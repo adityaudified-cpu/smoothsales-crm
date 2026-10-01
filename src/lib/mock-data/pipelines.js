@@ -1,0 +1,53 @@
+export const MOCK_PIPELINES = [
+  {
+    id: "pipeline-interior",
+    verticalName: "Interior Design",
+    stages: [
+      {
+        id: "stg_1",
+        name: "Requirement",
+        stageGroup: "Inquiry",
+        isConversion: false,
+        isPrimaryConversion: false,
+        triggerCapi: false,
+        sortOrder: 1,
+      },
+      {
+        id: "stg_2",
+        name: "Site Visit",
+        stageGroup: "Qualification",
+        isConversion: true,
+        isPrimaryConversion: true,
+        triggerCapi: true,
+        sortOrder: 2,
+      },
+      {
+        id: "stg_3",
+        name: "Quotation",
+        stageGroup: "Proposal",
+        isConversion: false,
+        isPrimaryConversion: false,
+        triggerCapi: false,
+        sortOrder: 3,
+      },
+      {
+        id: "stg_4",
+        name: "Proposal",
+        stageGroup: "Proposal",
+        isConversion: false,
+        isPrimaryConversion: false,
+        triggerCapi: false,
+        sortOrder: 4,
+      },
+      {
+        id: "stg_5",
+        name: "Negotiation",
+        stageGroup: "Closing",
+        isConversion: false,
+        isPrimaryConversion: false,
+        triggerCapi: false,
+        sortOrder: 5,
+      },
+    ],
+  },
+];

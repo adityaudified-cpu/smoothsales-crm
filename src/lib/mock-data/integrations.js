@@ -1,0 +1,148 @@
+export const integrationsList = [
+  // 1. Advertising
+  {
+    id: "meta_ads",
+    name: "Meta Ads & Conversions API",
+    category: "Advertising",
+    description: "Real-time sync of Facebook & Instagram Lead Ads with offline conversion feedback loop.",
+    connected: true,
+    color: "bg-blue-600 text-white",
+    letter: "M",
+  },
+  {
+    id: "google_ads",
+    name: "Google Ads Lead Form Extensions",
+    category: "Advertising",
+    description: "Ingest search and YouTube lead extension submissions directly into routing pools.",
+    connected: false,
+    color: "bg-red-500 text-white",
+    letter: "G",
+  },
+
+  // 2. Messaging
+  {
+    id: "whatsapp",
+    name: "WhatsApp Business Cloud API",
+    category: "Messaging",
+    description: "Official Meta Cloud API integration for instant sub-60s auto-replies and template broadcasts.",
+    connected: true,
+    color: "bg-emerald-600 text-white",
+    letter: "W",
+  },
+  {
+    id: "sms_gateway",
+    name: "SMS Gateway (DLT Compliant)",
+    category: "Messaging",
+    description: "Transactional and promotional SMS alerts via Kaleyra, Gupshup, and Textlocal.",
+    connected: false,
+    color: "bg-indigo-600 text-white",
+    letter: "S",
+  },
+  {
+    id: "email_sync",
+    name: "Email (Gmail & Microsoft 365)",
+    category: "Messaging",
+    description: "Two-way email sync, click-to-email logging, and automated deal follow-up sequences.",
+    connected: false,
+    color: "bg-amber-600 text-white",
+    letter: "E",
+  },
+
+  // 3. Listing Portals
+  {
+    id: "indiamart",
+    name: "IndiaMART Webhook Lead Manager",
+    category: "Listing Portals",
+    description: "Instant push notification of B2B buyer inquiries with product requirement tags.",
+    connected: false,
+    color: "bg-orange-600 text-white",
+    letter: "I",
+  },
+  {
+    id: "99acres",
+    name: "99acres Property Portal",
+    category: "Listing Portals",
+    description: "Automatic lead sync from builder project listings and buyer callback requests.",
+    connected: false,
+    color: "bg-blue-700 text-white",
+    letter: "9",
+  },
+  {
+    id: "magicbricks",
+    name: "MagicBricks Real Estate Gateway",
+    category: "Listing Portals",
+    description: "Direct webhook integration for property seeker inquiries and virtual tour requests.",
+    connected: false,
+    color: "bg-red-600 text-white",
+    letter: "M",
+  },
+
+  // 4. Payments
+  {
+    id: "razorpay",
+    name: "Razorpay Subscriptions & Smart Collect",
+    category: "Payments",
+    description: "Automated booking token collection, UPI recurring autopay, and instant TDS payouts.",
+    connected: true,
+    color: "bg-sky-600 text-white",
+    letter: "R",
+  },
+  {
+    id: "cashfree",
+    name: "Cashfree Payment Gateway",
+    category: "Payments",
+    description: "Instant vendor disbursements and payment link generation with automated receipting.",
+    connected: false,
+    color: "bg-teal-600 text-white",
+    letter: "C",
+  },
+
+  // 5. Productivity
+  {
+    id: "google_sheets",
+    name: "Google Sheets Two-Way Sync",
+    category: "Productivity",
+    description: "Continuous real-time export and backup of leads, deals, and commission ledger records.",
+    connected: false,
+    color: "bg-green-600 text-white",
+    letter: "S",
+  },
+  {
+    id: "google_forms",
+    name: "Google Forms Webhook",
+    category: "Productivity",
+    description: "Capture survey responses and internal lead registration forms without manual data entry.",
+    connected: false,
+    color: "bg-purple-600 text-white",
+    letter: "F",
+  },
+  {
+    id: "google_meet",
+    name: "Google Meet & Calendar Scheduling",
+    category: "Productivity",
+    description: "Automatic calendar invite generation and video consultation links on demo bookings.",
+    connected: false,
+    color: "bg-yellow-600 text-white",
+    letter: "M",
+  },
+
+  // 6. Web
+  {
+    id: "website_chat",
+    name: "Website Live Chat & WhatsApp Widget",
+    category: "Web",
+    description: "Lightweight, customizable visitor chat bubble that routes web traffic straight to WhatsApp.",
+    connected: true,
+    color: "bg-cyan-600 text-white",
+    letter: "W",
+  },
+  {
+    id: "custom_form",
+    name: "Custom Webhook Form Builder",
+    category: "Web",
+    description: "Embed high-conversion lead generation forms on WordPress, Webflow, and custom landing pages.",
+    connected: false,
+    color: "bg-slate-700 text-white",
+    letter: "F",
+  },
+];
