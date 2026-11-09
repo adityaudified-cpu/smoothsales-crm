@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,59 +20,59 @@ import { useWaAccounts, CHANNEL_BADGE } from "../wa-accounts-context";
 // ─── Static Data ──────────────────────────────────────────────────────────────
 
 const TRIGGERS = [
-  { id: "lead_created",       label: "New Lead Created",       bg: "bg-blue-500",    hex: "#3b82f6", Icon: Users },
-  { id: "visit_scheduled",    label: "Visit Scheduled",        bg: "bg-violet-500",  hex: "#8b5cf6", Icon: Activity },
-  { id: "quotation_sent",     label: "Quotation Sent",         bg: "bg-amber-500",   hex: "#f59e0b", Icon: Layers },
-  { id: "lead_inactive_30d",  label: "Lead Inactive 30d",      bg: "bg-red-500",     hex: "#ef4444", Icon: Clock },
-  { id: "deal_won",           label: "Deal Won",               bg: "bg-emerald-500", hex: "#10b981", Icon: CheckCircle2 },
-  { id: "campaign_reply",     label: "Campaign Reply",         bg: "bg-cyan-500",    hex: "#06b6d4", Icon: MessageCircle },
-  { id: "keyword_received",   label: "Keyword Received",       bg: "bg-pink-500",    hex: "#ec4899", Icon: MousePointerClick },
-  { id: "deal_stage_changed", label: "Deal Stage Changed",     bg: "bg-indigo-500",  hex: "#6366f1", Icon: GitBranch },
-  { id: "webhook",            label: "Webhook Trigger",        bg: "bg-orange-500",  hex: "#f97316", Icon: Webhook },
+  { id: "lead_created", label: "New Lead Created", bg: "bg-blue-500", hex: "#3b82f6", Icon: Users },
+  { id: "visit_scheduled", label: "Visit Scheduled", bg: "bg-violet-500", hex: "#8b5cf6", Icon: Activity },
+  { id: "quotation_sent", label: "Quotation Sent", bg: "bg-amber-500", hex: "#f59e0b", Icon: Layers },
+  { id: "lead_inactive_30d", label: "Lead Inactive 30d", bg: "bg-red-500", hex: "#ef4444", Icon: Clock },
+  { id: "deal_won", label: "Deal Won", bg: "bg-emerald-500", hex: "#10b981", Icon: CheckCircle2 },
+  { id: "campaign_reply", label: "Campaign Reply", bg: "bg-cyan-500", hex: "#06b6d4", Icon: MessageCircle },
+  { id: "keyword_received", label: "Keyword Received", bg: "bg-pink-500", hex: "#ec4899", Icon: MousePointerClick },
+  { id: "deal_stage_changed", label: "Deal Stage Changed", bg: "bg-indigo-500", hex: "#6366f1", Icon: GitBranch },
+  { id: "webhook", label: "Webhook Trigger", bg: "bg-orange-500", hex: "#f97316", Icon: Webhook },
 ];
 
 const TEMPLATES = [
-  { id: "t_welcome", name: "lead_welcome_intro", display: "Lead Welcome & Intro", body: "Hi {{1}}! Welcome to {{2}}. Would you like to schedule a discovery demo?", vars: ["customer_name","company_name"] },
-  { id: "t_demo_reminder", name: "meeting_demo_reminder", display: "Meeting / Demo Reminder", body: "Hi {{1}}, this is a reminder for your scheduled meeting on {{2}} at {{3}}.", vars: ["customer_name","visit_date","visit_time"] },
-  { id: "t_followup", name: "product_followup", display: "Product Follow-up", body: "Hi {{1}}! Following up on your enquiry. Reply YES or call {{2}}.", vars: ["customer_name","phone_number"] },
-  { id: "t_quote_ready", name: "quotation_ready", display: "Quotation Ready", body: "Hi {{1}}, your quotation is ready! Estimated value: {{2}}.", vars: ["customer_name","quote_amount"] },
+  { id: "t_welcome", name: "lead_welcome_intro", display: "Lead Welcome & Intro", body: "Hi {{1}}! Welcome to {{2}}. Would you like to schedule a discovery demo?", vars: ["customer_name", "company_name"] },
+  { id: "t_demo_reminder", name: "meeting_demo_reminder", display: "Meeting / Demo Reminder", body: "Hi {{1}}, this is a reminder for your scheduled meeting on {{2}} at {{3}}.", vars: ["customer_name", "visit_date", "visit_time"] },
+  { id: "t_followup", name: "product_followup", display: "Product Follow-up", body: "Hi {{1}}! Following up on your enquiry. Reply YES or call {{2}}.", vars: ["customer_name", "phone_number"] },
+  { id: "t_quote_ready", name: "quotation_ready", display: "Quotation Ready", body: "Hi {{1}}, your quotation is ready! Estimated value: {{2}}.", vars: ["customer_name", "quote_amount"] },
 ];
 
 const LEAD_FIELDS = [
-  { id: "lead.name",        label: "Lead Name" },
-  { id: "lead.phone",       label: "Phone Number" },
-  { id: "lead.email",       label: "Email" },
-  { id: "lead.source",      label: "Lead Source" },
+  { id: "lead.name", label: "Lead Name" },
+  { id: "lead.phone", label: "Phone Number" },
+  { id: "lead.email", label: "Email" },
+  { id: "lead.source", label: "Lead Source" },
   { id: "lead.assigned_to", label: "Assigned Agent" },
-  { id: "lead.visit_date",  label: "Visit Date" },
-  { id: "lead.visit_time",  label: "Visit Time" },
-  { id: "lead.quote_amount",label: "Quote Amount" },
-  { id: "company.name",     label: "Company Name" },
-  { id: "company.phone",    label: "Company Phone" },
+  { id: "lead.visit_date", label: "Visit Date" },
+  { id: "lead.visit_time", label: "Visit Time" },
+  { id: "lead.quote_amount", label: "Quote Amount" },
+  { id: "company.name", label: "Company Name" },
+  { id: "company.phone", label: "Company Phone" },
 ];
 
 const DELAY_UNITS = [
   { id: "minutes", label: "Minutes" },
-  { id: "hours",   label: "Hours" },
-  { id: "days",    label: "Days" },
-  { id: "weeks",   label: "Weeks" },
+  { id: "hours", label: "Hours" },
+  { id: "days", label: "Days" },
+  { id: "weeks", label: "Weeks" },
 ];
 
 const CONDITIONS = [
-  { id: "replied",        label: "Did they reply?" },
-  { id: "clicked_link",   label: "Did they click the link?" },
-  { id: "status_hot",     label: "Is lead status = Hot?" },
-  { id: "visit_scheduled",label: "Is visit scheduled?" },
-  { id: "quote_sent",     label: "Was quotation sent?" },
-  { id: "keyword_yes",    label: "Replied with YES?" },
+  { id: "replied", label: "Did they reply?" },
+  { id: "clicked_link", label: "Did they click the link?" },
+  { id: "status_hot", label: "Is lead status = Hot?" },
+  { id: "visit_scheduled", label: "Is visit scheduled?" },
+  { id: "quote_sent", label: "Was quotation sent?" },
+  { id: "keyword_yes", label: "Replied with YES?" },
 ];
 
 const NODE_TYPES = [
-  { id: "send_template", label: "Send Template",  Icon: MessageCircle, hex: "#10b981", light: "rgba(16,185,129,0.07)",  border: "rgba(16,185,129,0.22)" },
-  { id: "wait",          label: "Wait / Delay",   Icon: Clock,         hex: "#f59e0b", light: "rgba(245,158,11,0.07)",  border: "rgba(245,158,11,0.22)" },
-  { id: "condition",     label: "Condition",      Icon: GitBranch,     hex: "#3b82f6", light: "rgba(59,130,246,0.07)",  border: "rgba(59,130,246,0.22)" },
-  { id: "ai_reply",      label: "AI Auto-Reply",  Icon: Bot,           hex: "#8b5cf6", light: "rgba(139,92,246,0.07)",  border: "rgba(139,92,246,0.22)" },
-  { id: "end",           label: "End Flow",       Icon: CheckCircle2,  hex: "#6b7280", light: "rgba(107,114,128,0.05)", border: "rgba(107,114,128,0.18)" },
+  { id: "send_template", label: "Send Template", Icon: MessageCircle, hex: "#10b981", light: "rgba(16,185,129,0.07)", border: "rgba(16,185,129,0.22)" },
+  { id: "wait", label: "Wait / Delay", Icon: Clock, hex: "#f59e0b", light: "rgba(245,158,11,0.07)", border: "rgba(245,158,11,0.22)" },
+  { id: "condition", label: "Condition", Icon: GitBranch, hex: "#3b82f6", light: "rgba(59,130,246,0.07)", border: "rgba(59,130,246,0.22)" },
+  { id: "ai_reply", label: "AI Auto-Reply", Icon: Bot, hex: "#8b5cf6", light: "rgba(139,92,246,0.07)", border: "rgba(139,92,246,0.22)" },
+  { id: "end", label: "End Flow", Icon: CheckCircle2, hex: "#6b7280", light: "rgba(107,114,128,0.05)", border: "rgba(107,114,128,0.18)" },
 ];
 
 const MOCK_FLOWS = [
@@ -83,11 +83,11 @@ const MOCK_FLOWS = [
     stats: { sent: 842, delivered: 801, replied: 312, converted: 89 },
     reenrollAfterDays: 0,
     steps: [
-      { id: "s1", type: "send_template", label: "Send Welcome & Intro",  templateId: "t_welcome", varMap: { "1": "lead.name", "2": "company.name" },  delayValue: "", delayUnit: "hours" },
-      { id: "s2", type: "wait",          label: "Wait 24 Hours",         delayValue: "24", delayUnit: "hours" },
-      { id: "s3", type: "condition",     label: "Did they reply?",       conditionId: "replied" },
-      { id: "s4", type: "send_template", label: "Send Follow-up",        templateId: "t_followup", varMap: { "1": "lead.name", "2": "company.phone" }, delayValue: "", delayUnit: "hours" },
-      { id: "s5", type: "end",           label: "End Flow" },
+      { id: "s1", type: "send_template", label: "Send Welcome & Intro", templateId: "t_welcome", varMap: { "1": "lead.name", "2": "company.name" }, delayValue: "", delayUnit: "hours" },
+      { id: "s2", type: "wait", label: "Wait 24 Hours", delayValue: "24", delayUnit: "hours" },
+      { id: "s3", type: "condition", label: "Did they reply?", conditionId: "replied" },
+      { id: "s4", type: "send_template", label: "Send Follow-up", templateId: "t_followup", varMap: { "1": "lead.name", "2": "company.phone" }, delayValue: "", delayUnit: "hours" },
+      { id: "s5", type: "end", label: "End Flow" },
     ],
   },
   {
@@ -98,8 +98,8 @@ const MOCK_FLOWS = [
     reenrollAfterDays: 0,
     steps: [
       { id: "s1", type: "send_template", label: "Send Confirmation", templateId: "t_demo_reminder", varMap: { "1": "lead.name", "2": "lead.visit_date", "3": "lead.visit_time" }, delayValue: "", delayUnit: "hours" },
-      { id: "s2", type: "wait",          label: "Wait 2 Hours Before", delayValue: "2", delayUnit: "hours" },
-      { id: "s3", type: "end",           label: "End Flow" },
+      { id: "s2", type: "wait", label: "Wait 2 Hours Before", delayValue: "2", delayUnit: "hours" },
+      { id: "s3", type: "end", label: "End Flow" },
     ],
   },
   {
@@ -110,10 +110,10 @@ const MOCK_FLOWS = [
     reenrollAfterDays: 7,
     steps: [
       { id: "s1", type: "send_template", label: "Quotation Notification", templateId: "t_quote_ready", varMap: { "1": "lead.name", "2": "lead.quote_amount" }, delayValue: "", delayUnit: "hours" },
-      { id: "s2", type: "wait",          label: "Wait 48 Hours",          delayValue: "48", delayUnit: "hours" },
-      { id: "s3", type: "condition",     label: "If No Reply",            conditionId: "replied" },
-      { id: "s4", type: "send_template", label: "Send Reminder",          templateId: "t_followup", varMap: { "1": "lead.name", "2": "company.phone" }, delayValue: "", delayUnit: "hours" },
-      { id: "s5", type: "end",           label: "End Flow" },
+      { id: "s2", type: "wait", label: "Wait 48 Hours", delayValue: "48", delayUnit: "hours" },
+      { id: "s3", type: "condition", label: "If No Reply", conditionId: "replied" },
+      { id: "s4", type: "send_template", label: "Send Reminder", templateId: "t_followup", varMap: { "1": "lead.name", "2": "company.phone" }, delayValue: "", delayUnit: "hours" },
+      { id: "s5", type: "end", label: "End Flow" },
     ],
   },
 ];
@@ -424,7 +424,7 @@ export default function WhatsAppAutomationPage() {
       try {
         const stored = localStorage.getItem("wa_automation_flows_v1");
         if (stored) return JSON.parse(stored);
-      } catch {}
+      } catch { }
     }
     return MOCK_FLOWS;
   });
@@ -433,7 +433,7 @@ export default function WhatsAppAutomationPage() {
   useEffect(() => {
     try {
       localStorage.setItem("wa_automation_flows_v1", JSON.stringify(flows));
-    } catch {}
+    } catch { }
   }, [flows]);
   const [createOpen, setCreateOpen] = useState(false);
   const [stepOpen, setStepOpen] = useState(false);
@@ -623,10 +623,10 @@ export default function WhatsAppAutomationPage() {
       {/* ── KPI Strip ───────────────────────────────────────────────────────── */}
       <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 border-b border-border bg-card/60">
         {[
-          { label: "Active Flows",     value: activeCount,                  sub: `of ${flows.length} total`,   color: "text-emerald-600", dot: "bg-emerald-500" },
-          { label: "Leads Processed",  value: totalProcessed.toLocaleString(), sub: "all time",               color: "text-blue-600",    dot: "bg-blue-500" },
-          { label: "Conversions",      value: totalConverted.toLocaleString(), sub: "from automation",         color: "text-violet-600",  dot: "bg-violet-500" },
-          { label: "Templates",        value: TEMPLATES.length,             sub: `${TEMPLATES.length} approved`, color: "text-amber-600", dot: "bg-amber-500" },
+          { label: "Active Flows", value: activeCount, sub: `of ${flows.length} total`, color: "text-emerald-600", dot: "bg-emerald-500" },
+          { label: "Leads Processed", value: totalProcessed.toLocaleString(), sub: "all time", color: "text-blue-600", dot: "bg-blue-500" },
+          { label: "Conversions", value: totalConverted.toLocaleString(), sub: "from automation", color: "text-violet-600", dot: "bg-violet-500" },
+          { label: "Templates", value: TEMPLATES.length, sub: `${TEMPLATES.length} approved`, color: "text-amber-600", dot: "bg-amber-500" },
         ].map((k, i) => (
           <div key={k.label} className={`px-5 py-3 flex items-center gap-3 ${i < 3 ? "border-r border-border" : ""}`}>
             <span className={`h-2 w-2 rounded-full shrink-0 ${k.dot}`} />
@@ -761,9 +761,9 @@ export default function WhatsAppAutomationPage() {
                 return (
                   <div className="shrink-0 grid grid-cols-4 border-b border-border bg-muted/20">
                     {[
-                      { label: "Sent",      value: s.sent.toLocaleString(),      rate: null,    color: "text-foreground" },
+                      { label: "Sent", value: s.sent.toLocaleString(), rate: null, color: "text-foreground" },
                       { label: "Delivered", value: s.delivered.toLocaleString(), rate: `${dr}%`, color: "text-emerald-600" },
-                      { label: "Replied",   value: s.replied.toLocaleString(),   rate: `${rr}%`, color: "text-blue-600" },
+                      { label: "Replied", value: s.replied.toLocaleString(), rate: `${rr}%`, color: "text-blue-600" },
                       { label: "Converted", value: s.converted.toLocaleString(), rate: `${cr}%`, color: "text-violet-600" },
                     ].map((stat, i) => (
                       <div key={stat.label} className={`px-5 py-2.5 ${i < 3 ? "border-r border-border" : ""}`}>
@@ -956,10 +956,10 @@ export default function WhatsAppAutomationPage() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             {[
-              { label: "Global Automation",  desc: "Pause all flows at once",              on: true },
-              { label: "Respect DND Hours",  desc: "Don't send between 10PM–8AM",          on: true },
-              { label: "Stop on Reply",      desc: "Pause flow when lead replies",          on: true },
-              { label: "Skip Weekends",      desc: "Don't trigger flows on Sat/Sun",        on: false },
+              { label: "Global Automation", desc: "Pause all flows at once", on: true },
+              { label: "Respect DND Hours", desc: "Don't send between 10PM–8AM", on: true },
+              { label: "Stop on Reply", desc: "Pause flow when lead replies", on: true },
+              { label: "Skip Weekends", desc: "Don't trigger flows on Sat/Sun", on: false },
             ].map((s) => (
               <div key={s.label} className="flex items-center justify-between gap-4">
                 <div>
