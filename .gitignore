@@ -1,34 +1,42 @@
-# dependencies
+# Dependencies
 /node_modules
 /.pnp
 .pnp.*
 
-# testing
+# Testing
 /coverage
 
-# next.js
+# Next.js Build & Outputs
 /.next/
 /out/
-
-# production
 /build
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
 
-# misc
-.DS_Store
+# Environment & Credentials (NEVER COMMIT)
+.env
+.env.*
+.env*.local
+*.local
+*.local.*
+*credentials*
+*secret*
 *.pem
+*.key
 
-# debug
+# Logs & Debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log
 
-# local env files
-.env*.local
-.env
+# Archives & Temporary files
+*.tar.gz
+*.zip
+*.swp
+.DS_Store
+Thumbs.db
 
-# vercel
+# Vercel
 .vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
