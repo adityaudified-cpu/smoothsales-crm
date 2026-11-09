@@ -32,12 +32,10 @@ const TRIGGERS = [
 ];
 
 const TEMPLATES = [
-  { id: "t1", name: "welcome_message",    display: "Welcome Message",    body: "Hi {{1}}! Welcome to {{2}}. Reply YES to schedule a free site visit!", vars: ["customer_name","company_name"] },
-  { id: "t2", name: "site_visit_reminder",display: "Site Visit Reminder",body: "Hi {{1}}, your site visit is on {{2}} at {{3}}. Reply YES to confirm.", vars: ["customer_name","visit_date","visit_time"] },
-  { id: "t3", name: "follow_up_generic",  display: "Generic Follow-up",  body: "Hi {{1}}! Following up on your enquiry. Reply YES or call {{2}}.",    vars: ["customer_name","phone_number"] },
-  { id: "t4", name: "quotation_ready",    display: "Quotation Ready",    body: "Hi {{1}}, your quotation is ready! Estimated value: {{2}}.",           vars: ["customer_name","quote_amount"] },
-  { id: "t5", name: "new_year_followup",  display: "New Year Follow-up", body: "Happy New Year {{1}}! Up to 15% off this month. Reply YES!",           vars: ["customer_name"] },
-  { id: "t6", name: "diwali_offer_v2",    display: "Diwali Offer",       body: "Hi {{1}}! Packages from ₹8L. Book a FREE site visit — reply YES!",     vars: ["customer_name"] },
+  { id: "t_welcome", name: "lead_welcome_intro", display: "Lead Welcome & Intro", body: "Hi {{1}}! Welcome to {{2}}. Would you like to schedule a discovery demo?", vars: ["customer_name","company_name"] },
+  { id: "t_demo_reminder", name: "meeting_demo_reminder", display: "Meeting / Demo Reminder", body: "Hi {{1}}, this is a reminder for your scheduled meeting on {{2}} at {{3}}.", vars: ["customer_name","visit_date","visit_time"] },
+  { id: "t_followup", name: "product_followup", display: "Product Follow-up", body: "Hi {{1}}! Following up on your enquiry. Reply YES or call {{2}}.", vars: ["customer_name","phone_number"] },
+  { id: "t_quote_ready", name: "quotation_ready", display: "Quotation Ready", body: "Hi {{1}}, your quotation is ready! Estimated value: {{2}}.", vars: ["customer_name","quote_amount"] },
 ];
 
 const LEAD_FIELDS = [
@@ -79,30 +77,29 @@ const NODE_TYPES = [
 
 const MOCK_FLOWS = [
   {
-    id: "f1", name: "New Lead Welcome Flow", active: true,
+    id: "f1", name: "New Lead Instant Welcome Flow", active: true,
     trigger: "lead_created", triggerLabel: "New Lead Created", triggerBg: "bg-blue-500",
     leadsProcessed: 842, lastRun: "2 min ago", lastEdited: "Today",
     stats: { sent: 842, delivered: 801, replied: 312, converted: 89 },
     reenrollAfterDays: 0,
     steps: [
-      { id: "s1", type: "send_template", label: "Send Welcome Message",  templateId: "t1", varMap: { "1": "lead.name", "2": "company.name" },  delayValue: "", delayUnit: "hours" },
+      { id: "s1", type: "send_template", label: "Send Welcome & Intro",  templateId: "t_welcome", varMap: { "1": "lead.name", "2": "company.name" },  delayValue: "", delayUnit: "hours" },
       { id: "s2", type: "wait",          label: "Wait 24 Hours",         delayValue: "24", delayUnit: "hours" },
       { id: "s3", type: "condition",     label: "Did they reply?",       conditionId: "replied" },
-      { id: "s4", type: "send_template", label: "Send Follow-up",        templateId: "t3", varMap: { "1": "lead.name", "2": "company.phone" }, delayValue: "", delayUnit: "hours" },
+      { id: "s4", type: "send_template", label: "Send Follow-up",        templateId: "t_followup", varMap: { "1": "lead.name", "2": "company.phone" }, delayValue: "", delayUnit: "hours" },
       { id: "s5", type: "end",           label: "End Flow" },
     ],
   },
   {
-    id: "f2", name: "Site Visit Confirmation", active: true,
-    trigger: "visit_scheduled", triggerLabel: "Visit Scheduled", triggerBg: "bg-violet-500",
+    id: "f2", name: "Meeting / Demo Confirmation", active: true,
+    trigger: "visit_scheduled", triggerLabel: "Meeting Scheduled", triggerBg: "bg-violet-500",
     leadsProcessed: 234, lastRun: "1 hour ago", lastEdited: "Yesterday",
     stats: { sent: 234, delivered: 228, replied: 198, converted: 54 },
     reenrollAfterDays: 0,
     steps: [
-      { id: "s1", type: "send_template", label: "Send Confirmation", templateId: "t2", varMap: { "1": "lead.name", "2": "lead.visit_date", "3": "lead.visit_time" }, delayValue: "", delayUnit: "hours" },
-      { id: "s2", type: "wait",          label: "Wait 2 Hours",      delayValue: "2", delayUnit: "hours" },
-      { id: "s3", type: "send_template", label: "Send Reminder",     templateId: "t2", varMap: {}, delayValue: "", delayUnit: "hours" },
-      { id: "s4", type: "end",           label: "End Flow" },
+      { id: "s1", type: "send_template", label: "Send Confirmation", templateId: "t_demo_reminder", varMap: { "1": "lead.name", "2": "lead.visit_date", "3": "lead.visit_time" }, delayValue: "", delayUnit: "hours" },
+      { id: "s2", type: "wait",          label: "Wait 2 Hours Before", delayValue: "2", delayUnit: "hours" },
+      { id: "s3", type: "end",           label: "End Flow" },
     ],
   },
   {
@@ -112,10 +109,10 @@ const MOCK_FLOWS = [
     stats: { sent: 156, delivered: 149, replied: 67, converted: 23 },
     reenrollAfterDays: 7,
     steps: [
-      { id: "s1", type: "send_template", label: "Quotation Notification", templateId: "t4", varMap: { "1": "lead.name", "2": "lead.quote_amount" }, delayValue: "", delayUnit: "hours" },
+      { id: "s1", type: "send_template", label: "Quotation Notification", templateId: "t_quote_ready", varMap: { "1": "lead.name", "2": "lead.quote_amount" }, delayValue: "", delayUnit: "hours" },
       { id: "s2", type: "wait",          label: "Wait 48 Hours",          delayValue: "48", delayUnit: "hours" },
       { id: "s3", type: "condition",     label: "If No Reply",            conditionId: "replied" },
-      { id: "s4", type: "send_template", label: "Send Reminder",          templateId: "t3", varMap: { "1": "lead.name", "2": "company.phone" }, delayValue: "", delayUnit: "hours" },
+      { id: "s4", type: "send_template", label: "Send Reminder",          templateId: "t_followup", varMap: { "1": "lead.name", "2": "company.phone" }, delayValue: "", delayUnit: "hours" },
       { id: "s5", type: "end",           label: "End Flow" },
     ],
   },
@@ -422,8 +419,22 @@ export default function WhatsAppAutomationPage() {
   const metaAccounts = accounts.filter((a) => a.type === "meta");
   const personalAccounts = accounts.filter((a) => a.type === "personal");
 
-  const [flows, setFlows] = useState(MOCK_FLOWS);
+  const [flows, setFlows] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("wa_automation_flows_v1");
+        if (stored) return JSON.parse(stored);
+      } catch {}
+    }
+    return MOCK_FLOWS;
+  });
   const [selected, setSelected] = useState(MOCK_FLOWS[0]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("wa_automation_flows_v1", JSON.stringify(flows));
+    } catch {}
+  }, [flows]);
   const [createOpen, setCreateOpen] = useState(false);
   const [stepOpen, setStepOpen] = useState(false);
   const [stepMode, setStepMode] = useState("add");

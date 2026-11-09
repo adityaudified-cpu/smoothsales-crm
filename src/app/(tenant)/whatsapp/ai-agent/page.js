@@ -19,39 +19,39 @@ import {
 import { toast } from "sonner";
 import { useWaAccounts, CHANNEL_BADGE } from "../wa-accounts-context";
 
-const DEFAULT_PROMPT = `You are {{agent_name}}, a friendly sales consultant at {{company_name}}.
+const DEFAULT_PROMPT = `You are {{agent_name}}, a professional sales & customer success specialist at {{company_name}}.
 
-Your goal is to qualify leads and schedule site visits.
+Your goal is to qualify inbound leads, understand their requirements, and schedule discovery meetings or demos.
 
 Always:
 - Greet warmly and introduce yourself by name
-- Ask qualifying questions (budget, timeline, flat size)
-- Highlight key benefits: free site visit, 45-day delivery, 10-year warranty
-- Offer to schedule a free site visit
-- Keep responses concise (2-3 sentences max)
-- Sound like a real human, never reveal you are an AI
-- Use emojis sparingly to feel warm and approachable
+- Ask clarifying questions about their business requirements, team size, budget, and timeline
+- Highlight key benefits: streamlined workflow, quick implementation, dedicated support
+- Offer to schedule a free 15-minute consultation or product walkthrough
+- Keep responses concise (2-3 sentences max) and helpful
+- Sound natural, polite, and consultative
+- Use emojis sparingly to feel approachable
 
 Never:
-- Discuss competitor pricing or make comparisons
-- Make promises outside your authority (discounts > 10%)
-- Share internal pricing sheets or cost breakdowns
+- Discuss competitor confidential information or make unfounded comparisons
+- Make unauthorized commercial promises or unverified discounts (> 10%)
+- Share internal cost breakdowns
 
-If asked if you are an AI: Say "I'm a real consultant, happy to help! 😊"`;
+If asked if you are an AI: Say "I'm a digital assistant at {{company_name}}, happy to help you or connect you with our human team anytime! 😊"`;
 
 const INIT_FAQS = [
-  { id: "f1", q: "What is your price range?",       a: "Our packages start from ₹8L for 3BHK. We offer customized solutions based on your requirements.", cat: "Pricing" },
-  { id: "f2", q: "Do you offer free site visits?",  a: "Yes! Completely free site visits with no obligation. Our designer will visit at your convenience.", cat: "Process" },
-  { id: "f3", q: "How long does the project take?", a: "Typically 45-60 days for a 3BHK. We provide a detailed timeline after the site visit.", cat: "Process" },
-  { id: "f4", q: "What areas do you serve?",        a: "We currently serve Jaipur, Delhi NCR, and Mumbai. Expanding to more cities soon!", cat: "General" },
-  { id: "f5", q: "Do you provide warranty?",        a: "Yes, 10-year warranty on all modular furniture and 1-year warranty on civil work.", cat: "General" },
+  { id: "f1", q: "What are your business hours?", a: "Our team is available Monday to Saturday, 9:30 AM to 6:30 PM. Inbound messages are answered promptly during business hours!", cat: "General" },
+  { id: "f2", q: "How can I schedule a product demo or consultation?", a: "We would love to connect! Please share your preferred date and time, and our specialist will confirm a meeting invitation with you.", cat: "Process" },
+  { id: "f3", q: "Where can I view your pricing and plans?", a: "Our pricing is structured based on team size and feature requirements. We can share a tailored proposal right after understanding your needs.", cat: "Pricing" },
+  { id: "f4", q: "What solutions do you offer?", a: "We provide lead management, WhatsApp CRM automation, pipeline tracking, and sales analytics to help teams scale revenue.", cat: "General" },
+  { id: "f5", q: "How do I reach human support directly?", a: "You can ask for a callback here or call our support line, and our account executive will connect with you right away.", cat: "Process" },
 ];
 
 const INIT_CHAT = [
-  { role: "user",  text: "Hi, I'm interested in interior design for my new flat", ts: "10:30 AM" },
-  { role: "agent", text: "Hi! I'm Priya from Jaipur Interiors 😊 Congratulations on your new flat! Could you tell me the size and your approximate budget?", ts: "10:30 AM" },
-  { role: "user",  text: "It's a 3BHK, budget around 10-12 lakhs", ts: "10:31 AM" },
-  { role: "agent", text: "That's a great budget for a beautiful 3BHK! Would you like to schedule a free site visit so our designer can understand your vision better? 🏠", ts: "10:31 AM" },
+  { role: "user",  text: "Hi, I'm interested in learning more about your CRM and WhatsApp automation", ts: "10:30 AM" },
+  { role: "agent", text: "Hi! I'm Priya from SmoothSales CRM 😊 Thank you for reaching out! Could you tell me a little about your team size and your main sales goals?", ts: "10:30 AM" },
+  { role: "user",  text: "We have an 8-member sales team and want to automate lead follow-ups via WhatsApp", ts: "10:31 AM" },
+  { role: "agent", text: "That's a great fit! Our WhatsApp Cloud API integration allows automated follow-ups and broadcast campaigns for your entire sales pipeline. Would you like to schedule a quick 15-minute live demo today or tomorrow? 🚀", ts: "10:31 AM" },
 ];
 
 const VARS = [
@@ -76,7 +76,7 @@ const LEAD_RULES = [
   { id: "l2", label: "Capture name from conversation", desc: "Extract and save customer name from chat automatically",                  on: true },
   { id: "l3", label: "Capture budget from chat",       desc: "Extract and save budget mentioned in conversation",                       on: true },
   { id: "l4", label: "Tag source as WhatsApp",         desc: "Automatically tag all WhatsApp leads with source = WhatsApp",            on: true },
-  { id: "l5", label: "Capture flat size / BHK",        desc: "Extract and save flat size or BHK type mentioned in conversation",        on: true },
+  { id: "l5", label: "Capture team size / requirements", desc: "Extract and save team size or requirements mentioned in conversation", on: true },
 ];
 
 const FAQ_CATS = ["All", "Pricing", "Process", "General", "Technical"];
@@ -118,7 +118,7 @@ export default function WhatsAppAIAgentPage() {
   // Identity
   const [agentEnabled, setAgentEnabled] = useState(true);
   const [agentName, setAgentName]       = useState("Priya");
-  const [persona, setPersona]           = useState("Interior Design Consultant at Jaipur Interiors");
+  const [persona, setPersona]           = useState("Sales & Solutions Specialist at SmoothSales CRM");
   const [tone, setTone]                 = useState("friendly");
   const [language, setLanguage]         = useState("hinglish");
   const [model, setModel]               = useState("gpt-4o-mini");

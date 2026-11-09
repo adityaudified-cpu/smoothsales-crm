@@ -14,6 +14,20 @@ function writeLocal(key, value) {
 
 const WaAccountsContext = createContext(null);
 
+const DEFAULT_META_ACCOUNT = {
+  id: "meta_primary",
+  label: "SmoothSales Official WhatsApp",
+  number: "+91 87500 73899",
+  type: "meta",
+  phoneId: "1197546510113741",
+  wabaId: "4424288871221076",
+  status: "connected",
+  qualityRating: "GREEN",
+  metaStatus: "CONNECTED",
+  verifiedName: "SmoothSales",
+  connectedAt: "2026-11-03",
+};
+
 export function WaAccountsProvider({ children }) {
   const [accounts, setAccounts] = useState([]);
   const [activeAccountId, setActiveAccountId] = useState(null);
@@ -23,12 +37,16 @@ export function WaAccountsProvider({ children }) {
     automation:  { ar1: true, ar2: false, ar3: false, ar4: true, ar5: true },
   }));
 
-  // Load from localStorage on mount
+  // Load from localStorage or initialize with verified backend Meta account
   useEffect(() => {
-    const saved = readLocal(WA_ACCOUNTS_KEY, []);
+    const saved = readLocal(WA_ACCOUNTS_KEY, null);
     if (Array.isArray(saved) && saved.length > 0) {
       setAccounts(saved);
       setActiveAccountId(saved[0].id);
+    } else {
+      setAccounts([DEFAULT_META_ACCOUNT]);
+      setActiveAccountId(DEFAULT_META_ACCOUNT.id);
+      writeLocal(WA_ACCOUNTS_KEY, [DEFAULT_META_ACCOUNT]);
     }
     setIsLoading(false);
   }, []);

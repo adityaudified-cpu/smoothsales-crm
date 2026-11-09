@@ -1,10 +1,19 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -12,12 +21,18 @@ import {
 import {
   Search, Send, Paperclip, Phone, MoreVertical, Check, CheckCheck,
   Bot, FileText, X, Wifi, WifiOff, MessageCircle, UserPlus,
-  Zap, Plus, Star, Archive, Loader2,
+  Zap, Plus, Star, Archive, Loader2, ArrowUpRight, AlertCircle,
+  ExternalLink, User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { whatsappInboxApi, whatsappSendApi, subscribeInboundMessages } from "@/lib/api/whatsapp";
+import {
+  whatsappInboxApi, whatsappSendApi, whatsappTemplatesApi,
+  subscribeInboundMessages,
+} from "@/lib/api/whatsapp";
+import { customersApi } from "@/lib/api/customers";
 import { isApiMode } from "@/lib/api/client";
+import { encodeId } from "../campaigns/data";
 
 const LABEL_COLORS = {
   "Hot Lead":  "bg-rose-500/10 text-rose-600 border-rose-200",
@@ -30,14 +45,14 @@ const LABEL_COLORS = {
 const SOURCE_COLORS = {
   "Meta Ads":  "bg-blue-500/10 text-blue-600",
   "Website":   "bg-violet-500/10 text-violet-600",
+  "WhatsApp":  "bg-emerald-500/10 text-emerald-600",
   "JustDial":  "bg-orange-500/10 text-orange-600",
   "IndiaMART": "bg-green-500/10 text-green-600",
 };
 
-// Channel badge config
 const CHANNEL_CFG = {
-  meta:     { label: "Meta API",    cls: "bg-blue-500/10 text-blue-600 border-blue-500/20",    dot: "bg-blue-500" },
-  personal: { label: "Personal WA", cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20", dot: "bg-emerald-500" },
+  meta:     { label: "Meta Cloud API", cls: "bg-blue-500/10 text-blue-600 border-blue-500/20",    dot: "bg-blue-500" },
+  personal: { label: "Personal WA",    cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20", dot: "bg-emerald-500" },
 };
 
 const FILTERS = [
@@ -48,89 +63,21 @@ const FILTERS = [
 ];
 
 const QUICK_REPLIES = [
-  "Hi! Thanks for reaching out. How can I help you today?",
-  "We'd love to schedule a free site visit. Are you available this week?",
-  "Our packages start from ₹8L for a 3BHK. Would you like a detailed quote?",
-  "I'll have our design team reach out to you shortly.",
-  "Thank you for your interest! Let me share our portfolio.",
+  "Hi! Thanks for reaching out. How can I assist you today?",
+  "Would you like to schedule a quick 10-minute demo or consultation call?",
+  "I have shared our product catalog and pricing overview with you.",
+  "Our sales specialist will follow up with you shortly.",
+  "Please let us know if you have any questions or need further details!",
 ];
 
-const MOCK_CONVERSATIONS = [
-  {
-    id: "c1", name: "Aditya Narayan", phone: "+91 98201 11234", initials: "AN",
-    lastMsg: "Yes, I'm interested in the 3BHK package. Can you share the brochure?",
-    lastTime: "2m ago", unread: 3, status: "open", assignee: "Aarav Sharma",
-    source: "Meta Ads", label: "Hot Lead", online: true, starred: true,
-    channel: "meta",
-    messages: [
-      { id: "m1", from: "them", text: "Hi, I saw your ad on Facebook about interior design.", time: "10:02 AM", status: "read", date: "Today" },
-      { id: "m2", from: "us", text: "Hello Aditya! Thanks for reaching out. We specialize in turnkey interior solutions. How can I help you today?", time: "10:04 AM", status: "read", date: "Today" },
-      { id: "m3", from: "them", text: "I have a 3BHK flat in Powai. Looking for complete interior work.", time: "10:06 AM", status: "read", date: "Today" },
-      { id: "m4", from: "us", text: "That's great! Our 3BHK packages start from ₹8L. Would you like to schedule a free site visit?", time: "10:08 AM", status: "read", date: "Today" },
-      { id: "m5", from: "them", text: "Yes, I'm interested in the 3BHK package. Can you share the brochure?", time: "10:10 AM", status: "delivered", date: "Today" },
-    ],
-    notes: "Interested in 3BHK, budget ~₹10L. Follow up Thursday.",
-    tags: ["High Priority", "Site Visit Pending"],
-  },
-  {
-    id: "c2", name: "Kavita Nair", phone: "+91 99102 55678", initials: "KN",
-    lastMsg: "Okay, I'll confirm by tomorrow morning.", lastTime: "15m ago", unread: 0,
-    status: "open", assignee: "Pooja Deshmukh", source: "Website", label: "Warm", online: false, starred: false,
-    channel: "personal",
-    messages: [
-      { id: "m1", from: "us", text: "Hi Kavita! Following up on your inquiry about modular kitchen.", time: "9:30 AM", status: "read", date: "Today" },
-      { id: "m2", from: "them", text: "Yes, I was looking at your catalogue. The L-shaped kitchen looks good.", time: "9:45 AM", status: "read", date: "Today" },
-      { id: "m3", from: "us", text: "Perfect! We can do a site visit this week. Are you free Thursday or Friday?", time: "9:47 AM", status: "read", date: "Today" },
-      { id: "m4", from: "them", text: "Okay, I'll confirm by tomorrow morning.", time: "9:50 AM", status: "read", date: "Today" },
-    ],
-    notes: "",
-    tags: ["Kitchen", "Follow-up"],
-  },
-  {
-    id: "c3", name: "Rajeshwar Iyer", phone: "+91 98334 77890", initials: "RI",
-    lastMsg: "Please send the revised quotation.", lastTime: "1h ago", unread: 1,
-    status: "open", assignee: "Vikram Singhania", source: "JustDial", label: "Follow-up", online: false, starred: false,
-    channel: "meta",
-    messages: [
-      { id: "m1", from: "them", text: "The earlier quote was too high. Can you revise it?", time: "8:00 AM", status: "read", date: "Today" },
-      { id: "m2", from: "us", text: "Understood. Let me check with our design team and get back to you.", time: "8:15 AM", status: "read", date: "Today" },
-      { id: "m3", from: "them", text: "Please send the revised quotation.", time: "8:30 AM", status: "delivered", date: "Today" },
-    ],
-    notes: "Price sensitive. Needs revised quote under ₹7L.",
-    tags: ["Negotiation"],
-  },
-  {
-    id: "c4", name: "Meera Kulkarni", phone: "+91 97123 44556", initials: "MK",
-    lastMsg: "Thank you! Looking forward to the visit.", lastTime: "2h ago", unread: 0,
-    status: "resolved", assignee: "Aarav Sharma", source: "IndiaMART", label: "Scheduled", online: false, starred: true,
-    channel: "personal",
-    messages: [
-      { id: "m1", from: "us", text: "Hi Meera! Your site visit is confirmed for Thursday 11 AM.", time: "Yesterday", status: "read", date: "Yesterday" },
-      { id: "m2", from: "them", text: "Thank you! Looking forward to the visit.", time: "Yesterday", status: "read", date: "Yesterday" },
-    ],
-    notes: "Site visit Thu 11 AM. 2BHK in Bandra.",
-    tags: ["Confirmed"],
-  },
-  {
-    id: "c5", name: "Harish Patel", phone: "+91 98450 99821", initials: "HP",
-    lastMsg: "Can you call me instead?", lastTime: "3h ago", unread: 2,
-    status: "open", assignee: "Unassigned", source: "Meta Ads", label: "New", online: true, starred: false,
-    channel: "meta",
-    messages: [
-      { id: "m1", from: "them", text: "Hello, I need interior work for my office in Ahmedabad.", time: "7:00 AM", status: "read", date: "Today" },
-      { id: "m2", from: "them", text: "Can you call me instead?", time: "7:05 AM", status: "delivered", date: "Today" },
-    ],
-    notes: "",
-    tags: ["Office", "New Lead"],
-  },
-];
-
-// ─── Helper Components ────────────────────────────────────────────────────────
+// ─── Status & Helper Components ───────────────────────────────────────────────
 
 function StatusIcon({ status, fromUs }) {
   if (!fromUs) return null;
-  if (status === "read") return <CheckCheck className="h-3 w-3 text-emerald-500" />;
-  if (status === "delivered") return <CheckCheck className="h-3 w-3 text-muted-foreground" />;
+  const s = String(status || "").toLowerCase();
+  if (s === "read") return <CheckCheck className="h-3 w-3 text-emerald-500" />;
+  if (s === "delivered") return <CheckCheck className="h-3 w-3 text-muted-foreground" />;
+  if (s === "failed") return <AlertCircle className="h-3 w-3 text-red-500" />;
   return <Check className="h-3 w-3 text-muted-foreground" />;
 }
 
@@ -139,8 +86,11 @@ function TypingIndicator() {
     <div className="flex justify-start items-end gap-2 mb-1">
       <div className="bg-muted border border-border rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1 shadow-sm">
         {[0, 1, 2].map((i) => (
-          <span key={i} className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce"
-            style={{ animationDelay: `${i * 150}ms` }} />
+          <span
+            key={i}
+            className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce"
+            style={{ animationDelay: `${i * 150}ms` }}
+          />
         ))}
       </div>
     </div>
@@ -185,7 +135,7 @@ function ConvItem({ conv, isActive, onClick }) {
         <div className="flex items-center justify-between gap-1 mb-0.5">
           <div className="flex items-center gap-1 min-w-0">
             {conv.starred && <Star className="h-2.5 w-2.5 text-amber-400 fill-amber-400 shrink-0" />}
-            <span className={cn("text-xs font-semibold truncate text-foreground")}>
+            <span className="text-xs font-semibold truncate text-foreground">
               {conv.name}
             </span>
           </div>
@@ -193,13 +143,15 @@ function ConvItem({ conv, isActive, onClick }) {
         </div>
 
         <p className={cn("text-[11px] truncate leading-relaxed", conv.unread > 0 ? "text-foreground/80 font-medium" : "text-muted-foreground")}>
-          {conv.lastMsg}
+          {conv.lastMsg || "No messages yet"}
         </p>
 
         <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-          <span className={cn("text-[9px] px-1.5 py-0.5 rounded-md font-medium", SOURCE_COLORS[conv.source] || "bg-muted text-muted-foreground")}>
-            {conv.source}
-          </span>
+          {conv.source && (
+            <span className={cn("text-[9px] px-1.5 py-0.5 rounded-md font-medium", SOURCE_COLORS[conv.source] || "bg-muted text-muted-foreground")}>
+              {conv.source}
+            </span>
+          )}
           {conv.label && (
             <span className={cn("text-[9px] px-1.5 py-0.5 rounded-md font-semibold border", LABEL_COLORS[conv.label] || "bg-muted text-muted-foreground border-border")}>
               {conv.label}
@@ -226,10 +178,306 @@ function ConvItem({ conv, isActive, onClick }) {
   );
 }
 
+// ─── New Chat Modal ───────────────────────────────────────────────────────────
+
+function NewChatModal({ open, onClose, onChatCreated }) {
+  const [leads, setLeads] = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [loadingLeads, setLoadingLeads] = useState(false);
+  const [searchLead, setSearchLead] = useState("");
+  const [selectedLead, setSelectedLead] = useState(null);
+  const [manualName, setManualName] = useState("");
+  const [manualPhone, setManualPhone] = useState("");
+  const [mode, setMode] = useState("select"); // 'select' | 'manual'
+  const [sendType, setSendType] = useState("text"); // 'text' | 'template'
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [templateVars, setTemplateVars] = useState({});
+  const [initialMessage, setInitialMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoadingLeads(true);
+    customersApi.list({ size: 100 })
+      .then((data) => {
+        const items = Array.isArray(data) ? data : (data?.items || data?.content || []);
+        setLeads(items);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingLeads(false));
+
+    whatsappTemplatesApi.getApproved()
+      .then((data) => {
+        const list = Array.isArray(data) ? data : (data?.data || []);
+        setTemplates(list);
+      })
+      .catch(() => {});
+  }, [open]);
+
+  const filteredLeads = useMemo(() => {
+    if (!searchLead) return leads.slice(0, 20);
+    const q = searchLead.toLowerCase();
+    return leads.filter((l) =>
+      (l.fullName || l.name || "").toLowerCase().includes(q) ||
+      (l.phone || "").includes(q) ||
+      (l.email || "").toLowerCase().includes(q)
+    ).slice(0, 20);
+  }, [leads, searchLead]);
+
+  const selectedTmpl = useMemo(() => {
+    return templates.find((t) => t.id === selectedTemplateId || t.templateName === selectedTemplateId);
+  }, [templates, selectedTemplateId]);
+
+  const handleStartChat = async () => {
+    const targetName = mode === "select" ? (selectedLead?.fullName || selectedLead?.name) : manualName.trim();
+    const targetPhone = mode === "select" ? selectedLead?.phone : manualPhone.trim();
+    const customerId = mode === "select" ? selectedLead?.id : null;
+
+    if (!targetPhone) {
+      toast.error("Please select a lead or provide a valid phone number");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      if (sendType === "template" && selectedTmpl) {
+        const varList = (selectedTmpl.variables || []).map((v, i) => templateVars[v] || templateVars[String(i + 1)] || targetName || "");
+        if (customerId) {
+          await whatsappSendApi.sendTemplate({
+            customerId,
+            templateId: selectedTmpl.id,
+            variables: varList,
+          });
+        }
+        toast.success(`Template "${selectedTmpl.displayName || selectedTmpl.templateName}" sent!`);
+      } else if (initialMessage.trim()) {
+        if (customerId) {
+          await whatsappSendApi.sendSession({
+            customerId,
+            messageBody: initialMessage.trim(),
+          });
+        }
+        toast.success("Message sent successfully!");
+      }
+
+      const newConv = {
+        id: String(customerId || `custom_${Date.now()}`),
+        customerId: customerId ? String(customerId) : null,
+        name: targetName || targetPhone,
+        phone: targetPhone,
+        initials: (targetName || "WA").split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase(),
+        lastMsg: sendType === "template" ? `[Template] ${selectedTmpl?.displayName || selectedTmpl?.templateName}` : initialMessage.trim(),
+        lastTime: "Just now",
+        unread: 0,
+        status: "open",
+        assignee: "You",
+        source: "WhatsApp",
+        online: false,
+        starred: false,
+        channel: "meta",
+        messages: [
+          ...(initialMessage.trim() || sendType === "template" ? [{
+            id: `msg_${Date.now()}`,
+            from: "us",
+            text: sendType === "template" ? (selectedTmpl?.bodyText || selectedTmpl?.displayName) : initialMessage.trim(),
+            time: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
+            status: "delivered",
+            date: "Today",
+          }] : []),
+        ],
+        notes: "",
+        tags: [],
+      };
+
+      onChatCreated(newConv);
+      onClose();
+    } catch (err) {
+      toast.error(err?.message || "Failed to start conversation");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg p-0 overflow-hidden">
+        <DialogHeader className="px-5 py-4 border-b border-border">
+          <DialogTitle className="text-sm font-bold flex items-center gap-2">
+            <div className="h-7 w-7 rounded-lg bg-emerald-500 flex items-center justify-center text-white">
+              <MessageCircle className="h-4 w-4" />
+            </div>
+            Start New WhatsApp Conversation
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+          {/* Target Mode Toggle */}
+          <div className="flex rounded-lg border border-border p-1 bg-muted/40">
+            <button
+              onClick={() => { setMode("select"); setSelectedLead(null); }}
+              className={cn("flex-1 py-1.5 text-xs font-semibold rounded-md transition-all", mode === "select" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+            >
+              Choose from CRM Leads
+            </button>
+            <button
+              onClick={() => setMode("manual")}
+              className={cn("flex-1 py-1.5 text-xs font-semibold rounded-md transition-all", mode === "manual" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
+            >
+              Enter Phone Number
+            </button>
+          </div>
+
+          {mode === "select" ? (
+            <div className="space-y-2">
+              <Label className="text-xs font-medium">Select Lead / Contact <span className="text-red-500">*</span></Label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  value={searchLead}
+                  onChange={(e) => setSearchLead(e.target.value)}
+                  placeholder="Search lead by name, phone or email..."
+                  className="pl-8 h-8 text-xs"
+                />
+              </div>
+              <div className="border border-border rounded-lg max-h-40 overflow-y-auto divide-y divide-border/60">
+                {loadingLeads ? (
+                  <div className="flex items-center justify-center py-6 text-xs text-muted-foreground gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading CRM leads...
+                  </div>
+                ) : filteredLeads.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-muted-foreground">
+                    No leads found matching query
+                  </div>
+                ) : (
+                  filteredLeads.map((lead) => {
+                    const isSel = selectedLead?.id === lead.id;
+                    return (
+                      <button
+                        key={lead.id}
+                        type="button"
+                        onClick={() => setSelectedLead(lead)}
+                        className={cn("w-full text-left px-3 py-2 flex items-center justify-between text-xs transition-colors hover:bg-muted/50", isSel ? "bg-emerald-500/10 font-medium text-emerald-800 dark:text-emerald-300" : "")}
+                      >
+                        <div>
+                          <p className="font-semibold">{lead.fullName || lead.name || "Unnamed"}</p>
+                          <p className="text-[10.5px] text-muted-foreground">{lead.phone || "No phone"} · {lead.email || "No email"}</p>
+                        </div>
+                        {isSel && <Check className="h-4 w-4 text-emerald-600" />}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+              {selectedLead && (
+                <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs flex items-center justify-between">
+                  <div>
+                    <span className="font-semibold text-emerald-800 dark:text-emerald-300">{selectedLead.fullName || selectedLead.name}</span>
+                    <span className="text-muted-foreground ml-2">({selectedLead.phone})</span>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] bg-background">Selected</Badge>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Customer Name</Label>
+                <Input value={manualName} onChange={(e) => setManualName(e.target.value)} placeholder="e.g. Rajesh Kumar" className="h-8 text-xs" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Phone Number (with +91) <span className="text-red-500">*</span></Label>
+                <Input value={manualPhone} onChange={(e) => setManualPhone(e.target.value)} placeholder="+91 98765 43210" className="h-8 text-xs" />
+              </div>
+            </div>
+          )}
+
+          {/* Message Type Toggle */}
+          <div className="space-y-2 pt-2 border-t border-border">
+            <Label className="text-xs font-medium">Initial Message Type</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setSendType("text")}
+                className={cn("p-2 rounded-lg border text-xs text-left transition-colors", sendType === "text" ? "border-emerald-500 bg-emerald-500/10 font-semibold text-emerald-800 dark:text-emerald-300" : "border-border hover:bg-muted/50")}
+              >
+                <p>Direct Message / Session</p>
+                <p className="text-[10px] text-muted-foreground font-normal">Active within 24hr window</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSendType("template")}
+                className={cn("p-2 rounded-lg border text-xs text-left transition-colors", sendType === "template" ? "border-emerald-500 bg-emerald-500/10 font-semibold text-emerald-800 dark:text-emerald-300" : "border-border hover:bg-muted/50")}
+              >
+                <p>Approved Template</p>
+                <p className="text-[10px] text-muted-foreground font-normal">Meta official 24/7 delivery</p>
+              </button>
+            </div>
+          </div>
+
+          {sendType === "template" ? (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Select Approved Template</Label>
+                <Select value={selectedTemplateId} onValueChange={(v) => { setSelectedTemplateId(v); setTemplateVars({}); }}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder={templates.length === 0 ? "No approved templates found" : "Choose approved template"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.map((t) => (
+                      <SelectItem key={t.id || t.templateName} value={t.id || t.templateName} className="text-xs">
+                        {t.displayName || t.templateName} <span className="text-muted-foreground text-[10px]">· {t.category}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedTmpl && (
+                <div className="p-3 rounded-lg bg-muted/40 border border-border space-y-2">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Template Preview</p>
+                  <p className="text-xs whitespace-pre-wrap leading-relaxed bg-background p-2.5 rounded border border-border/80">
+                    {selectedTmpl.bodyText || selectedTmpl.body || "Template content"}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Message Body</Label>
+              <Textarea
+                value={initialMessage}
+                onChange={(e) => setInitialMessage(e.target.value)}
+                placeholder="Type your opening message to this customer..."
+                className="text-xs min-h-[80px] resize-none"
+              />
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="px-5 py-3 border-t border-border bg-card flex justify-between items-center">
+          <Button variant="outline" size="sm" onClick={onClose} className="text-xs">
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleStartChat}
+            disabled={submitting || (mode === "select" ? !selectedLead : !manualPhone.trim())}
+            className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+          >
+            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            Start Conversation
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function WhatsAppChatPage() {
-  const [conversations, setConversations] = useState(MOCK_CONVERSATIONS);
+  const router = useRouter();
+  const [conversations, setConversations] = useState([]);
   const [isLoadingConvs, setIsLoadingConvs] = useState(false);
   const [activeId, setActiveId] = useState(null);
   const [message, setMessage] = useState("");
@@ -241,120 +489,158 @@ export default function WhatsAppChatPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [editingNote, setEditingNote] = useState(false);
+  const [newChatOpen, setNewChatOpen] = useState(false);
+
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
   // Load conversations from API
-  useEffect(() => {
-    if (!isApiMode()) {
-      setConversations(MOCK_CONVERSATIONS);
-      setActiveId("c1");
-      setWsConnected(true);
-      return;
-    }
+  const loadConversations = useCallback(() => {
     setIsLoadingConvs(true);
     whatsappInboxApi.getConversations()
       .then((data) => {
-        const items = Array.isArray(data) ? data : (data?.content || []);
+        const items = Array.isArray(data) ? data : (data?.data || data?.content || []);
         if (items.length > 0) {
           const mapped = items.map((c) => ({
             id: String(c.customerId || c.id),
-            name: c.customerName || c.name || "Unknown",
-            phone: c.phoneNumber || c.phone || "",
-            initials: (c.customerName || c.name || "?").split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase(),
+            customerId: String(c.customerId || c.id),
+            name: c.customerName || c.name || "Customer",
+            phone: c.customerPhone || c.phoneNumber || c.phone || "",
+            initials: (c.customerName || c.name || "WA").split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase(),
             lastMsg: c.lastMessage || "",
             lastTime: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "",
             unread: c.unreadCount || 0,
-            status: c.status?.toLowerCase() || "open",
-            assignee: c.assigneeName || "Unassigned",
+            status: (c.status || "open").toLowerCase(),
+            assignee: c.assignedStaffName || c.assigneeName || "Unassigned",
             source: c.source || "WhatsApp",
             label: c.label || null,
             online: false,
-            starred: c.starred || false,
+            starred: Boolean(c.starred),
             channel: c.channel || "meta",
             messages: [],
             notes: c.notes || "",
             tags: c.tags || [],
           }));
           setConversations(mapped);
-          setActiveId(mapped[0]?.id || null);
+          setActiveId((curr) => curr || mapped[0]?.id || null);
         } else {
-          setConversations(MOCK_CONVERSATIONS);
-          setActiveId("c1");
+          setConversations([]);
+          setActiveId(null);
         }
         setWsConnected(true);
       })
-      .catch(() => {
-        setConversations(MOCK_CONVERSATIONS);
-        setActiveId("c1");
+      .catch((err) => {
+        console.warn("Failed to load conversations:", err);
+        setConversations([]);
+        setActiveId(null);
         setWsConnected(false);
       })
       .finally(() => setIsLoadingConvs(false));
   }, []);
 
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations]);
+
   // Load thread messages when active conversation changes
   useEffect(() => {
-    if (!isApiMode() || !activeId) return;
-    // Use functional check to avoid stale closure on conversations
+    if (!activeId) return;
     setConversations((prev) => {
       const conv = prev.find((c) => c.id === activeId);
-      if (!conv || conv.messages.length > 0) return prev; // already loaded, no change
-      // Trigger async load outside setState
+      if (!conv || (conv.messages && conv.messages.length > 0)) return prev;
+
       whatsappInboxApi.getThread(activeId, { page: 0, size: 50 })
         .then((data) => {
-          const msgs = Array.isArray(data) ? data : (data?.content || []);
+          const msgs = Array.isArray(data) ? data : (data?.items || data?.content || data?.data || []);
           const mapped = msgs.map((m) => ({
-            id: String(m.id),
-            from: m.direction === "OUTBOUND" ? "us" : "them",
-            text: m.body || m.message || "",
-            time: m.sentAt ? new Date(m.sentAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "",
+            id: String(m.id || Math.random()),
+            from: (m.direction === "OUTBOUND" || m.direction === "outbound") ? "us" : "them",
+            text: m.messageBody || m.body || m.content || "",
+            time: (m.sentAt || m.createdAt) ? new Date(m.sentAt || m.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "",
             status: (m.status || "sent").toLowerCase(),
-            date: m.sentAt ? new Date(m.sentAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "Today",
+            date: (m.sentAt || m.createdAt) ? new Date(m.sentAt || m.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "Today",
           }));
           setConversations((p) => p.map((c) => c.id === activeId ? { ...c, messages: mapped } : c));
+          whatsappInboxApi.markAsRead(activeId).catch(() => {});
         })
         .catch(() => {});
       return prev;
     });
   }, [activeId]);
 
-  const active = conversations.find((c) => c.id === activeId);
+  const active = useMemo(() => conversations.find((c) => c.id === activeId), [conversations, activeId]);
 
-  // WebSocket: real-time inbound messages
+  // Real-time WebSocket Inbound Listener
   useEffect(() => {
-    if (!isApiMode()) return;
     const unsub = subscribeInboundMessages((msg) => {
-      const convId = String(msg.customerId);
+      const convId = String(msg.customerId || msg.phone);
       const newMsg = {
         id: `ws_${Date.now()}`,
         from: "them",
-        text: msg.messageBody || "",
+        text: msg.messageBody || msg.body || "",
         time: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
         status: "delivered",
         date: "Today",
       };
-      setConversations((prev) => prev.map((c) =>
-        c.id === convId
-          ? { ...c, messages: [...c.messages, newMsg], lastMsg: msg.messageBody || "", lastTime: "Just now", unread: c.id === activeId ? 0 : c.unread + 1 }
-          : c
-      ));
+      setConversations((prev) => {
+        const existing = prev.find((c) => c.id === convId);
+        if (existing) {
+          return prev.map((c) =>
+            c.id === convId
+              ? {
+                  ...c,
+                  messages: [...c.messages, newMsg],
+                  lastMsg: msg.messageBody || msg.body || "",
+                  lastTime: "Just now",
+                  unread: c.id === activeId ? 0 : c.unread + 1,
+                }
+              : c
+          );
+        }
+        return [
+          {
+            id: convId,
+            customerId: msg.customerId ? String(msg.customerId) : null,
+            name: msg.customerName || msg.phone || "Inbound Lead",
+            phone: msg.phone || "",
+            initials: (msg.customerName || "WA").split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase(),
+            lastMsg: msg.messageBody || msg.body || "",
+            lastTime: "Just now",
+            unread: 1,
+            status: "open",
+            assignee: "Unassigned",
+            source: "WhatsApp",
+            online: true,
+            starred: false,
+            channel: "meta",
+            messages: [newMsg],
+            notes: "",
+            tags: ["New Inbound"],
+          },
+          ...prev,
+        ];
+      });
       setWsConnected(true);
     });
     return unsub;
   }, [activeId]);
 
-  const filtered = conversations.filter((c) => {
-    const q = search.toLowerCase();
-    const matchSearch = !search || c.name.toLowerCase().includes(q) || c.phone.includes(q);
-    const matchFilter =
-      filter === "all" ||
-      (filter === "open" && c.status === "open") ||
-      (filter === "unread" && c.unread > 0) ||
-      (filter === "resolved" && c.status === "resolved");
-    return matchSearch && matchFilter;
-  });
+  const filtered = useMemo(() => {
+    return conversations.filter((c) => {
+      const q = search.toLowerCase();
+      const matchSearch = !search || c.name.toLowerCase().includes(q) || c.phone.includes(q);
+      const matchFilter =
+        filter === "all" ||
+        (filter === "open" && c.status === "open") ||
+        (filter === "unread" && c.unread > 0) ||
+        (filter === "resolved" && c.status === "resolved");
+      return matchSearch && matchFilter;
+    });
+  }, [conversations, search, filter]);
 
-  const totalUnread = conversations.reduce((s, c) => s + c.unread, 0);
+  const totalUnread = useMemo(() => {
+    return conversations.reduce((s, c) => s + (c.unread || 0), 0);
+  }, [conversations]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -362,7 +648,7 @@ export default function WhatsAppChatPage() {
 
   useEffect(() => {
     if (active) setNoteText(active.notes || "");
-  }, [activeId]);
+  }, [activeId, active]);
 
   const selectConv = useCallback((id) => {
     setActiveId(id);
@@ -372,42 +658,40 @@ export default function WhatsAppChatPage() {
 
   const sendMessage = useCallback(async () => {
     if (!message.trim() || !active) return;
+    const msgText = message.trim();
+    const tempId = `m_${Date.now()}`;
     const newMsg = {
-      id: `m${Date.now()}`, from: "us", text: message.trim(),
+      id: tempId,
+      from: "us",
+      text: msgText,
       time: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
-      status: "sent", date: "Today",
+      status: "sent",
+      date: "Today",
     };
+
     setConversations((prev) =>
       prev.map((c) => c.id === activeId
-        ? { ...c, messages: [...c.messages, newMsg], lastMsg: message.trim(), lastTime: "Just now" }
+        ? { ...c, messages: [...c.messages, newMsg], lastMsg: msgText, lastTime: "Just now" }
         : c)
     );
-    const msgText = message.trim();
     setMessage("");
     setShowQuickReplies(false);
 
-    if (isApiMode()) {
-      try {
-        await whatsappSendApi.sendSession({ customerId: activeId, messageBody: msgText });
-        setConversations((prev) => prev.map((c) => c.id === activeId
-          ? { ...c, messages: c.messages.map((m) => m.id === newMsg.id ? { ...m, status: "delivered" } : m) }
-          : c));
-      } catch {
-        setConversations((prev) => prev.map((c) => c.id === activeId
-          ? { ...c, messages: c.messages.map((m) => m.id === newMsg.id ? { ...m, status: "failed" } : m) }
-          : c));
-        toast.error("Failed to send message");
+    try {
+      if (active.customerId || activeId) {
+        await whatsappSendApi.sendSession({
+          customerId: active.customerId || activeId,
+          messageBody: msgText,
+        });
       }
-    } else {
-      setIsTyping(true);
-      setTimeout(() => {
-        setConversations((prev) =>
-          prev.map((c) => c.id === activeId
-            ? { ...c, messages: c.messages.map((m) => m.id === newMsg.id ? { ...m, status: "delivered" } : m) }
-            : c)
-        );
-        setIsTyping(false);
-      }, 1500);
+      setConversations((prev) => prev.map((c) => c.id === activeId
+        ? { ...c, messages: c.messages.map((m) => m.id === tempId ? { ...m, status: "delivered" } : m) }
+        : c));
+    } catch (err) {
+      toast.error(err?.message || "Failed to send message via WhatsApp");
+      setConversations((prev) => prev.map((c) => c.id === activeId
+        ? { ...c, messages: c.messages.map((m) => m.id === tempId ? { ...m, status: "failed" } : m) }
+        : c));
     }
   }, [message, active, activeId]);
 
@@ -431,12 +715,25 @@ export default function WhatsAppChatPage() {
     toast.success("Note saved");
   }, [activeId, noteText]);
 
-  const groupedMessages = active ? active.messages.reduce((acc, msg) => {
-    const d = msg.date || "Today";
-    if (!acc[d]) acc[d] = [];
-    acc[d].push(msg);
-    return acc;
-  }, {}) : {};
+  const groupedMessages = useMemo(() => {
+    if (!active) return {};
+    return active.messages.reduce((acc, msg) => {
+      const d = msg.date || "Today";
+      if (!acc[d]) acc[d] = [];
+      acc[d].push(msg);
+      return acc;
+    }, {});
+  }, [active]);
+
+  const viewLead = useCallback(() => {
+    if (!active) return;
+    const cid = active.customerId || active.id;
+    if (cid && cid.includes("-")) {
+      router.push(`/leads/active/${encodeId(cid)}`);
+    } else {
+      router.push(`/leads/active?search=${encodeURIComponent(active.phone || active.name)}`);
+    }
+  }, [active, router]);
 
   return (
     <div className="flex h-[calc(100vh-56px)] overflow-hidden bg-background border border-border rounded-xl">
@@ -459,7 +756,7 @@ export default function WhatsAppChatPage() {
               <div className={cn(
                 "flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border",
                 wsConnected
-                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-200"
+                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-800"
                   : "bg-rose-500/10 text-rose-600 border-rose-200"
               )}>
                 {wsConnected ? <Wifi className="h-2.5 w-2.5" /> : <WifiOff className="h-2.5 w-2.5" />}
@@ -467,8 +764,9 @@ export default function WhatsAppChatPage() {
               </div>
               <Button
                 size="icon"
-                className="h-7 w-7 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg"
-                onClick={() => toast.info("New conversation coming soon")}
+                className="h-7 w-7 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm"
+                onClick={() => setNewChatOpen(true)}
+                title="Start New WhatsApp Chat"
               >
                 <Plus className="h-3.5 w-3.5" />
               </Button>
@@ -519,9 +817,20 @@ export default function WhatsAppChatPage() {
               <p className="text-xs">Loading conversations...</p>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 gap-2 text-muted-foreground">
-              <MessageCircle className="h-8 w-8 opacity-20" />
-              <p className="text-xs">No conversations found</p>
+            <div className="flex flex-col items-center justify-center h-48 px-4 text-center text-muted-foreground">
+              <MessageCircle className="h-8 w-8 opacity-20 mb-2" />
+              <p className="text-xs font-semibold text-foreground">No conversations</p>
+              <p className="text-[11px] text-muted-foreground mt-1 mb-3">
+                {search ? "No chats matching search" : "Inbound WhatsApp messages will appear here."}
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs border-emerald-500/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
+                onClick={() => setNewChatOpen(true)}
+              >
+                <Plus className="h-3 w-3 mr-1" /> New Chat
+              </Button>
             </div>
           ) : (
             <div className="divide-y divide-border/50">
@@ -537,10 +846,18 @@ export default function WhatsAppChatPage() {
           )}
         </div>
 
-        <div className="px-3 py-2 border-t border-border">
-          <p className="text-[10px] text-muted-foreground text-center">
+        <div className="px-3 py-2 border-t border-border flex items-center justify-between">
+          <p className="text-[10px] text-muted-foreground">
             {filtered.length} of {conversations.length} conversations
           </p>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={loadConversations}
+            className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+          >
+            Refresh
+          </Button>
         </div>
       </div>
 
@@ -563,7 +880,7 @@ export default function WhatsAppChatPage() {
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground leading-tight">{active.name}</p>
-                <p className="text-[10px] text-muted-foreground">{active.phone} · {active.online ? "Online" : "Last seen recently"}</p>
+                <p className="text-[10px] text-muted-foreground">{active.phone || "No phone number"}</p>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -603,6 +920,9 @@ export default function WhatsAppChatPage() {
                   <DropdownMenuItem onClick={() => toggleStar(active.id)} className="gap-2 cursor-pointer text-xs">
                     <Star className="h-3.5 w-3.5" /> {active.starred ? "Unstar" : "Star"}
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={viewLead} className="gap-2 cursor-pointer text-xs">
+                    <ExternalLink className="h-3.5 w-3.5" /> Open Lead Profile
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => markResolved(active.id)} className="gap-2 cursor-pointer text-xs">
                     <Archive className="h-3.5 w-3.5" /> Mark Resolved
@@ -614,34 +934,44 @@ export default function WhatsAppChatPage() {
 
           {/* Messages Area */}
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-0.5">
-            {Object.entries(groupedMessages).map(([date, msgs]) => (
-              <div key={date}>
-                <DateSeparator label={date} />
-                <div className="space-y-2">
-                  {msgs.map((msg) => {
-                    const isUs = msg.from === "us";
-                    return (
-                      <div key={msg.id} className={cn("flex", isUs ? "justify-end" : "justify-start")}>
-                        <div className={cn(
-                          "max-w-[68%] px-3.5 py-2.5 rounded-2xl shadow-sm text-[12.5px] leading-relaxed",
-                          isUs
-                            ? "bg-emerald-500 text-white rounded-br-sm"
-                            : "bg-card text-foreground rounded-bl-sm border border-border"
-                        )}>
-                          <p className="whitespace-pre-wrap">{msg.text}</p>
-                          <div className={cn("flex items-center gap-1 mt-1", isUs ? "justify-end" : "justify-start")}>
-                            <span className={cn("text-[9.5px]", isUs ? "text-white/70" : "text-muted-foreground")}>
-                              {msg.time}
-                            </span>
-                            <StatusIcon status={msg.status} fromUs={isUs} />
+            {Object.keys(groupedMessages).length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground py-12">
+                <MessageCircle className="h-10 w-10 opacity-20 mb-2" />
+                <p className="text-xs font-semibold text-foreground">No message history yet</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Send a template or text message below to begin chatting.
+                </p>
+              </div>
+            ) : (
+              Object.entries(groupedMessages).map(([date, msgs]) => (
+                <div key={date}>
+                  <DateSeparator label={date} />
+                  <div className="space-y-2">
+                    {msgs.map((msg) => {
+                      const isUs = msg.from === "us";
+                      return (
+                        <div key={msg.id} className={cn("flex", isUs ? "justify-end" : "justify-start")}>
+                          <div className={cn(
+                            "max-w-[68%] px-3.5 py-2.5 rounded-2xl shadow-sm text-[12.5px] leading-relaxed",
+                            isUs
+                              ? "bg-emerald-600 text-white rounded-br-sm"
+                              : "bg-card text-foreground rounded-bl-sm border border-border"
+                          )}>
+                            <p className="whitespace-pre-wrap">{msg.text}</p>
+                            <div className={cn("flex items-center gap-1 mt-1", isUs ? "justify-end" : "justify-start")}>
+                              <span className={cn("text-[9.5px]", isUs ? "text-white/75" : "text-muted-foreground")}>
+                                {msg.time}
+                              </span>
+                              <StatusIcon status={msg.status} fromUs={isUs} />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
             {isTyping && <TypingIndicator />}
             <div ref={messagesEndRef} />
           </div>
@@ -667,7 +997,7 @@ export default function WhatsAppChatPage() {
             {isAiMode && (
               <div className="flex items-center gap-1.5 mb-2 px-1">
                 <Bot className="h-3 w-3 text-violet-500" />
-                <span className="text-[10px] text-violet-600 font-semibold">AI Assist is active</span>
+                <span className="text-[10px] text-violet-600 font-semibold">AI Assistant is active for auto-replies</span>
               </div>
             )}
             <div className="flex items-end gap-2">
@@ -680,7 +1010,7 @@ export default function WhatsAppChatPage() {
                   <Zap className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={() => toast.info("Attachment coming soon")}
+                  onClick={() => toast.info("Document & Image attachments will be sent via Meta Media API")}
                   title="Attach file"
                   className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                 >
@@ -694,7 +1024,7 @@ export default function WhatsAppChatPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
                 }}
-                placeholder="Type a message..."
+                placeholder="Type a WhatsApp message... (Enter to send, Shift+Enter for newline)"
                 rows={1}
                 className="flex-1 resize-none bg-muted/50 border-border text-foreground placeholder:text-muted-foreground text-[12.5px] rounded-xl px-3 py-2 focus-visible:ring-1 focus-visible:ring-emerald-500/50 min-h-[36px] max-h-[120px]"
               />
@@ -702,7 +1032,7 @@ export default function WhatsAppChatPage() {
                 onClick={sendMessage}
                 disabled={!message.trim()}
                 size="icon"
-                className="h-9 w-9 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white shrink-0 disabled:opacity-40"
+                className="h-9 w-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 disabled:opacity-40"
               >
                 <Send className="h-4 w-4" />
               </Button>
@@ -711,9 +1041,23 @@ export default function WhatsAppChatPage() {
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center bg-muted/20">
-          <div className="text-center space-y-3">
-            <MessageCircle className="h-12 w-12 text-muted-foreground/20 mx-auto" />
-            <p className="text-muted-foreground text-sm">Select a conversation to start chatting</p>
+          <div className="text-center space-y-3 max-w-sm px-4">
+            <div className="h-14 w-14 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center mx-auto">
+              <MessageCircle className="h-7 w-7" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-foreground">WhatsApp Live Inbox</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Select a conversation from the left, or click below to start a chat with any lead or customer.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1.5 shadow-sm"
+              onClick={() => setNewChatOpen(true)}
+            >
+              <Plus className="h-3.5 w-3.5" /> Start New Chat
+            </Button>
           </div>
         </div>
       )}
@@ -728,7 +1072,7 @@ export default function WhatsAppChatPage() {
               </AvatarFallback>
             </Avatar>
             <p className="text-xs font-bold text-foreground">{active.name}</p>
-            <p className="text-[10.5px] text-muted-foreground mt-0.5">{active.phone}</p>
+            <p className="text-[10.5px] text-muted-foreground mt-0.5">{active.phone || "No phone"}</p>
             {active.channel && CHANNEL_CFG[active.channel] && (
               <span className={`inline-flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded-full border mt-1.5 ${CHANNEL_CFG[active.channel].cls}`}>
                 <span className={`h-1.5 w-1.5 rounded-full ${CHANNEL_CFG[active.channel].dot}`} />
@@ -736,9 +1080,11 @@ export default function WhatsAppChatPage() {
               </span>
             )}
             <div className="flex items-center justify-center gap-1.5 mt-2 flex-wrap">
-              <span className={cn("text-[9px] px-1.5 py-0.5 rounded-md font-medium", SOURCE_COLORS[active.source] || "bg-muted text-muted-foreground")}>
-                {active.source}
-              </span>
+              {active.source && (
+                <span className={cn("text-[9px] px-1.5 py-0.5 rounded-md font-medium", SOURCE_COLORS[active.source] || "bg-muted text-muted-foreground")}>
+                  {active.source}
+                </span>
+              )}
               {active.label && (
                 <span className={cn("text-[9px] px-1.5 py-0.5 rounded-md font-semibold border", LABEL_COLORS[active.label] || "bg-muted text-muted-foreground border-border")}>
                   {active.label}
@@ -749,7 +1095,7 @@ export default function WhatsAppChatPage() {
 
           <div className="p-3 space-y-4 text-xs">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Assigned To</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Assigned Agent</p>
               <p className="text-foreground font-medium text-xs">{active.assignee}</p>
             </div>
 
@@ -780,7 +1126,7 @@ export default function WhatsAppChatPage() {
                     onChange={(e) => setNoteText(e.target.value)}
                     rows={3}
                     className="text-xs resize-none"
-                    placeholder="Add a note..."
+                    placeholder="Add a customer note..."
                   />
                   <Button size="sm" onClick={saveNote} className="h-6 text-[10px] w-full">Save</Button>
                 </div>
@@ -794,23 +1140,35 @@ export default function WhatsAppChatPage() {
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">Quick Actions</p>
               <div className="space-y-1">
+                {active.phone && (
+                  <button
+                    onClick={() => window.open(`tel:${active.phone.replace(/[^\d+]/g, "")}`)}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-muted/60 hover:bg-muted text-foreground text-[11px] font-medium transition-colors"
+                  >
+                    <Phone className="h-3.5 w-3.5 text-emerald-600" /> Call Now
+                  </button>
+                )}
                 <button
-                  onClick={() => window.location.assign(`tel:${active.phone.replace(/[^\d+]/g, "")}`)}
+                  onClick={viewLead}
                   className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-muted/60 hover:bg-muted text-foreground text-[11px] font-medium transition-colors"
                 >
-                  <Phone className="h-3.5 w-3.5 text-emerald-600" /> Call Now
-                </button>
-                <button
-                  onClick={() => toast.info("Opening lead profile...")}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-muted/60 hover:bg-muted text-foreground text-[11px] font-medium transition-colors"
-                >
-                  <FileText className="h-3.5 w-3.5 text-primary" /> View Lead
+                  <FileText className="h-3.5 w-3.5 text-primary" /> View Lead Profile
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* ── New Chat Dialog ── */}
+      <NewChatModal
+        open={newChatOpen}
+        onClose={() => setNewChatOpen(false)}
+        onChatCreated={(conv) => {
+          setConversations((prev) => [conv, ...prev.filter((c) => c.id !== conv.id)]);
+          setActiveId(conv.id);
+        }}
+      />
     </div>
   );
 }

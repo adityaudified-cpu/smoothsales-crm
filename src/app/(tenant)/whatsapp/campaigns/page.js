@@ -117,7 +117,7 @@ function CreateCampaignModal({ open, onClose, onSubmit, templates = MOCK_TEMPLAT
               <>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Campaign Name <span className="text-red-500">*</span></Label>
-                  <Input value={form.name} onChange={(e) => setF({ name: e.target.value })} placeholder="e.g. Diwali 2024 Offer" className="h-8 text-xs" />
+                  <Input value={form.name} onChange={(e) => setF({ name: e.target.value })} placeholder="e.g. Q1 Product Discovery Broadcast" className="h-8 text-xs" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Message Template <span className="text-red-500">*</span></Label>

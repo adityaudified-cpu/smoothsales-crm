@@ -1,7 +1,17 @@
 // HTTP client for the SmoothSales Spring Boot backend (server.servlet.context-path = /api).
 // Every endpoint returns ApiResponse<T> = { success, message, data, errors, timestamp }; callers get `data`.
 
-export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api").replace(/\/$/, "");
+const RAW_API_URL = (process.env.NEXT_PUBLIC_API_URL || "/api").replace(/\/$/, "");
+
+// Resolve base URL: relative paths get prefixed with origin (browser) or internal host (SSR).
+function resolveBase() {
+  if (!RAW_API_URL.startsWith("/")) return RAW_API_URL;
+  if (typeof window !== "undefined") return `${window.location.origin}${RAW_API_URL}`;
+  const internal = (process.env.INTERNAL_API_URL || "http://127.0.0.1:8080/api").replace(/\/$/, "");
+  return internal;
+}
+
+export const API_BASE_URL = RAW_API_URL;
 
 // "api" switches the Leads module from browser storage to the backend.
 export const LEADS_DATA_SOURCE = process.env.NEXT_PUBLIC_LEADS_DATA_SOURCE === "api" ? "api" : "local";
@@ -34,7 +44,8 @@ export function clearAuthTokens() {
 }
 
 function buildUrl(path, query) {
-  const url = new URL(`${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`);
+  const base = resolveBase();
+  const url = new URL(`${base}${path.startsWith("/") ? path : `/${path}`}`);
   Object.entries(query || {}).forEach(([key, value]) => {
     if (value === undefined || value === null || value === "") return;
     if (Array.isArray(value)) value.forEach((item) => url.searchParams.append(key, item));
@@ -72,7 +83,7 @@ export async function apiRequest(path, { method = "GET", query, body, signal, re
     response = await fetch(buildUrl(path, query), { method, headers, signal, body: body === undefined ? undefined : isForm ? body : JSON.stringify(body) });
   } catch (error) {
     if (error.name === "AbortError") throw error;
-    throw new ApiError(`Cannot reach the server at ${API_BASE_URL}`, { status: 0, path });
+    throw new ApiError(`Cannot reach the server at ${resolveBase()}`, { status: 0, path });
   }
 
   if (response.status === 401 && retry && (await refreshAccessToken())) {
