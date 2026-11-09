@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useReactTable,
   getCoreRowModel,
@@ -50,7 +51,6 @@ import {
   PhoneIncoming,
   PhoneOutgoing,
   AlertCircle,
-  HelpCircle,
   Pencil,
   ChevronLeft,
   ChevronRight,
@@ -58,39 +58,95 @@ import {
   ChevronsRight,
   Rows3,
   RotateCcw,
+  GripVertical,
+  Copy,
+  Zap,
+  CheckCircle2,
+  UserCheck,
+  AlertTriangle,
+  Trash2,
+  MoreHorizontal,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatDistanceToNowStrict, format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { formatCellValue, formatINR, parseValidDate } from "@/lib/format-cell-value";
 import { LEADS_COLUMNS_CONFIG } from "@/lib/leads-columns.config";
+import { encodeLeadId } from "@/lib/lead-id-codec";
 
 export function LeadTable({
   data = [],
   columnsConfig = LEADS_COLUMNS_CONFIG,
   visibleColumnIds = [],
+  columnOrder = [],
+  columnSizing = {},
+  onColumnSizingChange,
+  onReorderColumns,
   rowSelection = {},
   onRowSelectionChange,
   isLoading = false,
   onResetFilters,
+  onEditLead,
+  onDeleteLead,
 }) {
+  const router = useRouter();
   const [sorting, setSorting] = useState([{ id: "last_worked", desc: true }]);
   const [columnFilters, setColumnFilters] = useState([]);
-  const [density, setDensity] = useState("normal"); // "normal" | "compact"
-  const [pagination, setPagination] = useState({
-    pageIndex: 0,
-    pageSize: 15,
-  });
+  const [density, setDensity] = useState("normal");
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 15 });
+  const [internalColumnSizing, setInternalColumnSizing] = useState({});
+  const resolvedColumnSizing = onColumnSizingChange ? columnSizing : internalColumnSizing;
+
+  // Column drag-to-reorder state
+  const dragColId = useRef(null);
+  const dragOverColId = useRef(null);
+  const [draggingColId, setDraggingColId] = useState(null);
+
+  const handleColDragStart = (colId) => {
+    dragColId.current = colId;
+    setDraggingColId(colId);
+  };
+  const handleColDragEnter = (colId) => { dragOverColId.current = colId; };
+  const handleColDragEnd = () => {
+    if (dragColId.current && dragOverColId.current && dragColId.current !== dragOverColId.current && onReorderColumns) {
+      onReorderColumns(dragColId.current, dragOverColId.current);
+    }
+    dragColId.current = null;
+    dragOverColId.current = null;
+    setDraggingColId(null);
+  };
 
   // Quick Action Handlers
   const handleCall = (e, lead) => {
     e.stopPropagation();
-    toast.success(`Calling ${lead.lead_name || lead.name} (${lead.mobile_number || lead.phone})`);
+    const phone = String(lead.mobile_number || lead.phone || "").trim();
+    if (!phone) return toast.error("This lead has no phone number");
+    toast.success(`Dialing ${lead.lead_name || lead.name || phone}...`);
+    window.location.href = `tel:${phone.replace(/[^\d+]/g, "")}`;
   };
 
   const handleWhatsApp = (e, lead) => {
     e.stopPropagation();
-    toast.info(`Opening WhatsApp for ${lead.lead_name || lead.name}`);
+    const phone = String(lead.mobile_number || lead.phone || "").replace(/\D/g, "");
+    if (!phone) return toast.error("This lead has no phone number");
+    const name = lead.lead_name || lead.name || "there";
+    const text = encodeURIComponent(`Hi ${name}, reaching out from SmoothSales regarding your inquiry. When would be a good time to connect?`);
+    window.open(`https://wa.me/${phone}?text=${text}`, "_blank", "noopener,noreferrer");
+  };
+
+  const handleCopyPhone = (e, lead) => {
+    e.stopPropagation();
+    const phone = lead.mobile_number || lead.phone || "";
+    if (phone) {
+      navigator.clipboard.writeText(phone).then(() => toast.success("Phone copied"));
+    }
   };
 
   // Convert columnsConfig into TanStack table columns
@@ -122,10 +178,43 @@ export function LeadTable({
       size: 44,
     };
 
-    const dataCols = columnsConfig.map((col) => {
+    // S.No column — derives the true sequential number from the SORTED+FILTERED row model.
+    // This is the only correct approach: find this row's position in the full sorted+filtered
+    // list (before pagination slicing), so the number never resets on filter/sort change.
+    const snoCol = {
+      id: "sno",
+      header: () => <span className="text-[11px] font-semibold text-muted-foreground">#</span>,
+      cell: ({ row, table }) => {
+        // getSortedRowModel gives all rows after sort+filter, before pagination.
+        // Find this row's index in that full list for a stable global sequence number.
+        const allSortedRows = table.getSortedRowModel().rows;
+        const globalIndex = allSortedRows.findIndex((r) => r.id === row.id) + 1;
+        return (
+          <span className="font-mono text-[11px] text-muted-foreground select-none tabular-nums">
+            {globalIndex > 0 ? globalIndex : row.index + 1}
+          </span>
+        );
+      },
+      enableSorting: false,
+      enableResizing: false,
+      size: 48,
+    };
+
+    const orderedColumns = columnOrder.length
+      ? [
+          ...columnOrder.map((id) => columnsConfig.find((col) => col.id === id)).filter(Boolean),
+          ...columnsConfig.filter((col) => !columnOrder.includes(col.id)),
+        ]
+      : columnsConfig;
+
+    const dataCols = orderedColumns.map((col) => {
+      const colSize = col.width || (col.id === "lead_name" ? 280 : col.id === "last_user_remark" ? 220 : 160);
       return {
         id: col.id,
         accessorKey: col.accessorKey,
+        size: colSize,
+        minSize: col.minWidth || 100,
+        maxSize: col.maxWidth || 500,
         header: ({ column }) => {
           const isSorted = column.getIsSorted();
           const filterValue = column.getFilterValue();
@@ -198,6 +287,8 @@ export function LeadTable({
               const name = rawVal || lead.name || "Unnamed Lead";
               const isUnassigned = !lead.lead_owner;
               const source = lead.lead_source || lead.source || "";
+              const phone = lead.mobile_number || lead.phone || "";
+              const city = lead.city || "";
               const initials = name
                 .split(" ")
                 .map((n) => n[0])
@@ -206,7 +297,7 @@ export function LeadTable({
                 .toUpperCase();
 
               return (
-                <div className="relative flex items-center justify-between min-w-[210px] group/name py-0.5">
+                <div className="relative flex items-center justify-between min-w-[220px] group/name py-0.5">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <Avatar className="h-7 w-7 text-[10px] font-bold border border-border shrink-0">
                       <AvatarFallback className="bg-primary/10 text-primary">
@@ -214,53 +305,74 @@ export function LeadTable({
                       </AvatarFallback>
                     </Avatar>
 
-                    <div className="flex flex-col min-w-0">
+                    <div className="flex flex-col min-w-0 gap-0.5">
+                      {/* Row 1: Name + source badge */}
                       <div className="flex items-center gap-1.5">
                         <Link
-                          href={`/leads/active/${lead.id}`}
-                          className="font-bold text-foreground hover:text-primary hover:underline truncate text-[13px]"
+                          href={`/leads/active/${encodeLeadId(lead.id)}`}
+                          className="font-bold text-foreground hover:text-primary hover:underline truncate text-[13px] leading-tight"
                         >
                           {name}
                         </Link>
                         {source === "IndiaMART" && (
-                          <span
-                            className="px-1 py-0.2 rounded text-[9px] font-bold bg-muted text-muted-foreground border border-border shrink-0"
-                            title="IndiaMART Ingestion"
-                          >
+                          <span className="px-1 rounded text-[9px] font-bold bg-orange-500/10 text-orange-600 border border-orange-500/20 shrink-0">
                             IM
                           </span>
                         )}
+                        {source === "Meta Ads" && (
+                          <span className="px-1 rounded text-[9px] font-bold bg-blue-500/10 text-blue-600 border border-blue-500/20 shrink-0">
+                            META
+                          </span>
+                        )}
+                        {isUnassigned && (
+                          <span className="text-[9px] font-bold text-destructive bg-destructive/10 px-1 rounded border border-destructive/20 shrink-0">
+                            Unassigned
+                          </span>
+                        )}
                       </div>
-                      {isUnassigned && (
-                        <span className="inline-flex items-center gap-0.5 text-[9.5px] font-bold text-destructive bg-destructive/10 px-1 py-0.2 rounded border border-destructive/20 w-max mt-0.5">
-                          Unassigned
-                        </span>
-                      )}
+                      {/* Row 2: Phone + City */}
+                      <div className="flex items-center gap-2 text-[10.5px] text-muted-foreground">
+                        {phone && (
+                          <span className="font-mono tracking-tight">{phone}</span>
+                        )}
+                        {phone && city && <span className="text-border">·</span>}
+                        {city && (
+                          <span className="truncate">{city}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
                   {/* Inline quick actions on row hover */}
-                  <div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover/name:opacity-100 transition-opacity bg-card/95 backdrop-blur-sm border border-border shadow-sm rounded p-0.5 flex items-center gap-0.5 z-20">
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover/row:opacity-100 transition-all duration-150 bg-card/95 backdrop-blur-md border border-border shadow-md rounded-lg p-0.5 flex items-center gap-0.5 z-20">
                     <button
                       type="button"
                       onClick={(e) => handleCall(e, lead)}
                       title="Call Lead"
-                      className="p-1 rounded text-success hover:bg-success/10 transition-colors"
+                      className="p-1.5 rounded-md text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors"
                     >
                       <Phone className="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"
                       onClick={(e) => handleWhatsApp(e, lead)}
-                      title="WhatsApp Chat"
-                      className="p-1 rounded text-success hover:bg-success/10 transition-colors"
+                      title="1-Click WhatsApp"
+                      className="p-1.5 rounded-md text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors"
                     >
                       <MessageCircle className="h-3.5 w-3.5" />
                     </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleCopyPhone(e, lead)}
+                      title="Copy phone"
+                      className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
                     <Link
-                      href={`/leads/active/${lead.id}`}
-                      title="View Lead Details"
-                      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      href={`/leads/active/${encodeLeadId(lead.id)}`}
+                      title="View Details"
+                      className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                     >
                       <Eye className="h-3.5 w-3.5" />
                     </Link>
@@ -294,22 +406,49 @@ export function LeadTable({
             case "lead_stage": {
               const stageName = formatCellValue(rawVal);
               if (stageName === "—") return <span className="text-muted-foreground">—</span>;
+              const stageStyles = {
+                "New Lead": "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+                "Contacted": "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20",
+                "Qualified": "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+                "Meeting Scheduled": "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
+                "Proposal Sent": "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+                "Deal Won": "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
+                "Disqualified": "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
+              };
+              const dotStyles = {
+                "New Lead": "bg-blue-500",
+                "Contacted": "bg-sky-500",
+                "Qualified": "bg-emerald-500",
+                "Meeting Scheduled": "bg-purple-500",
+                "Proposal Sent": "bg-amber-500",
+                "Deal Won": "bg-green-500",
+                "Disqualified": "bg-rose-500",
+              };
+              const stageClass = stageStyles[stageName] || "bg-secondary text-secondary-foreground border-border/60";
+              const dotClass = dotStyles[stageName] || "bg-primary";
               return (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-secondary text-secondary-foreground border border-border/60">
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                  <span>{stageName}</span>
+                <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium border", stageClass)}>
+                  <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", dotClass)} />
+                  <span className="whitespace-nowrap">{stageName}</span>
                 </span>
               );
             }
 
             case "awaiting_first_touch": {
-              const isAwaiting = rawVal === "YES" || rawVal === true;
+              const isAwaiting = rawVal === "YES" || rawVal === true || rawVal === 1;
               return isAwaiting ? (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10.5px] font-bold bg-warning/10 text-warning border border-warning/30">
-                  YES
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shadow-2xs">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                  </span>
+                  <span>Awaiting Touch</span>
                 </span>
               ) : (
-                <span className="text-muted-foreground text-xs font-mono">NO</span>
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                  <span>Touched</span>
+                </span>
               );
             }
 
@@ -331,11 +470,26 @@ export function LeadTable({
             }
 
             case "speed_to_first_call": {
-              const formatted = formatCellValue(rawVal);
-              if (formatted === "—") return <span className="text-muted-foreground">—</span>;
+              const seconds = Number(rawVal);
+              if (!rawVal || isNaN(seconds)) return <span className="text-muted-foreground">—</span>;
+              // Format: <60s show seconds, else show minutes
+              const display = seconds < 60 ? `${seconds}s` : `${Math.round(seconds / 60)}m`;
+              const isFast = seconds <= 300;    // ≤5 min = green
+              const isDelayed = seconds <= 1800; // 5–30 min = amber, >30 min = rose
+
               return (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-success/10 text-success border border-success/20">
-                  {formatted}
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border",
+                    isFast
+                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                      : isDelayed
+                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                      : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30"
+                  )}
+                >
+                  {isFast && <Zap className="h-3 w-3 shrink-0 text-emerald-500 fill-emerald-500" />}
+                  <span>{display}</span>
                 </span>
               );
             }
@@ -343,7 +497,9 @@ export function LeadTable({
             case "next_followup": {
               const d = parseValidDate(rawVal);
               if (!d) return <span className="text-muted-foreground">—</span>;
-              const isOverdue = d < new Date();
+              const now = new Date();
+              const isOverdue = d < now;
+              const isToday = !isOverdue && d.toDateString() === now.toDateString();
               const dist = formatDistanceToNowStrict(d);
 
               return (
@@ -352,17 +508,25 @@ export function LeadTable({
                     <TooltipTrigger asChild>
                       <span
                         className={cn(
-                          "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border",
+                          "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border transition-all shadow-2xs",
                           isOverdue
-                            ? "bg-destructive/10 text-destructive border-destructive/20"
-                            : "bg-warning/10 text-warning border-warning/30"
+                            ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 animate-pulse font-bold"
+                            : isToday
+                            ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                            : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
                         )}
                       >
-                        <Clock className="h-3 w-3" />
-                        <span>{isOverdue ? `${dist} overdue` : `in ${dist}`}</span>
+                        {isOverdue ? (
+                          <AlertTriangle className="h-3 w-3 shrink-0 text-rose-500" />
+                        ) : (
+                          <Clock className="h-3 w-3 shrink-0" />
+                        )}
+                        <span>
+                          {isOverdue ? `${dist} overdue` : isToday ? `Today (${dist})` : `in ${dist}`}
+                        </span>
                       </span>
                     </TooltipTrigger>
-                    <TooltipContent className="text-xs">
+                    <TooltipContent className="text-xs bg-popover text-popover-foreground border shadow-md">
                       {format(d, "dd MMM yyyy, hh:mm a")}
                     </TooltipContent>
                   </Tooltip>
@@ -408,23 +572,37 @@ export function LeadTable({
 
             case "deal_stage": {
               const stageData = rawVal || { stage: "Discovery", progress: 1 };
-              const progress = stageData.progress || 1;
+              const progress = Number(stageData.progress) || 1;
+              const stages = [
+                "Discovery",
+                "Requirements",
+                "Proposal",
+                "Negotiation",
+                "Documentation",
+                "Closed Won",
+              ];
+              const stageLabel = stageData.stage || stages[progress - 1] || `Stage ${progress}`;
+
               return (
-                <div className="flex flex-col gap-1 min-w-[120px]">
-                  <div className="flex items-center gap-0.5">
+                <div className="flex flex-col gap-1 min-w-[125px]">
+                  <div className="flex items-center gap-1">
                     {[1, 2, 3, 4, 5, 6].map((step) => (
-                      <span
+                      <div
                         key={step}
                         className={cn(
-                          "h-1.5 flex-1 rounded-full",
-                          step <= progress ? "bg-primary" : "bg-muted"
+                          "h-1.5 flex-1 rounded-full transition-all",
+                          step <= progress
+                            ? "bg-gradient-to-r from-emerald-500 to-teal-500 shadow-2xs"
+                            : "bg-muted/60"
                         )}
+                        title={stages[step - 1]}
                       />
                     ))}
                   </div>
-                  <span className="text-[10px] text-muted-foreground font-medium truncate">
-                    {stageData.stage || "Stage 1"}
-                  </span>
+                  <div className="flex items-center justify-between text-[10px] font-medium text-muted-foreground">
+                    <span className="truncate text-foreground font-semibold">{stageLabel}</span>
+                    <span className="font-mono text-[9px] text-muted-foreground/80">{progress}/6</span>
+                  </div>
                 </div>
               );
             }
@@ -432,8 +610,18 @@ export function LeadTable({
             case "lead_disposition": {
               const disp = formatCellValue(rawVal);
               if (disp === "—") return <span className="text-muted-foreground">—</span>;
+              const dispStyles = {
+                "Connected - Interested": "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25",
+                "Connected - Callback Requested": "bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/25",
+                "RNR": "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25",
+                "Busy": "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25",
+                "Not Reachable": "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25",
+                "Not Interested": "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/25",
+                "Invalid Number": "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/25",
+              };
+              const cls = dispStyles[disp] || "bg-secondary text-secondary-foreground border-border";
               return (
-                <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-secondary text-secondary-foreground border border-border whitespace-nowrap">
+                <span className={cn("px-2 py-0.5 rounded text-[11px] font-medium border whitespace-nowrap", cls)}>
                   {disp}
                 </span>
               );
@@ -444,25 +632,35 @@ export function LeadTable({
               return (
                 <div
                   className={cn(
-                    "inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs select-none",
+                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs select-none border transition-colors group/stars",
                     count >= 4
-                      ? "bg-warning/10 border border-warning/30 text-warning font-semibold"
-                      : "text-muted-foreground"
+                      ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 font-semibold shadow-2xs"
+                      : "bg-muted/40 border-border/60 text-muted-foreground hover:bg-muted"
                   )}
                 >
-                  <div className="flex items-center gap-0.5 text-warning">
+                  <div className="flex items-center gap-0.5 text-amber-500">
                     {[1, 2, 3, 4, 5].map((s) => (
-                      <Star
+                      <button
                         key={s}
-                        className={cn(
-                          "h-3 w-3",
-                          s <= count ? "fill-warning text-warning" : "text-muted-foreground/30"
-                        )}
-                      />
+                        type="button"
+                        title={`Set priority to ${s} star${s > 1 ? "s" : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toast.success(`Priority set to ${s} star${s > 1 ? "s" : ""} for ${lead.lead_name || lead.name}`);
+                        }}
+                        className="p-0.5 hover:scale-125 transition-transform"
+                      >
+                        <Star
+                          className={cn(
+                            "h-3 w-3 transition-colors",
+                            s <= count ? "fill-amber-400 text-amber-500" : "text-muted-foreground/30 hover:text-amber-400"
+                          )}
+                        />
+                      </button>
                     ))}
                   </div>
                   {count > 0 && (
-                    <span className="text-[10px] font-mono font-bold leading-none">
+                    <span className="text-[10px] font-mono font-bold leading-none ml-0.5">
                       {count}★
                     </span>
                   )}
@@ -473,17 +671,78 @@ export function LeadTable({
             case "lead_source": {
               const src = formatCellValue(rawVal);
               if (src === "—") return <span className="text-muted-foreground">—</span>;
-              let Icon = Globe;
-              if (src.includes("IndiaMART")) Icon = Building2;
-              if (src.includes("Meta")) Icon = Share2;
-              if (src.includes("Referral")) Icon = HelpCircle;
-              if (src.includes("CSV")) Icon = FileSpreadsheet;
+
+              if (src.includes("IndiaMART")) {
+                return (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/25">
+                    <span className="font-black text-[9px] px-1 py-0.2 rounded bg-orange-500 text-white leading-none">IM</span>
+                    <span>IndiaMART</span>
+                  </span>
+                );
+              }
+              if (src.includes("Meta") || src.includes("Facebook") || src.includes("Instagram")) {
+                return (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/25">
+                    <Share2 className="h-3 w-3 text-blue-500 shrink-0" />
+                    <span>Meta Ads</span>
+                  </span>
+                );
+              }
+              if (src.includes("Google")) {
+                return (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/25">
+                    <span className="font-bold text-[9px] px-1 py-0.2 rounded bg-red-500 text-white leading-none">G</span>
+                    <span>Google Ads</span>
+                  </span>
+                );
+              }
+              if (src.includes("JustDial")) {
+                return (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25">
+                    <span className="font-black text-[9px] px-1 py-0.2 rounded bg-amber-500 text-black leading-none">JD</span>
+                    <span>JustDial</span>
+                  </span>
+                );
+              }
+              if (src.includes("Referral")) {
+                return (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/25">
+                    <UserCheck className="h-3 w-3 text-purple-500 shrink-0" />
+                    <span>Referral</span>
+                  </span>
+                );
+              }
+              if (src.includes("CSV") || src.includes("Excel") || src.includes("Upload")) {
+                return (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/25">
+                    <FileSpreadsheet className="h-3 w-3 text-slate-500 shrink-0" />
+                    <span>CSV Import</span>
+                  </span>
+                );
+              }
 
               return (
-                <div className="flex items-center gap-1.5 truncate">
-                  <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
-                  <span className="truncate text-xs font-medium">{src}</span>
-                </div>
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-secondary text-secondary-foreground border border-border">
+                  <Globe className="h-3 w-3 text-primary shrink-0" />
+                  <span className="truncate">{src}</span>
+                </span>
+              );
+            }
+
+            case "payment_status": {
+              if (!rawVal) return <span className="text-muted-foreground">—</span>;
+              const isPaid = rawVal === "Paid";
+              return (
+                <span
+                  className={cn(
+                    "inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border",
+                    isPaid
+                      ? "bg-success/10 text-success border-success/20"
+                      : "bg-warning/10 text-warning border-warning/30"
+                  )}
+                >
+                  {rawVal}
+                </span>
               );
             }
 
@@ -543,20 +802,88 @@ export function LeadTable({
 
             case "tooltip_text": {
               const text = formatCellValue(rawVal);
-              if (text === "—") return <span className="text-muted-foreground">—</span>;
+              const isRemark = col.id === "last_user_remark";
+              if (text === "—") {
+                if (isRemark) {
+                  return (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-[11px] text-muted-foreground/60 hover:text-primary flex items-center gap-1 italic group/addrem"
+                        >
+                          <Pencil className="h-2.5 w-2.5 opacity-60 group-hover/addrem:opacity-100" />
+                          <span>+ Add remark</span>
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-3 shadow-lg" align="start" onClick={(e) => e.stopPropagation()}>
+                        <div className="space-y-2">
+                          <span className="font-semibold text-xs text-foreground">Add Remark</span>
+                          <Input
+                            placeholder="Type note or call remark..."
+                            className="h-8 text-xs"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && e.target.value.trim()) {
+                                toast.success(`Remark added: "${e.target.value}"`);
+                                e.target.value = "";
+                              }
+                            }}
+                          />
+                          <span className="text-[10px] text-muted-foreground block">Press Enter to save</span>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  );
+                }
+                return <span className="text-muted-foreground">—</span>;
+              }
               return (
-                <TooltipProvider delayDuration={200}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="truncate max-w-[200px] block cursor-help text-xs text-foreground">
+                <div className="flex items-center gap-1.5 group/remcell">
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="truncate max-w-[200px] block cursor-help text-xs text-foreground font-medium">
+                          {text}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs text-xs">
                         {text}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs text-xs">
-                      {text}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  {isRemark && (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={(e) => e.stopPropagation()}
+                          title="Quick edit remark"
+                          className="opacity-0 group-hover/remcell:opacity-100 p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-opacity"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-3 shadow-lg" align="start" onClick={(e) => e.stopPropagation()}>
+                        <div className="space-y-2">
+                          <span className="font-semibold text-xs text-foreground">Update Remark</span>
+                          <Input
+                            defaultValue={text}
+                            placeholder="Type note..."
+                            className="h-8 text-xs"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && e.target.value.trim()) {
+                                toast.success(`Remark updated: "${e.target.value}"`);
+                              }
+                            }}
+                          />
+                          <span className="text-[10px] text-muted-foreground block">Press Enter to save</span>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
               );
             }
 
@@ -590,12 +917,82 @@ export function LeadTable({
       };
     });
 
-    return [selectCol, ...dataCols];
-  }, [columnsConfig]);
+    // Actions column — compact: View button + More dropdown
+    const actionsCol = {
+      id: "actions",
+      header: () => null,
+      cell: ({ row }) => {
+        const lead = row.original;
+        return (
+          <div className="flex items-center justify-end gap-1 pr-1">
+            <Link
+              href={`/leads/active/${encodeLeadId(lead.id)}`}
+              onClick={(e) => e.stopPropagation()}
+              title="View lead details"
+              className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[11px] font-semibold text-primary bg-primary/8 hover:bg-primary/15 border border-primary/20 transition-all"
+            >
+              <Eye className="h-3 w-3" />
+              <span>View</span>
+            </Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted border border-border/60 hover:border-border transition-all"
+                  title="More actions"
+                >
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44 text-xs shadow-lg">
+                {onEditLead && (
+                  <DropdownMenuItem
+                    onClick={(e) => { e.stopPropagation(); onEditLead(lead); }}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />Edit Lead
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  onClick={(e) => { e.stopPropagation(); handleCall(e, lead); }}
+                  className="flex items-center gap-2 cursor-pointer text-emerald-600 focus:text-emerald-600"
+                >
+                  <Phone className="h-3.5 w-3.5" />Call Now
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => { e.stopPropagation(); handleWhatsApp(e, lead); }}
+                  className="flex items-center gap-2 cursor-pointer text-emerald-600 focus:text-emerald-600"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />WhatsApp
+                </DropdownMenuItem>
+                {onDeleteLead && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={(e) => { e.stopPropagation(); onDeleteLead(lead); }}
+                      className="flex items-center gap-2 cursor-pointer text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />Delete
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        );
+      },
+      enableSorting: false,
+      enableResizing: false,
+      size: 120,
+    };
+
+    return [selectCol, snoCol, ...dataCols, actionsCol];
+  }, [columnsConfig, columnOrder]);
 
   // Visibility map
   const columnVisibility = useMemo(() => {
-    const visibility = { select: true, lead_name: true };
+    const visibility = { select: true, sno: true, lead_name: true, actions: true };
     columnsConfig.forEach((c) => {
       visibility[c.id] = visibleColumnIds.length === 0 ? !!c.defaultVisible : visibleColumnIds.includes(c.id);
     });
@@ -611,51 +1008,22 @@ export function LeadTable({
       columnVisibility,
       rowSelection,
       pagination,
+      columnSizing: resolvedColumnSizing,
     },
     enableRowSelection: true,
     onRowSelectionChange,
     onPaginationChange: setPagination,
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
+    onColumnSizingChange: onColumnSizingChange || setInternalColumnSizing,
+    columnResizeMode: "onChange",
+    enableColumnResizing: true,
+    getRowId: (row) => String(row.id),
+    onSortingChange: (updater) => { setSorting(updater); setPagination((p) => ({ ...p, pageIndex: 0 })); },
+    onColumnFiltersChange: (updater) => { setColumnFilters(updater); setPagination((p) => ({ ...p, pageIndex: 0 })); },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
   });
-
-  // Category Bands computation for 2-tier organized table header across 63 columns
-  const categoryBands = useMemo(() => {
-    const leafCols = table.getVisibleLeafColumns();
-    const bands = [];
-    let currentKey = null;
-    let currentSpan = 0;
-
-    leafCols.forEach((col) => {
-      let key = "Core";
-      if (col.id === "select") key = "__select__";
-      else if (col.id === "lead_name") key = "__lead_name__";
-      else {
-        const found = columnsConfig.find((c) => c.id === col.id);
-        key = found?.group || "Core";
-      }
-
-      if (key === currentKey) {
-        currentSpan++;
-      } else {
-        if (currentKey !== null) {
-          bands.push({ group: currentKey, span: currentSpan });
-        }
-        currentKey = key;
-        currentSpan = 1;
-      }
-    });
-
-    if (currentKey !== null) {
-      bands.push({ group: currentKey, span: currentSpan });
-    }
-
-    return bands;
-  }, [table, columnsConfig]);
 
   const pageIndex = table.getState().pagination.pageIndex;
   const pageSize = table.getState().pagination.pageSize;
@@ -667,99 +1035,73 @@ export function LeadTable({
   const selectedCount = Object.keys(rowSelection).length;
 
   return (
-    <div className="w-full bg-card border border-border rounded-lg shadow-2xs overflow-hidden flex flex-col">
-      {/* Scrollable Table Area */}
-      <div className="relative overflow-x-auto max-h-[calc(100vh-270px)] leads-table-scroll">
-        <Table className="w-full border-collapse text-[13px]">
-          {/* 2-Tier Header: Category Group Band + Column Headers */}
-          <TableHeader className="sticky top-0 z-30 shadow-2xs backdrop-blur-md">
-            {/* Tier 1: Category Header Band */}
-            <TableRow className="border-b border-border/80 bg-muted/70 hover:bg-muted/70 text-[10px] select-none">
-              {categoryBands.map((band, idx) => {
-                if (band.group === "__select__") {
-                  return (
-                    <TableHead
-                      key={`cat-select-${idx}`}
-                      colSpan={1}
-                      className="h-6 w-[44px] min-w-[44px] max-w-[44px] px-2 sticky left-0 z-40 bg-card border-r border-border/70"
-                    />
-                  );
-                }
-                if (band.group === "__lead_name__") {
-                  return (
-                    <TableHead
-                      key={`cat-lead-${idx}`}
-                      colSpan={1}
-                      className="h-6 sticky left-[44px] z-40 bg-card border-r-2 border-border shadow-[4px_0_12px_rgba(0,0,0,0.08)] min-w-[240px] max-w-[280px] px-3 font-bold text-muted-foreground uppercase tracking-wider text-[9.5px]"
-                    >
-                      Lead Identity
-                    </TableHead>
-                  );
-                }
-
-                const labels = {
-                  Core: "Core Pipeline & Activity",
-                  "Contact & Location": "Contact Details & Geography",
-                  "Classification & Source": "Classification & Attribution",
-                  Payments: "Payments & Financials",
-                  "Calls & Visits": "Calls & Visits Tracking",
-                  Meta: "System & Flags",
-                  "Custom Fields": "Tenant Custom Fields",
-                };
-
-                return (
-                  <TableHead
-                    key={`cat-${band.group}-${idx}`}
-                    colSpan={band.span}
-                    className="h-6 px-3 text-center border-r-2 border-border/80 uppercase tracking-wider font-bold text-foreground bg-muted/60"
-                  >
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-background/90 text-foreground border border-border shadow-2xs">
-                      <span>{labels[band.group] || band.group}</span>
-                      <span className="text-[9px] px-1 py-0.1 rounded-full bg-muted text-muted-foreground font-mono font-semibold">
-                        {band.span} cols
-                      </span>
-                    </span>
-                  </TableHead>
-                );
-              })}
-            </TableRow>
-
-            {/* Tier 2: Individual Column Headers */}
+    <div className="w-full bg-card border border-border rounded-xl shadow-sm overflow-hidden flex flex-col">
+      {/* Scrollable Table Area with unified single scroll container */}
+      <div className="relative overflow-auto max-h-[calc(100vh-320px)] min-h-[300px] leads-table-scroll">
+        <table
+          className="w-full border-collapse text-[13px] text-left caption-bottom"
+          style={{ width: table.getTotalSize(), minWidth: table.getTotalSize(), tableLayout: "fixed" }}
+        >
+          <thead className="sticky top-0 z-30 shadow-xs border-b border-border bg-muted/95 backdrop-blur-xs">
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="border-b border-border/80 bg-muted/40 hover:bg-muted/50">
+              <tr key={headerGroup.id} className="border-b border-border bg-muted/95">
                 {headerGroup.headers.map((header) => {
                   const isSelect = header.id === "select";
+                  const isSno = header.id === "sno";
                   const isLeadName = header.id === "lead_name";
-
+                  const isFixed = isSelect || isSno || isLeadName;
+                  const isDragging = draggingColId === header.id;
                   return (
-                    <TableHead
+                    <th
                       key={header.id}
+                      style={{ width: header.getSize(), minWidth: header.getSize() }}
+                      draggable={!isFixed}
+                      onDragStart={(event) => {
+                        if (event.target.closest("button")) { event.preventDefault(); return; }
+                        if (!isFixed) handleColDragStart(header.id);
+                      }}
+                      onDragEnter={() => !isFixed && handleColDragEnter(header.id)}
+                      onDragEnd={handleColDragEnd}
+                      onDragOver={(e) => e.preventDefault()}
                       className={cn(
-                        "h-9 px-3 text-xs font-bold text-foreground border-r border-border/30 whitespace-nowrap",
-                        isSelect &&
-                          "w-[44px] min-w-[44px] max-w-[44px] px-2 sticky left-0 z-40 bg-card border-r border-border/70 text-center shadow-2xs",
-                        isLeadName &&
-                          "sticky left-[44px] z-40 bg-card border-r-2 border-border shadow-[4px_0_12px_rgba(0,0,0,0.08)] min-w-[240px] max-w-[280px]"
+                        "h-10 px-3 text-[11px] font-semibold text-muted-foreground border-r border-border/40 whitespace-nowrap uppercase tracking-wider bg-muted/95 transition-colors select-none",
+                        !isFixed && "cursor-grab active:cursor-grabbing hover:bg-muted",
+                        isDragging && "opacity-40 bg-primary/10",
+                        isSelect && "w-[44px] min-w-[44px] max-w-[44px] px-2 sticky left-0 top-0 z-40 bg-muted border-r border-border/60 text-center",
+                        isSno && "w-[48px] min-w-[48px] max-w-[48px] px-2 sticky left-[44px] top-0 z-40 bg-muted border-r border-border/40 text-center",
+                        isLeadName && "w-[280px] min-w-[280px] max-w-[280px] sticky left-[92px] top-0 z-40 bg-muted border-r-2 border-border shadow-[2px_0_8px_rgba(0,0,0,0.06)]"
                       )}
                     >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
+                      {header.isPlaceholder ? null : (
+                        <div className="relative flex items-center gap-1.5 pr-2">
+                          {!isFixed && (
+                            <GripVertical className="h-3 w-3 text-muted-foreground/30 shrink-0" />
                           )}
-                    </TableHead>
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                          {header.column.getCanResize() && (
+                            <button
+                              type="button"
+                              aria-label={`Resize ${header.column.id} column`}
+                              onMouseDown={(event) => { event.stopPropagation(); header.getResizeHandler()(event); }}
+                              onTouchStart={(event) => { event.stopPropagation(); header.getResizeHandler()(event); }}
+                              onClick={(event) => event.stopPropagation()}
+                              className="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none after:absolute after:right-0.5 after:top-1/2 after:h-4 after:w-px after:-translate-y-1/2 after:bg-border hover:after:bg-primary"
+                            />
+                          )}
+                        </div>
+                      )}
+                    </th>
                   );
                 })}
-              </TableRow>
+              </tr>
             ))}
-          </TableHeader>
+          </thead>
 
           {/* Body */}
-          <TableBody className="divide-y divide-border/40">
+          <tbody className="divide-y divide-border/40 bg-card">
             {isLoading ? (
-              <TableRow>
-                <TableCell
+              <tr>
+                <td
                   colSpan={columnsConfig.length + 1}
                   className="h-48 text-center text-xs text-muted-foreground"
                 >
@@ -767,11 +1109,11 @@ export function LeadTable({
                     <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                     <span>Loading pipeline leads...</span>
                   </div>
-                </TableCell>
-              </TableRow>
+                </td>
+              </tr>
             ) : table.getRowModel().rows.length === 0 ? (
-              <TableRow>
-                <TableCell
+              <tr>
+                <td
                   colSpan={columnsConfig.length + 1}
                   className="h-56 text-center text-xs text-muted-foreground"
                 >
@@ -800,54 +1142,65 @@ export function LeadTable({
                       </Button>
                     )}
                   </div>
-                </TableCell>
-              </TableRow>
+                </td>
+              </tr>
             ) : (
               table.getRowModel().rows.map((row) => {
                 const isSelected = row.getIsSelected();
+                const nextFollowupDate = parseValidDate(row.original.next_followup);
+                const isOverdue = nextFollowupDate && nextFollowupDate < new Date();
 
                 return (
-                  <TableRow
+                  <tr
                     key={row.id}
                     data-state={isSelected ? "selected" : undefined}
+                    onClick={(event) => {
+                      if (event.target.closest("a,button,input,[role='checkbox']")) return;
+                      router.push(`/leads/active/${encodeLeadId(row.original.id)}`);
+                    }}
                     className={cn(
-                      "hover:bg-muted/40 transition-colors group/row",
-                      isSelected && "bg-primary/5"
+                      "hover:bg-muted/40 transition-colors group/row cursor-pointer relative",
+                      isSelected && "bg-primary/5 hover:bg-primary/8",
+                      isOverdue && "border-l-4 border-l-rose-500 bg-rose-500/[0.02]"
                     )}
                   >
                     {row.getVisibleCells().map((cell) => {
                       const isSelect = cell.column.id === "select";
+                      const isSno = cell.column.id === "sno";
                       const isLeadName = cell.column.id === "lead_name";
 
                       return (
-                        <TableCell
+                        <td
                           key={cell.id}
+                          style={{ width: cell.column.getSize(), minWidth: cell.column.getSize() }}
                           className={cn(
                             "border-r border-border/30 whitespace-nowrap transition-colors",
                             density === "compact" ? "py-1.5 px-2.5 text-xs" : "py-2.5 px-3 text-[13px]",
                             isSelect &&
-                              "w-[44px] min-w-[44px] max-w-[44px] px-2 sticky left-0 z-20 bg-card group-hover/row:bg-muted/70 group-data-[state=selected]/row:bg-primary/10 border-r border-border/60 text-center",
+                              "w-[44px] min-w-[44px] max-w-[44px] px-2 sticky left-0 z-20 bg-[hsl(var(--card))] group-hover/row:bg-[hsl(var(--muted))] group-data-[state=selected]/row:bg-primary/10 border-r border-border/60 text-center",
+                            isSno &&
+                              "w-[48px] min-w-[48px] max-w-[48px] px-2 sticky left-[44px] z-20 bg-[hsl(var(--card))] group-hover/row:bg-[hsl(var(--muted))] group-data-[state=selected]/row:bg-primary/10 border-r border-border/40 text-center",
                             isLeadName &&
-                              "sticky left-[44px] z-20 bg-card group-hover/row:bg-muted/70 group-data-[state=selected]/row:bg-primary/10 border-r-2 border-border shadow-[4px_0_12px_rgba(0,0,0,0.08)] min-w-[240px] max-w-[280px]"
+                              "w-[280px] min-w-[280px] max-w-[280px] sticky left-[92px] z-20 bg-[hsl(var(--card))] group-hover/row:bg-[hsl(var(--muted))] group-data-[state=selected]/row:bg-primary/10 border-r-2 border-border shadow-[2px_0_8px_rgba(0,0,0,0.06)]"
                           )}
                         >
                           {flexRender(
                             cell.column.columnDef.cell,
                             cell.getContext()
                           )}
-                        </TableCell>
+                        </td>
                       );
                     })}
-                  </TableRow>
+                  </tr>
                 );
               })
             )}
-          </TableBody>
-        </Table>
+          </tbody>
+        </table>
       </div>
 
       {/* Pagination & Density Footer */}
-      <div className="px-4 py-2.5 bg-muted/20 border-t border-border flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground select-none">
+      <div className="px-4 py-2.5 bg-muted/10 border-t border-border flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground select-none">
         <div className="flex items-center gap-3">
           {selectedCount > 0 ? (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-primary/10 text-primary border border-primary/20">

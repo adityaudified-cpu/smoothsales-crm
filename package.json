@@ -1,11 +1,10 @@
 {
-  "name": "smoothsales-crm",
+  "name": "crm",
   "version": "0.1.0",
   "private": true,
-  "description": "SmoothSales.ai Multi-Tenant Sales CRM Microservice (app.smoothsales.ai)",
   "scripts": {
-    "dev": "next dev -p 3001",
-    "build": "next build",
+    "dev": "next dev --webpack -p 3001",
+    "build": "next build --webpack",
     "start": "next start -p 3001",
     "lint": "next lint"
   },
@@ -27,6 +26,9 @@
     "@radix-ui/react-switch": "^1.3.7",
     "@radix-ui/react-tabs": "^1.1.21",
     "@radix-ui/react-tooltip": "^1.2.16",
+    "@smoothsales/config": "*",
+    "@smoothsales/lib": "*",
+    "@smoothsales/ui": "*",
     "@tanstack/react-table": "^8.21.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -43,7 +45,7 @@
     "recharts": "^3.10.1",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.6.0",
-    "tailwindcss-animate": "^1.0.7",
+    "xlsx": "^0.18.5",
     "zod": "^4.5.4"
   },
   "devDependencies": {

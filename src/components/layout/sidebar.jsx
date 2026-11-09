@@ -18,27 +18,24 @@ import {
   GitBranch,
   UsersRound,
   ShieldCheck,
-  Handshake,
-  ClipboardCheck,
-  Radio,
-  Wallet,
   Plug,
   BarChart3,
   Settings,
-  PanelLeftClose,
   PanelLeftOpen,
   ChevronsLeft,
   ChevronsRight,
-  Zap,
-  ArrowRight,
   LogOut,
   ChevronDown,
   Check,
-  KeyRound,
+  CalendarCheck,
+  TrendingUp,
+  Bell,
+  MessageCircle,
+  Bot,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/lib/auth/auth-context";
-import { hasRouteAccess, ROLES } from "@/lib/auth/permissions";
+import { hasPermission, getRoleLabel, ROLES } from "@/lib/auth/permissions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -105,64 +102,85 @@ export function Sidebar() {
 
   const { user, logout, switchDemoRole } = useAuth();
   const [leadsExpanded, setLeadsExpanded] = useState(true);
+  const [waExpanded, setWaExpanded] = useState(false);
 
+  // Auto-expand WhatsApp group when on a WhatsApp route
+  useEffect(() => {
+    if (pathname?.startsWith("/whatsapp")) setWaExpanded(true);
+  }, [pathname]);
+
+  // Each item has a `permission` field — null means accessible to all authenticated users.
+  // hasPermission() checks user.permissions[] from JWT first (works for custom roles),
+  // then falls back to static role matrix for demo/offline mode.
   const allNavSections = [
     {
       label: "WORKSPACE",
       items: [
-        { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+        { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, permission: "DASHBOARD_VIEW" },
         {
           name: "Leads",
           href: "/leads/active",
           icon: Users,
           badge: "24",
           isGroup: true,
+          permission: "LEADS_VIEW",
           subItems: [
             { name: "Active Leads", href: "/leads/active" },
             { name: "Worked Leads", href: "/leads/worked" },
+            { name: "Customers", href: "/leads/customers" },
             { name: "Businesses", href: "/leads/businesses" },
             { name: "Documents", href: "/leads/documents" },
             { name: "Segments & Lists", href: "/leads/segments" },
-            { name: "Uploads", href: "/leads/uploads" },
             { name: "Distributions", href: "/leads/distributions" },
           ],
         },
-        { name: "Deals & Pipeline", href: "/deals", icon: Kanban, badge: "8" },
-        { name: "Distribution Rules", href: "/distribution-rules", icon: GitBranch },
-        { name: "Teams & Users", href: "/teams", icon: UsersRound },
-        { name: "Permissions", href: "/permissions", icon: ShieldCheck },
-      ],
-    },
-    {
-      label: "CHANNELS",
-      items: [
-        { name: "Sales Channels", href: "/channels", icon: Radio },
-        { name: "Partners", href: "/partners", icon: Handshake },
-        { name: "Partner Onboarding", href: "/partner-onboarding", icon: ClipboardCheck },
-        { name: "Commission Ledger", href: "/commission-ledger", icon: Wallet },
+        { name: "Deals & Pipeline", href: "/deals", icon: Kanban, badge: "8", permission: "CUSTOMERS_EDIT" },
+        { name: "Activities", href: "/activities", icon: CalendarCheck, permission: "CALLS_VIEW" },
+        { name: "Forecasting", href: "/forecasting", icon: TrendingUp, permission: "MONITORING_VIEW" },
+        {
+          name: "WhatsApp",
+          href: "/whatsapp/chat",
+          icon: MessageCircle,
+          isGroup: true,
+          groupKey: "whatsapp",
+          permission: "WHATSAPP_VIEW",
+          subItems: [
+            { name: "Connect", href: "/whatsapp/connect" },
+            { name: "Live Chat", href: "/whatsapp/chat" },
+            { name: "Campaigns", href: "/whatsapp/campaigns" },
+            { name: "Templates", href: "/whatsapp/templates" },
+            { name: "AI Agent", href: "/whatsapp/ai-agent" },
+            { name: "Automation", href: "/whatsapp/automation" },
+          ],
+        },
+        { name: "Distribution Rules", href: "/distribution-rules", icon: GitBranch, permission: "LEADS_ASSIGN" },
+        { name: "Teams & Users", href: "/teams", icon: UsersRound, permission: "USERS_VIEW" },
+        { name: "Permissions", href: "/permissions", icon: ShieldCheck, permission: "ROLES_VIEW" },
       ],
     },
     {
       label: "SYSTEM",
       items: [
-        { name: "Integrations", href: "/integrations", icon: Plug },
-        { name: "Reports", href: "/reports", icon: BarChart3 },
-        { name: "Settings", href: "/settings", icon: Settings },
+        { name: "Integrations", href: "/integrations", icon: Plug, permission: null },
+        { name: "Reports", href: "/reports", icon: BarChart3, permission: "REPORTS_VIEW" },
+        { name: "Notifications", href: "/notifications", icon: Bell, permission: null },
+        { name: "Settings", href: "/settings", icon: Settings, permission: "SETTINGS_VIEW" },
       ],
     },
   ];
 
-  // Dynamically filter sections by current user's role permissions
+  // Filter by permission — works for system roles AND custom roles
   const navSections = allNavSections
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => hasRouteAccess(user, item.href)),
+      items: section.items.filter((item) => hasPermission(user, item.permission)),
     }))
     .filter((section) => section.items.length > 0);
 
   return (
     <TooltipProvider delayDuration={150}>
       <aside
+        suppressHydrationWarning
         className={cn(
           "bg-card border-r border-border flex flex-col h-screen select-none shrink-0 sticky top-0 transition-[width] duration-300 ease-in-out z-20 relative",
           isCollapsed ? "w-[72px]" : "w-[256px]"
@@ -172,6 +190,7 @@ export function Sidebar() {
         <Tooltip delayDuration={200}>
           <TooltipTrigger asChild>
             <button
+              suppressHydrationWarning
               onClick={toggleSidebar}
               aria-label={isCollapsed ? "Expand sidebar (Ctrl+B)" : "Collapse sidebar (Ctrl+B)"}
               className="absolute -right-3 top-4 z-40 h-6 w-6 rounded-full bg-card border border-border shadow-sm flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent hover:border-primary/50 transition-all duration-200 cursor-pointer group hover:scale-110 active:scale-95"
@@ -199,14 +218,17 @@ export function Sidebar() {
             <Tooltip delayDuration={0}>
               <TooltipTrigger asChild>
                 <button
+                  suppressHydrationWarning
                   onClick={toggleSidebar}
-                  className="h-9 w-9 rounded-xl bg-gradient-to-br from-primary via-primary to-primary/80 text-primary-foreground font-heading font-black text-sm shadow-sm flex items-center justify-center group relative cursor-pointer ring-2 ring-primary/10 hover:ring-primary/30 transition-all mx-auto"
+                  className="h-9 w-9 rounded-xl overflow-hidden border border-border shadow-xs flex items-center justify-center group relative cursor-pointer ring-1 ring-border hover:ring-primary/40 transition-all mx-auto bg-white"
                   aria-label="Expand sidebar"
                 >
-                  <span className="group-hover:opacity-0 transition-opacity font-bold">
-                    S
-                  </span>
-                  <PanelLeftOpen className="h-4 w-4 absolute opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <img
+                    src="/images/smoothsales-logo.jpg"
+                    alt="SmoothSales Logo"
+                    className="w-full h-full object-cover group-hover:opacity-20 transition-opacity"
+                  />
+                  <PanelLeftOpen className="h-4 w-4 absolute opacity-0 group-hover:opacity-100 transition-opacity text-foreground" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right" sideOffset={14}>
@@ -218,8 +240,12 @@ export function Sidebar() {
               href="/dashboard"
               className="flex items-center gap-2.5 group overflow-hidden"
             >
-              <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-primary via-primary to-primary/85 text-primary-foreground font-heading font-extrabold text-sm shadow-sm flex items-center justify-center border border-primary/20 ring-2 ring-primary/10 shrink-0 group-hover:shadow transition-all">
-                S
+              <div className="h-8 w-8 rounded-xl overflow-hidden border border-border shadow-xs shrink-0 group-hover:scale-105 transition-transform bg-white">
+                <img
+                  src="/images/smoothsales-logo.jpg"
+                  alt="SmoothSales Logo"
+                  className="w-full h-full object-cover"
+                />
               </div>
               <div className="flex items-center gap-2 truncate">
                 <span className="font-heading font-extrabold text-[15px] tracking-tight text-foreground truncate">
@@ -256,12 +282,71 @@ export function Sidebar() {
                 {section.items.map((item) => {
                   const Icon = item.icon;
                   const isLeadsGroup = item.isGroup && item.name === "Leads";
+                  const isWaGroup = item.isGroup && item.groupKey === "whatsapp";
                   const isItemActive =
                     item.href === "/dashboard"
                       ? pathname === "/dashboard"
                       : pathname === item.href ||
                         (pathname?.startsWith("/leads") && item.name === "Leads") ||
+                        (pathname?.startsWith("/whatsapp") && item.groupKey === "whatsapp") ||
                         (pathname?.startsWith(item.href) && pathname !== "/dashboard");
+
+                  if (isWaGroup && !isCollapsed) {
+                    return (
+                      <div key={item.name} className="space-y-0.5">
+                        <div
+                          className={cn(
+                            "relative flex items-center justify-between px-3 py-2 rounded-lg text-[13px] font-medium transition-all group select-none cursor-pointer",
+                            isItemActive
+                              ? "bg-primary/10 text-primary font-semibold shadow-2xs border border-primary/20"
+                              : "text-muted-foreground hover:bg-secondary/70 hover:text-foreground border border-transparent"
+                          )}
+                          onClick={() => setWaExpanded(!waExpanded)}
+                        >
+                          {isItemActive && (
+                            <span className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-primary rounded-r-full" />
+                          )}
+                          <Link
+                            href={item.href}
+                            onClick={(e) => { e.stopPropagation(); setWaExpanded(true); }}
+                            className="flex items-center gap-3 flex-1 min-w-0"
+                          >
+                            <MessageCircle className={cn("shrink-0 h-4 w-4 transition-transform duration-200 group-hover:scale-105", isItemActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
+                            <span className="truncate">{item.name}</span>
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setWaExpanded(!waExpanded); }}
+                            className="p-0.5 text-muted-foreground hover:text-foreground rounded"
+                          >
+                            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", waExpanded ? "rotate-0" : "-rotate-90")} />
+                          </button>
+                        </div>
+                        {waExpanded && (
+                          <div className="pl-7 pr-1 py-1 space-y-0.5 border-l border-border/70 ml-5 my-0.5 animate-in fade-in-50 duration-150">
+                            {item.subItems.map((sub) => {
+                              const isSubActive = pathname === sub.href || pathname?.startsWith(sub.href + "/");
+                              return (
+                                <Link
+                                  key={sub.href}
+                                  href={sub.href}
+                                  className={cn(
+                                    "flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] transition-colors",
+                                    isSubActive
+                                      ? "bg-accent text-accent-foreground font-semibold shadow-2xs"
+                                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                                  )}
+                                >
+                                  {sub.name === "AI Agent" && <Bot className="h-3 w-3 shrink-0" />}
+                                  <span className="truncate">{sub.name}</span>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
 
                   if (isLeadsGroup && !isCollapsed) {
                     return (
@@ -439,6 +524,7 @@ export function Sidebar() {
             <DropdownMenuTrigger asChild>
               {isCollapsed ? (
                 <button
+                  suppressHydrationWarning
                   className="relative h-10 w-10 mx-auto flex items-center justify-center rounded-xl bg-secondary/60 hover:bg-secondary border border-border/80 transition-all cursor-pointer group"
                 >
                   <Avatar className="h-7 w-7">
@@ -450,6 +536,7 @@ export function Sidebar() {
                 </button>
               ) : (
                 <button
+                  suppressHydrationWarning
                   className="w-full flex items-center gap-2.5 p-2 rounded-xl hover:bg-secondary/70 border border-transparent hover:border-border/60 transition-all cursor-pointer group text-left"
                 >
                   <div className="relative shrink-0">
@@ -486,23 +573,7 @@ export function Sidebar() {
                   <p className="text-[11px] leading-none text-muted-foreground">{user?.email}</p>
                 </div>
               </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-[10.5px] font-bold uppercase text-muted-foreground flex items-center gap-1.5">
-                <KeyRound className="h-3 w-3 text-primary" />
-                <span>Switch Role (Live RBAC Demo)</span>
-              </DropdownMenuLabel>
-              {[ROLES.ADMIN, ROLES.MANAGER, ROLES.TEAM_LEADER, ROLES.SALES_USER].map((role) => (
-                <DropdownMenuItem
-                  key={role}
-                  onClick={() => switchDemoRole(role)}
-                  className="flex items-center justify-between text-xs cursor-pointer"
-                >
-                  <span className={user?.role === role ? "font-bold text-primary" : ""}>
-                    {role}
-                  </span>
-                  {user?.role === role && <Check className="h-3.5 w-3.5 text-primary" />}
-                </DropdownMenuItem>
-              ))}
+              
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild className="text-xs cursor-pointer">
                 <Link href="/settings" className="flex items-center gap-2">

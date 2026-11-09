@@ -15,7 +15,7 @@ export default function BillingPage() {
     <div className="space-y-6">
       <PageHeader
         title="Subscription & Billing"
-        description="Manage your tenant subscription plan, active sales seats, and GST tax invoices."
+        subtitle="Manage your tenant subscription plan, active sales seats, and GST tax invoices."
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

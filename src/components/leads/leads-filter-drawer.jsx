@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { RotateCcw, Filter, Check } from "lucide-react";
 import { DEFAULT_PIPELINE_STAGES } from "@/lib/tenant-config";
+import { LEAD_SOURCE_OPTIONS } from "@/lib/api/mappers";
 
 export function LeadsFilterDrawer({
   isOpen,
@@ -22,6 +23,9 @@ export function LeadsFilterDrawer({
   onFilterChange,
   onResetFilters,
   totalResultsCount,
+  // Dynamic data from parent — derived from real leads/API
+  availableReps = [],   // [{ id, name }]
+  availableCities = [], // string[]
 }) {
   const activeFiltersCount = Object.values(filters).filter((val) => {
     if (Array.isArray(val)) return val.length > 0;
@@ -30,52 +34,38 @@ export function LeadsFilterDrawer({
 
   const toggleArrayFilter = (key, item) => {
     const current = filters[key] || [];
-    const next = current.includes(item)
-      ? current.filter((x) => x !== item)
-      : [...current, item];
+    const next = current.includes(item) ? current.filter((x) => x !== item) : [...current, item];
     onFilterChange(key, next);
   };
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-md p-0 flex flex-col bg-background border-l border-border"
-      >
-        <SheetHeader className="p-4 border-b border-border bg-muted/20">
+      <SheetContent side="right" className="w-full sm:max-w-sm p-0 flex flex-col bg-background border-l border-border">
+        <SheetHeader className="p-4 border-b border-border bg-muted/30">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-primary" />
-              <SheetTitle className="text-sm font-bold font-heading">
-                Filter Leads
-              </SheetTitle>
+              <div className="h-6 w-6 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Filter className="h-3.5 w-3.5 text-primary" />
+              </div>
+              <SheetTitle className="text-sm font-bold">Filter Leads</SheetTitle>
               {activeFiltersCount > 0 && (
-                <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-bold bg-primary/10 text-primary">
+                <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-bold bg-primary/10 text-primary border border-primary/20">
                   {activeFiltersCount} active
                 </Badge>
               )}
             </div>
             {activeFiltersCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onResetFilters}
-                className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1"
-              >
-                <RotateCcw className="h-3 w-3" />
-                <span>Reset all</span>
+              <Button variant="ghost" size="sm" onClick={onResetFilters} className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1">
+                <RotateCcw className="h-3 w-3" /><span>Reset all</span>
               </Button>
             )}
           </div>
         </SheetHeader>
 
-        {/* Scrollable Filter Form */}
         <div className="flex-1 overflow-y-auto p-4 space-y-5 text-xs">
           {/* Pipeline Stage */}
           <div className="space-y-2">
-            <Label className="text-xs font-semibold text-foreground">
-              Lead Stage (Pipeline)
-            </Label>
+            <Label className="text-xs font-semibold text-foreground">Lead Stage</Label>
             <div className="flex flex-wrap gap-1.5">
               {DEFAULT_PIPELINE_STAGES.map((stage) => {
                 const isSelected = (filters.stages || []).includes(stage.name);
@@ -83,11 +73,7 @@ export function LeadsFilterDrawer({
                   <button
                     key={stage.id}
                     onClick={() => toggleArrayFilter("stages", stage.name)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${
-                      isSelected
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-card text-muted-foreground border-border hover:border-foreground/30"
-                    }`}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 ${isSelected ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border hover:border-foreground/30"}`}
                   >
                     {isSelected && <Check className="h-3 w-3" />}
                     <span>{stage.name}</span>
@@ -97,29 +83,21 @@ export function LeadsFilterDrawer({
             </div>
           </div>
 
-          {/* Lead Owner */}
+          {/* Lead Owner — dynamic from real leads/API */}
           <div className="space-y-2">
-            <Label className="text-xs font-semibold text-foreground">
-              Lead Owner
-            </Label>
+            <Label className="text-xs font-semibold text-foreground">Lead Owner</Label>
             <div className="grid grid-cols-2 gap-1.5">
               {[
                 { id: "all", label: "Any Owner" },
                 { id: "unassigned", label: "Unassigned Only" },
-                { id: "Aarav Sharma", label: "Aarav Sharma" },
-                { id: "Rohan Varma", label: "Rohan Varma" },
-                { id: "Sneha Roy", label: "Sneha Roy" },
+                ...availableReps.map((rep) => ({ id: rep.name, label: rep.name })),
               ].map((owner) => {
                 const isSelected = filters.owner === owner.id;
                 return (
                   <button
                     key={owner.id}
                     onClick={() => onFilterChange("owner", owner.id)}
-                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium border text-left transition-all ${
-                      isSelected
-                        ? "bg-primary/10 text-primary border-primary/40 font-semibold"
-                        : "bg-card text-muted-foreground border-border hover:bg-secondary/40"
-                    }`}
+                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium border text-left transition-all ${isSelected ? "bg-primary/10 text-primary border-primary/40 font-semibold" : "bg-card text-muted-foreground border-border hover:bg-secondary/40"}`}
                   >
                     {owner.label}
                   </button>
@@ -128,23 +106,17 @@ export function LeadsFilterDrawer({
             </div>
           </div>
 
-          {/* Lead Source */}
+          {/* Lead Source — from mappers (canonical list) */}
           <div className="space-y-2">
-            <Label className="text-xs font-semibold text-foreground">
-              Lead Source
-            </Label>
+            <Label className="text-xs font-semibold text-foreground">Lead Source</Label>
             <div className="flex flex-wrap gap-1.5">
-              {["IndiaMART", "Meta Ads", "Website", "Referral", "CSV Import"].map((src) => {
+              {LEAD_SOURCE_OPTIONS.map((src) => {
                 const isSelected = (filters.sources || []).includes(src);
                 return (
                   <button
                     key={src}
                     onClick={() => toggleArrayFilter("sources", src)}
-                    className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${
-                      isSelected
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-card text-muted-foreground border-border hover:bg-secondary/40"
-                    }`}
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${isSelected ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border hover:bg-secondary/40"}`}
                   >
                     {src}
                   </button>
@@ -155,9 +127,7 @@ export function LeadsFilterDrawer({
 
           {/* Priority */}
           <div className="space-y-2">
-            <Label className="text-xs font-semibold text-foreground">
-              Priority Rating
-            </Label>
+            <Label className="text-xs font-semibold text-foreground">Priority Rating</Label>
             <div className="flex items-center gap-1.5">
               {[5, 4, 3, 2, 1].map((stars) => {
                 const isSelected = filters.priority === stars;
@@ -165,11 +135,7 @@ export function LeadsFilterDrawer({
                   <button
                     key={stars}
                     onClick={() => onFilterChange("priority", isSelected ? null : stars)}
-                    className={`px-2.5 py-1 rounded border text-xs font-semibold transition-all ${
-                      isSelected
-                        ? "bg-amber-500 text-white border-amber-600 shadow-2xs"
-                        : "bg-card text-muted-foreground border-border hover:bg-secondary/40"
-                    }`}
+                    className={`px-2.5 py-1 rounded border text-xs font-semibold transition-all ${isSelected ? "bg-amber-500 text-white border-amber-600 shadow-2xs" : "bg-card text-muted-foreground border-border hover:bg-secondary/40"}`}
                   >
                     {stars} ★
                   </button>
@@ -178,34 +144,30 @@ export function LeadsFilterDrawer({
             </div>
           </div>
 
-          {/* City */}
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold text-foreground">City</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {["Mumbai", "Delhi", "Bengaluru", "Pune", "Hyderabad", "Ahmedabad", "Jaipur", "Kolkata", "Chennai", "Chandigarh"].map((city) => {
-                const isSelected = (filters.cities || []).includes(city);
-                return (
-                  <button
-                    key={city}
-                    onClick={() => toggleArrayFilter("cities", city)}
-                    className={`px-2 py-0.5 rounded text-[11.5px] border transition-all ${
-                      isSelected
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-card text-muted-foreground border-border hover:bg-secondary/40"
-                    }`}
-                  >
-                    {city}
-                  </button>
-                );
-              })}
+          {/* City — dynamic from real leads */}
+          {availableCities.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-foreground">City</Label>
+              <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                {availableCities.map((city) => {
+                  const isSelected = (filters.cities || []).includes(city);
+                  return (
+                    <button
+                      key={city}
+                      onClick={() => toggleArrayFilter("cities", city)}
+                      className={`px-2 py-0.5 rounded text-[11.5px] border transition-all ${isSelected ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border hover:bg-secondary/40"}`}
+                    >
+                      {city}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Awaiting First Touch */}
           <div className="space-y-2">
-            <Label className="text-xs font-semibold text-foreground">
-              Awaiting 1st Touch
-            </Label>
+            <Label className="text-xs font-semibold text-foreground">Awaiting 1st Touch</Label>
             <div className="flex items-center gap-2">
               {[
                 { id: "all", label: "All" },
@@ -217,11 +179,7 @@ export function LeadsFilterDrawer({
                   <button
                     key={item.id}
                     onClick={() => onFilterChange("awaitingTouch", item.id)}
-                    className={`px-3 py-1 rounded text-xs border font-medium transition-all ${
-                      isSelected
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-card text-muted-foreground border-border hover:bg-secondary/40"
-                    }`}
+                    className={`px-3 py-1 rounded text-xs border font-medium transition-all ${isSelected ? "bg-primary text-primary-foreground border-primary" : "bg-card text-muted-foreground border-border hover:bg-secondary/40"}`}
                   >
                     {item.label}
                   </button>
@@ -231,11 +189,8 @@ export function LeadsFilterDrawer({
           </div>
         </div>
 
-        {/* Footer */}
         <SheetFooter className="p-4 border-t border-border bg-muted/20 flex flex-row items-center justify-between sm:justify-between">
-          <span className="text-xs text-muted-foreground font-mono">
-            {totalResultsCount} records match
-          </span>
+          <span className="text-xs text-muted-foreground font-mono">{totalResultsCount} records match</span>
           <SheetClose asChild>
             <Button size="sm" className="bg-primary text-primary-foreground text-xs font-semibold px-4">
               Apply Filters

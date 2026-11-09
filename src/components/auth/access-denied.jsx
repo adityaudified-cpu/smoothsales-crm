@@ -3,11 +3,11 @@
 import React from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/auth-context";
-import { ShieldAlert, ArrowLeft, KeyRound, Sparkles } from "lucide-react";
+import { ShieldAlert, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function AccessDenied({ targetRoute }) {
-  const { user, switchDemoRole } = useAuth();
+  const { user } = useAuth();
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6">
@@ -31,6 +31,9 @@ export function AccessDenied({ targetRoute }) {
             ) does not have permission to access{" "}
             {targetRoute ? <code className="text-primary font-mono text-[11px]">{targetRoute}</code> : "this resource"}.
           </p>
+          <p className="text-[11px] text-muted-foreground">
+            Contact your organization administrator to request access.
+          </p>
         </div>
 
         {/* Actions */}
@@ -41,27 +44,6 @@ export function AccessDenied({ targetRoute }) {
               Return to Dashboard
             </Button>
           </Link>
-
-          {/* Quick Demo Switcher helper */}
-          <div className="p-3 rounded-xl bg-secondary/50 border border-border/80 text-left space-y-2">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold text-foreground">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
-              <span>Testing as Administrator?</span>
-            </div>
-            <p className="text-[10.5px] text-muted-foreground leading-tight">
-              Switch to an Administrator account to preview this page and manage company-wide permissions.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => switchDemoRole("Admin")}
-              className="w-full h-7 text-[11px] font-semibold gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
-            >
-              <KeyRound className="h-3 w-3" />
-              Switch to Admin Role
-            </Button>
-          </div>
         </div>
       </div>
     </div>

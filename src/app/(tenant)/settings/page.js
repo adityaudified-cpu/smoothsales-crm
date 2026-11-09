@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { SettingsNav } from "@/components/settings/settings-nav";
@@ -11,13 +13,14 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Workspace & Tenant Settings"
-        description="Configure localization, working hours for SLA tracking, and global notification triggers."
-      >
-        <Button size="sm" className="h-8 text-xs bg-primary text-primary-foreground">
-          Save Settings
-        </Button>
-      </PageHeader>
+        title="Settings"
+        subtitle="Workspace configuration, localization, SLA rules, and preferences."
+        actions={
+          <Button size="sm" className="h-8 text-xs bg-primary text-primary-foreground">
+            Save Settings
+          </Button>
+        }
+      />
 
       <SettingsNav />
 

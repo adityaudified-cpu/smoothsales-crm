@@ -8,36 +8,44 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { CheckCircle2, ArrowLeft, KeyRound, ShieldCheck, Lock } from "lucide-react";
+import { CheckCircle2, ArrowLeft, KeyRound, ShieldCheck, Eye, EyeOff } from "lucide-react";
+import { authApi } from "@/lib/api/auth";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
-  const [step, setStep] = useState(1); // 1: Email, 2: OTP + New Password, 3: Success
-  const [email, setEmail] = useState("aarav.sharma@smoothsales.ai");
-  const [otp, setOtp] = useState("123456");
+  const [step, setStep] = useState(1);
+  const [email, setEmail] = useState("");
+  const [resetToken, setResetToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Step 1: Request Reset OTP
-  const handleRequestOtp = (e) => {
+  const handleRequestReset = async (e) => {
     e.preventDefault();
     if (!email) return;
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      await authApi.forgotPassword(email);
       setStep(2);
-      toast.success("Verification code sent!", {
-        description: `6-digit reset code sent to ${email}`,
+      toast.success("Reset link sent!", {
+        description: `If ${email} exists, a password reset link has been sent.`,
       });
-    }, 400);
+    } catch (err) {
+      // Backend always returns success to prevent user enumeration
+      setStep(2);
+      toast.success("Reset link sent!", {
+        description: `If ${email} exists, a password reset link has been sent.`,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // Step 2: Reset Password with OTP
-  const handleResetPassword = (e) => {
+  const handleResetPassword = async (e) => {
     e.preventDefault();
-    if (otp.length !== 6) {
-      toast.error("Please enter a valid 6-digit OTP code.");
+    if (!resetToken.trim()) {
+      toast.error("Please enter the reset token from your email.");
       return;
     }
     if (newPassword.length < 6) {
@@ -48,13 +56,16 @@ export default function ForgotPasswordPage() {
       toast.error("Passwords do not match.");
       return;
     }
-
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      await authApi.resetPassword(resetToken.trim(), newPassword);
       setStep(3);
       toast.success("Password reset successfully!");
-    }, 500);
+    } catch (err) {
+      toast.error(err.message || "Invalid or expired reset token. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -71,11 +82,11 @@ export default function ForgotPasswordPage() {
                 Reset your password
               </h2>
               <p className="text-xs text-muted-foreground">
-                Enter your company email to receive a password reset code.
+                Enter your company email to receive a password reset link.
               </p>
             </div>
 
-            <form onSubmit={handleRequestOtp} className="space-y-4 text-xs">
+            <form onSubmit={handleRequestReset} className="space-y-4 text-xs">
               <div className="space-y-1.5">
                 <Label htmlFor="email" className="text-xs font-semibold">
                   Registered Work Email
@@ -88,15 +99,16 @@ export default function ForgotPasswordPage() {
                   placeholder="name@company.com"
                   required
                   className="h-9 text-xs bg-background"
+                  autoComplete="email"
                 />
               </div>
 
               <Button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || !email}
                 className="w-full h-9 text-xs bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-xs mt-1"
               >
-                {isLoading ? "Sending code..." : "Send Verification Code"}
+                {isLoading ? "Sending..." : "Send Reset Link"}
               </Button>
             </form>
 
@@ -112,7 +124,7 @@ export default function ForgotPasswordPage() {
           </>
         )}
 
-        {/* Step 2: Enter OTP & New Password */}
+        {/* Step 2: Enter Token & New Password */}
         {step === 2 && (
           <>
             <div className="space-y-2">
@@ -123,26 +135,22 @@ export default function ForgotPasswordPage() {
                 Set new password
               </h2>
               <p className="text-xs text-muted-foreground">
-                Enter the 6-digit code sent to <strong className="text-foreground">{email}</strong> and your new password.
+                Check your email for the reset link. Copy the token from the link and paste it below.
               </p>
             </div>
 
             <form onSubmit={handleResetPassword} className="space-y-3.5 text-xs">
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="otp" className="text-xs font-semibold">
-                    6-Digit Reset Code
-                  </Label>
-                  <span className="text-[10.5px] font-mono text-primary font-bold">Demo: 123456</span>
-                </div>
+                <Label htmlFor="token" className="text-xs font-semibold">
+                  Reset Token (from email link)
+                </Label>
                 <Input
-                  id="otp"
-                  maxLength={6}
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  placeholder="123456"
+                  id="token"
+                  value={resetToken}
+                  onChange={(e) => setResetToken(e.target.value)}
+                  placeholder="Paste token from reset email"
                   required
-                  className="h-9 text-xs bg-background font-mono tracking-widest text-center text-sm font-bold"
+                  className="h-9 text-xs bg-background font-mono"
                 />
               </div>
 
@@ -150,15 +158,24 @@ export default function ForgotPasswordPage() {
                 <Label htmlFor="newPassword" className="text-xs font-semibold">
                   New Password
                 </Label>
-                <Input
-                  id="newPassword"
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="At least 6 characters"
-                  required
-                  className="h-9 text-xs bg-background"
-                />
+                <div className="relative">
+                  <Input
+                    id="newPassword"
+                    type={showPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="At least 6 characters"
+                    required
+                    className="h-9 text-xs bg-background pr-9"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2.5 top-2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1.5">
@@ -178,7 +195,7 @@ export default function ForgotPasswordPage() {
 
               <Button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || !resetToken || !newPassword || !confirmPassword}
                 className="w-full h-9 text-xs bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-xs mt-1"
               >
                 {isLoading ? "Updating password..." : "Update Password & Continue"}
@@ -198,13 +215,12 @@ export default function ForgotPasswordPage() {
           </>
         )}
 
-        {/* Step 3: Success State */}
+        {/* Step 3: Success */}
         {step === 3 && (
           <div className="space-y-4 text-center py-4">
-            <div className="h-14 w-14 rounded-2xl bg-success-soft text-success flex items-center justify-center mx-auto shadow-xs border border-success/20">
+            <div className="h-14 w-14 rounded-2xl bg-green-50 text-green-600 flex items-center justify-center mx-auto shadow-xs border border-green-200">
               <CheckCircle2 className="h-7 w-7" />
             </div>
-
             <div className="space-y-1.5">
               <h2 className="font-heading text-xl font-extrabold text-foreground">
                 Password successfully updated
@@ -213,7 +229,6 @@ export default function ForgotPasswordPage() {
                 Your account password has been changed. You can now log in with your new credentials.
               </p>
             </div>
-
             <div className="pt-3">
               <Button
                 onClick={() => router.push("/login")}
@@ -228,4 +243,3 @@ export default function ForgotPasswordPage() {
     </AuthSplitLayout>
   );
 }
-

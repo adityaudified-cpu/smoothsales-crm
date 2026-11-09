@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,19 +23,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -44,121 +32,189 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, MoreHorizontal, Check, ChevronsUpDown } from "lucide-react";
-import { MOCK_USERS } from "@/lib/mock-data/users";
-import { MOCK_TEAMS } from "@/lib/mock-data/teams";
+import { Plus, MoreHorizontal, Loader2, RefreshCw } from "lucide-react";
+import { usersApi, rolesApi } from "@/lib/api/users";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
+const DEFAULT_ROLE_OPTIONS = [
+  { value: "AGENT", label: "Sales Agent" },
+  { value: "TEAM_LEADER", label: "Team Leader" },
+  { value: "BRANCH_HEAD", label: "Branch Head / Manager" },
+  { value: "ADMIN", label: "Admin" },
+];
+
+const ROLE_DISPLAY_LABELS = {
+  ADMIN: "Admin",
+  BRANCH_HEAD: "Branch Head",
+  MANAGER: "Branch Head",
+  TEAM_LEADER: "Team Leader",
+  AGENT: "Sales Agent",
+};
+
+function getRoleDisplayLabel(role = "") {
+  const normalized = role.toUpperCase().replace("ROLE_", "");
+  return ROLE_DISPLAY_LABELS[normalized] || normalized.replace(/_/g, " ");
+}
+
+function getInitials(name = "") {
+  return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase() || "U";
+}
+
+function getRoleBadgeClass(role = "") {
+  const r = role.toLowerCase();
+  if (r.includes("admin")) return "bg-purple-50 text-purple-800 border-purple-300";
+  if (r.includes("manager") || r.includes("branch")) return "bg-emerald-50 text-emerald-800 border-emerald-300";
+  if (r.includes("leader")) return "bg-amber-50 text-amber-800 border-amber-300";
+  return "bg-muted text-foreground border-border";
+}
+
+function getStatusDot(active) {
+  return active
+    ? <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+    : <span className="h-2 w-2 rounded-full bg-neutral-400 shrink-0" />;
+}
+
 export default function TeamsAndUsersPage() {
-  const [users, setUsers] = useState(MOCK_USERS);
-  const [teams, setTeams] = useState(MOCK_TEAMS);
-
-  // Dialog states
+  const [users, setUsers] = useState([]);
+  const [roleOptions, setRoleOptions] = useState(DEFAULT_ROLE_OPTIONS);
+  const [isLoading, setIsLoading] = useState(true);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
-  const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editUser, setEditUser] = useState(null);
 
-  // Add User Form State
-  const [newUserName, setNewUserName] = useState("");
-  const [newUserMobile, setNewUserMobile] = useState("+91 ");
-  const [newUserEmail, setNewUserEmail] = useState("");
-  const [newUserWorkType, setNewUserWorkType] = useState("Both");
-  const [isManagerResp, setIsManagerResp] = useState(false);
-  const [isTeamLeaderResp, setIsTeamLeaderResp] = useState(false);
-  const [selectedTeamIds, setSelectedTeamIds] = useState(["team-jaipur"]);
-  const [primaryTeamId, setPrimaryTeamId] = useState("team-jaipur");
-  const [reportingManagerId, setReportingManagerId] = useState("");
-  const [autoDistribute, setAutoDistribute] = useState(true);
-  const [availability, setAvailability] = useState("Available");
-  const [maxActiveLeads, setMaxActiveLeads] = useState("25");
-  const [distWeight, setDistWeight] = useState("1");
-  const [territory, setTerritory] = useState("");
-  const [userStatus, setUserStatus] = useState("Active");
-  const [teamComboboxOpen, setTeamComboboxOpen] = useState(false);
+  // Invite form state
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [invitePhone, setInvitePhone] = useState("");
+  const [inviteRole, setInviteRole] = useState("AGENT");
+  const [inviteDesignation, setInviteDesignation] = useState("");
+  const [inviteReportsTo, setInviteReportsTo] = useState("");
 
-  // Create Team Form State
-  const [newTeamName, setNewTeamName] = useState("");
+  const loadUsers = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [usersResult, rolesResult] = await Promise.allSettled([
+        usersApi.list({ page: 0, size: 200 }),
+        rolesApi.list(),
+      ]);
+      if (usersResult.status === "fulfilled") {
+        setUsers(usersResult.value.items || []);
+      } else {
+        toast.error(usersResult.reason?.message || "Failed to load users.");
+      }
+      if (rolesResult.status === "fulfilled" && Array.isArray(rolesResult.value) && rolesResult.value.length > 0) {
+        setRoleOptions(
+          rolesResult.value.map((r) => ({ value: r.name.toUpperCase(), label: r.name }))
+        );
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-  const handleToggleAutoDistribute = (userId) => {
-    setUsers((prev) =>
-      prev.map((u) =>
-        u.id === userId ? { ...u, autoLeadDistribution: !u.autoLeadDistribution } : u
-      )
-    );
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
+
+  const resetInviteForm = () => {
+    setInviteName("");
+    setInviteEmail("");
+    setInvitePhone("");
+    setInviteRole("AGENT");
+    setInviteDesignation("");
+    setInviteReportsTo("");
+    setEditUser(null);
   };
 
-  const handleAddUserSubmit = (e) => {
+  const handleOpenInvite = () => {
+    resetInviteForm();
+    setIsAddUserOpen(true);
+  };
+
+  const handleOpenEdit = (user) => {
+    setEditUser(user);
+    setInviteName(user.fullName || "");
+    setInviteEmail(user.email || "");
+    setInvitePhone(user.phone || "");
+    setInviteRole((user.role || "AGENT").toUpperCase().replace("ROLE_", ""));
+    setInviteDesignation(user.designation || "");
+    setInviteReportsTo(user.reportsToId || "");
+    setIsAddUserOpen(true);
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const createdUser = {
-      id: `usr_${Date.now()}`,
-      name: newUserName || "New Teammate",
-      initials: (newUserName || "NT")
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .slice(0, 2)
-        .toUpperCase(),
-      email: newUserEmail,
-      phone: newUserMobile,
-      role: "Sales User",
-      avatarColor: "bg-blue-600 text-white",
-      primaryTeamId,
-      additionalTeamIds: selectedTeamIds.filter((id) => id !== primaryTeamId),
-      isTeamLeader: isTeamLeaderResp,
-      isManager: isManagerResp,
-      workType: newUserWorkType,
-      availability,
-      autoLeadDistribution: autoDistribute,
-      maxActiveLeads: maxActiveLeads ? Number(maxActiveLeads) : null,
-    };
-
-    setUsers([createdUser, ...users]);
-    setIsAddUserOpen(false);
-    // Reset form
-    setNewUserName("");
-    setNewUserEmail("");
-  };
-
-  const handleCreateTeamSubmit = (e) => {
-    e.preventDefault();
-    if (!newTeamName) return;
-
-    const createdTeam = {
-      id: `team-${Date.now()}`,
-      name: newTeamName,
-      memberIds: [],
-      isDirect: false,
-      memberCount: 0,
-    };
-
-    setTeams([...teams, createdTeam]);
-    setNewTeamName("");
-    setIsCreateTeamOpen(false);
-  };
-
-  // Availability dot mapping
-  const getAvailabilityDot = (status) => {
-    switch (status) {
-      case "Available":
-        return <span className="h-2 w-2 rounded-full bg-success shrink-0" />;
-      case "Busy":
-        return <span className="h-2 w-2 rounded-full bg-warning shrink-0" />;
-      case "On Leave":
-      case "Paused":
-      default:
-        return <span className="h-2 w-2 rounded-full bg-neutral-status shrink-0" />;
+    if (!inviteName.trim() || !inviteEmail.trim()) {
+      toast.error("Name and email are required.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      if (editUser) {
+        // Update existing user
+        const nameParts = inviteName.trim().split(" ");
+        const firstName = nameParts[0];
+        const lastName = nameParts.slice(1).join(" ") || "."; // backend @NotBlank — use "." if single name
+        await usersApi.update(editUser.id, {
+          firstName,
+          lastName,
+          email: inviteEmail,
+          phone: invitePhone,
+          role: inviteRole.toUpperCase(),
+          reportsToId: inviteReportsTo || null,
+          twoFactorEnabled: editUser.twoFactorEnabled || false,
+        });
+        toast.success(`${inviteName} updated successfully!`);
+      } else {
+        // Invite new user — role sent uppercase to match seeded role names (ADMIN, AGENT, TEAM_LEADER etc.)
+        await usersApi.invite({
+          name: inviteName,
+          email: inviteEmail,
+          phone: invitePhone,
+          role: inviteRole.toUpperCase(),
+          designation: inviteDesignation,
+          reportsToId: inviteReportsTo || null,
+        });
+        toast.success(`Invite sent to ${inviteEmail}!`);
+      }
+      setIsAddUserOpen(false);
+      resetInviteForm();
+      loadUsers();
+    } catch (err) {
+      toast.error(err.message || "Operation failed. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const getTeamName = (teamId) => {
-    const t = teams.find((item) => item.id === teamId);
-    return t ? t.name : "Unassigned";
+  const handleToggleStatus = async (user) => {
+    const newActive = !user.active;
+    // Optimistic update
+    setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, active: newActive } : u));
+    try {
+      await usersApi.setStatus(user.id, newActive);
+      toast.success(`${user.fullName} ${newActive ? "activated" : "deactivated"}.`);
+    } catch (err) {
+      // Revert
+      setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, active: !newActive } : u));
+      toast.error(err.message || "Failed to update status.");
+    }
   };
+
+  // Group users by role for "Teams" tab
+  const roleGroups = users.reduce((acc, u) => {
+    const role = getRoleDisplayLabel(u.role || "Agent");
+    if (!acc[role]) acc[role] = [];
+    acc[role].push(u);
+    return acc;
+  }, {});
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Teams & Users"
-        subtitle="Manage flexible organizational hierarchies, responsibilities, and routing capacity"
+        subtitle="Manage your team members, roles, and access"
       />
 
       <Tabs defaultValue="users" className="w-full space-y-4">
@@ -168,198 +224,198 @@ export default function TeamsAndUsersPage() {
               Users ({users.length})
             </TabsTrigger>
             <TabsTrigger value="teams" className="text-xs font-medium">
-              Teams ({teams.length})
+              By Role ({Object.keys(roleGroups).length})
             </TabsTrigger>
           </TabsList>
 
           <div className="flex items-center gap-2">
             <Button
               size="sm"
-              onClick={() => setIsAddUserOpen(true)}
-              className="h-8 gap-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
+              variant="outline"
+              onClick={loadUsers}
+              disabled={isLoading}
+              className="h-8 gap-1.5 text-xs font-medium"
             >
-              <Plus className="h-3.5 w-3.5" />
-              <span>Add User</span>
+              <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
             </Button>
             <Button
               size="sm"
-              variant="outline"
-              onClick={() => setIsCreateTeamOpen(true)}
-              className="h-8 gap-1.5 text-xs font-medium"
+              onClick={handleOpenInvite}
+              className="h-8 gap-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
             >
               <Plus className="h-3.5 w-3.5" />
-              <span>Create Team</span>
+              <span>Invite User</span>
             </Button>
           </div>
         </div>
 
-        {/* 1. Users Tab */}
+        {/* Users Tab */}
         <TabsContent value="users" className="m-0">
-          <Card className="bg-card border border-border rounded-lg overflow-hidden shadow-none">
-            <Table>
-              <TableHeader className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
-                <TableRow>
-                  <TableHead className="py-2.5 px-4">Name</TableHead>
-                  <TableHead className="py-2.5 px-4">Role Badges</TableHead>
-                  <TableHead className="py-2.5 px-4">Primary Team</TableHead>
-                  <TableHead className="py-2.5 px-4">Work Type</TableHead>
-                  <TableHead className="py-2.5 px-4">Availability</TableHead>
-                  <TableHead className="py-2.5 px-4">Auto-Distribution</TableHead>
-                  <TableHead className="py-2.5 px-4 text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody className="text-xs divide-y divide-border">
-                {users.map((user) => (
-                  <TableRow key={user.id} className="hover:bg-muted/30 transition-colors">
-                    {/* Name + Contact */}
-                    <TableCell className="py-2.5 px-4">
-                      <div className="flex items-center gap-2.5">
-                        <Avatar className="h-7 w-7 border border-border">
-                          <AvatarFallback className={cn("text-[10px] font-semibold", user.avatarColor)}>
-                            {user.initials}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-semibold text-foreground leading-tight">
-                            {user.name}
-                          </div>
-                          <div className="text-[11px] text-muted-foreground font-mono">
-                            {user.email}
-                          </div>
-                        </div>
-                      </div>
-                    </TableCell>
-
-                    {/* Role Badges */}
-                    <TableCell className="py-2.5 px-4">
-                      <div className="flex flex-wrap gap-1 items-center">
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-foreground border border-border">
-                          Sales User
-                        </span>
-                        {user.isManager && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300">
-                            Manager
-                          </span>
-                        )}
-                        {user.isTeamLeader && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-300">
-                            Team Leader
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-
-                    {/* Primary Team */}
-                    <TableCell className="py-2.5 px-4 font-medium text-foreground">
-                      {getTeamName(user.primaryTeamId)}
-                    </TableCell>
-
-                    {/* Work Type */}
-                    <TableCell className="py-2.5 px-4 text-muted-foreground">
-                      {user.workType || "Both"}
-                    </TableCell>
-
-                    {/* Availability */}
-                    <TableCell className="py-2.5 px-4">
-                      <div className="inline-flex items-center gap-1.5 font-medium text-foreground">
-                        {getAvailabilityDot(user.availability)}
-                        <span>{user.availability || "Available"}</span>
-                      </div>
-                    </TableCell>
-
-                    {/* Auto-Distribution Switch */}
-                    <TableCell className="py-2.5 px-4">
-                      <Switch
-                        checked={user.autoLeadDistribution}
-                        onCheckedChange={() => handleToggleAutoDistribute(user.id)}
-                      />
-                    </TableCell>
-
-                    {/* Action Menu */}
-                    <TableCell className="py-2.5 px-4 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="text-xs">
-                          <DropdownMenuItem>Edit Details</DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive">Deactivate</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground text-xs gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading users...
+            </div>
+          ) : users.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground text-xs">
+              No users found. Invite your first team member.
+            </div>
+          ) : (
+            <Card className="bg-card border border-border rounded-lg overflow-hidden shadow-none">
+              <Table>
+                <TableHeader className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <TableRow>
+                    <TableHead className="py-2.5 px-4">Name</TableHead>
+                    <TableHead className="py-2.5 px-4">Role</TableHead>
+                    <TableHead className="py-2.5 px-4">Designation</TableHead>
+                    <TableHead className="py-2.5 px-4">Reports To</TableHead>
+                    <TableHead className="py-2.5 px-4">Status</TableHead>
+                    <TableHead className="py-2.5 px-4">Active</TableHead>
+                    <TableHead className="py-2.5 px-4 text-right">Action</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
+                </TableHeader>
+                <TableBody className="text-xs divide-y divide-border">
+                  {users.map((user) => {
+                    const displayRole = getRoleDisplayLabel(user.role || "Agent");
+                    return (
+                      <TableRow key={user.id} className="hover:bg-muted/30 transition-colors">
+                        <TableCell className="py-2.5 px-4">
+                          <div className="flex items-center gap-2.5">
+                            <Avatar className="h-7 w-7 border border-border">
+                              <AvatarFallback className="text-[10px] font-semibold bg-primary text-primary-foreground">
+                                {getInitials(user.fullName)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <div className="font-semibold text-foreground leading-tight">
+                                {user.fullName}
+                                {user.pendingInvite && (
+                                  <span className="ml-1.5 text-[9px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded">
+                                    Pending
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-muted-foreground font-mono">{user.email}</div>
+                            </div>
+                          </div>
+                        </TableCell>
+
+                        <TableCell className="py-2.5 px-4">
+                          <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold border", getRoleBadgeClass(displayRole))}>
+                            {displayRole}
+                          </span>
+                        </TableCell>
+
+                        <TableCell className="py-2.5 px-4 text-muted-foreground">
+                          {user.designation || "—"}
+                        </TableCell>
+
+                        <TableCell className="py-2.5 px-4 text-muted-foreground">
+                          {user.reportsToName || "—"}
+                        </TableCell>
+
+                        <TableCell className="py-2.5 px-4">
+                          <div className="inline-flex items-center gap-1.5 font-medium text-foreground">
+                            {getStatusDot(user.active)}
+                            <span>{user.active ? "Active" : "Inactive"}</span>
+                          </div>
+                        </TableCell>
+
+                        <TableCell className="py-2.5 px-4">
+                          <Switch
+                            checked={user.active}
+                            onCheckedChange={() => handleToggleStatus(user)}
+                          />
+                        </TableCell>
+
+                        <TableCell className="py-2.5 px-4 text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+                                <MoreHorizontal className="h-3.5 w-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="text-xs">
+                              <DropdownMenuItem onClick={() => handleOpenEdit(user)}>
+                                Edit Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className={user.active ? "text-destructive" : "text-green-600"}
+                                onClick={() => handleToggleStatus(user)}
+                              >
+                                {user.active ? "Deactivate" : "Activate"}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </Card>
+          )}
         </TabsContent>
 
-        {/* 2. Teams Tab */}
+        {/* By Role Tab */}
         <TabsContent value="teams" className="m-0">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {teams.map((team) => {
-              const teamMembers = users.filter(
-                (u) =>
-                  u.primaryTeamId === team.id ||
-                  (u.additionalTeamIds && u.additionalTeamIds.includes(team.id))
-              );
-              const overflowCount = Math.max(0, teamMembers.length - 4);
-
-              return (
-                <Card key={team.id} className="p-4 bg-card border border-border shadow-none rounded-md space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="font-heading font-bold text-sm text-foreground">
-                        {team.name}
-                      </h3>
-                      <span className="text-xs text-muted-foreground">
-                        {team.isDirect ? "Direct to Admin" : "Standard Team"}
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground text-xs gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading...
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {Object.entries(roleGroups).map(([role, members]) => {
+                const overflowCount = Math.max(0, members.length - 4);
+                return (
+                  <Card key={role} className="p-4 bg-card border border-border shadow-none rounded-md space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="font-heading font-bold text-sm text-foreground">{role}</h3>
+                        <span className="text-xs text-muted-foreground">Role Group</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-accent text-accent-foreground border border-border">
+                        {members.length} {members.length === 1 ? "Member" : "Members"}
                       </span>
                     </div>
-                    <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-accent text-accent-foreground border border-border">
-                      {teamMembers.length} {teamMembers.length === 1 ? "Member" : "Members"}
-                    </span>
-                  </div>
 
-                  {/* Stacked Member Avatars */}
-                  <div className="pt-2 border-t border-border flex items-center gap-1.5">
-                    <div className="flex -space-x-2 overflow-hidden">
-                      {teamMembers.slice(0, 4).map((member) => (
-                        <Avatar key={member.id} className="h-7 w-7 border-2 border-card ring-0">
-                          <AvatarFallback className={cn("text-[9px] font-semibold", member.avatarColor)}>
-                            {member.initials}
-                          </AvatarFallback>
-                        </Avatar>
-                      ))}
+                    <div className="pt-2 border-t border-border flex items-center gap-1.5">
+                      <div className="flex -space-x-2 overflow-hidden">
+                        {members.slice(0, 4).map((member) => (
+                          <Avatar key={member.id} className="h-7 w-7 border-2 border-card ring-0">
+                            <AvatarFallback className="text-[9px] font-semibold bg-primary text-primary-foreground">
+                              {getInitials(member.fullName)}
+                            </AvatarFallback>
+                          </Avatar>
+                        ))}
+                      </div>
+                      {overflowCount > 0 && (
+                        <span className="text-[11px] text-muted-foreground font-medium pl-1">
+                          +{overflowCount} more
+                        </span>
+                      )}
                     </div>
-                    {overflowCount > 0 && (
-                      <span className="text-[11px] text-muted-foreground font-medium pl-1">
-                        +{overflowCount} more
-                      </span>
-                    )}
-                    {teamMembers.length === 0 && (
-                      <span className="text-xs text-muted-foreground italic">No members assigned</span>
-                    )}
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 
-      {/* Add User Dialog (Full Schema per B2) */}
-      <Dialog open={isAddUserOpen} onOpenChange={setIsAddUserOpen}>
-        <DialogContent className="sm:max-w-[620px] max-h-[85vh] overflow-y-auto">
-          <form onSubmit={handleAddUserSubmit} className="space-y-4 text-xs">
+      {/* Invite / Edit User Dialog */}
+      <Dialog open={isAddUserOpen} onOpenChange={(open) => { if (!open) resetInviteForm(); setIsAddUserOpen(open); }}>
+        <DialogContent className="sm:max-w-[500px]">
+          <form onSubmit={handleSubmit} className="space-y-4 text-xs">
             <DialogHeader>
               <DialogTitle className="font-heading font-extrabold text-base">
-                Add New User
+                {editUser ? "Edit User" : "Invite Team Member"}
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
-                Provision a sales user with customizable responsibility overlays and teams.
+                {editUser
+                  ? "Update this user's details and role."
+                  : "Send an invite email to provision a new team member."}
               </DialogDescription>
             </DialogHeader>
 
@@ -367,156 +423,46 @@ export default function TeamsAndUsersPage() {
               <div className="space-y-1">
                 <Label className="text-xs">Full Name</Label>
                 <Input
-                  value={newUserName}
-                  onChange={(e) => setNewUserName(e.target.value)}
+                  value={inviteName}
+                  onChange={(e) => setInviteName(e.target.value)}
                   placeholder="e.g. Rahul Sharma"
                   required
                   className="h-8 text-xs bg-background"
                 />
               </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs">Mobile (+91)</Label>
-                <Input
-                  value={newUserMobile}
-                  onChange={(e) => setNewUserMobile(e.target.value)}
-                  placeholder="+91 98765 43210"
-                  required
-                  className="h-8 text-xs bg-background font-mono tabular-nums"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Work Email</Label>
                 <Input
                   type="email"
-                  value={newUserEmail}
-                  onChange={(e) => setNewUserEmail(e.target.value)}
-                  placeholder="rahul.s@smoothsales.ai"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="rahul@company.com"
                   required
                   className="h-8 text-xs bg-background"
                 />
               </div>
-
-              {/* Primary Role (Fixed as Sales User) */}
-              <div className="space-y-1">
-                <Label className="text-xs">Primary Role</Label>
-                <Select disabled defaultValue="sales_user">
-                  <SelectTrigger className="h-8 text-xs bg-muted text-muted-foreground">
-                    <SelectValue placeholder="Sales User" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sales_user">Sales User</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              {/* Work Type */}
               <div className="space-y-1">
-                <Label className="text-xs">Work Type</Label>
-                <Select value={newUserWorkType} onValueChange={setNewUserWorkType}>
-                  <SelectTrigger className="h-8 text-xs bg-background">
-                    <SelectValue placeholder="Select Work Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Calling">Calling</SelectItem>
-                    <SelectItem value="Sales">Sales</SelectItem>
-                    <SelectItem value="Both">Both</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs">Phone</Label>
+                <Input
+                  value={invitePhone}
+                  onChange={(e) => setInvitePhone(e.target.value)}
+                  placeholder="+91 98765 43210"
+                  className="h-8 text-xs bg-background font-mono"
+                />
               </div>
-
-              {/* Availability */}
               <div className="space-y-1">
-                <Label className="text-xs">Initial Availability</Label>
-                <Select value={availability} onValueChange={setAvailability}>
+                <Label className="text-xs">Role</Label>
+                <Select value={inviteRole} onValueChange={setInviteRole}>
                   <SelectTrigger className="h-8 text-xs bg-background">
-                    <SelectValue placeholder="Select Availability" />
+                    <SelectValue placeholder="Select Role" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Available">Available</SelectItem>
-                    <SelectItem value="Busy">Busy</SelectItem>
-                    <SelectItem value="On Leave">On Leave</SelectItem>
-                    <SelectItem value="Paused">Paused</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Responsibility Switches */}
-            <div className="grid grid-cols-2 gap-3 p-3 bg-muted/30 border border-border rounded-md">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold text-foreground text-xs">Manager Responsibility</div>
-                  <div className="text-[10px] text-muted-foreground">Team overview and audit access</div>
-                </div>
-                <Switch checked={isManagerResp} onCheckedChange={setIsManagerResp} />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold text-foreground text-xs">Team Leader Responsibility</div>
-                  <div className="text-[10px] text-muted-foreground">Lead allocation & queue monitoring</div>
-                </div>
-                <Switch checked={isTeamLeaderResp} onCheckedChange={setIsTeamLeaderResp} />
-              </div>
-            </div>
-
-            {/* Teams Multi-select with Primary designation */}
-            <div className="space-y-1.5">
-              <Label className="text-xs">Teams & Primary Assignment</Label>
-              <div className="flex items-center gap-2">
-                <Popover open={teamComboboxOpen} onOpenChange={setTeamComboboxOpen}>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8 text-xs justify-between flex-1 bg-background font-normal">
-                      <span>{selectedTeamIds.length ? `${selectedTeamIds.length} Teams Selected` : "Select Teams..."}</span>
-                      <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-64 p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search teams..." className="h-8 text-xs" />
-                      <CommandList>
-                        <CommandEmpty>No teams found.</CommandEmpty>
-                        <CommandGroup>
-                          {teams.map((t) => {
-                            const isSelected = selectedTeamIds.includes(t.id);
-                            return (
-                              <CommandItem
-                                key={t.id}
-                                onSelect={() => {
-                                  if (isSelected) {
-                                    setSelectedTeamIds(selectedTeamIds.filter((id) => id !== t.id));
-                                  } else {
-                                    setSelectedTeamIds([...selectedTeamIds, t.id]);
-                                  }
-                                }}
-                                className="text-xs flex items-center justify-between cursor-pointer"
-                              >
-                                <span>{t.name}</span>
-                                {isSelected && <Check className="h-3.5 w-3.5 text-primary" />}
-                              </CommandItem>
-                            );
-                          })}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-
-                {/* Primary team marker */}
-                <Select value={primaryTeamId} onValueChange={setPrimaryTeamId}>
-                  <SelectTrigger className="h-8 text-xs w-48 bg-background">
-                    <SelectValue placeholder="Primary Team" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teams.map((t) => (
-                      <SelectItem key={t.id} value={t.id} className="text-xs">
-                        Primary: {t.name}
+                    {roleOptions.map((r) => (
+                      <SelectItem key={r.value} value={r.value} className="text-xs">
+                        {getRoleDisplayLabel(r.value) !== r.value ? getRoleDisplayLabel(r.value) : r.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -524,123 +470,53 @@ export default function TeamsAndUsersPage() {
               </div>
             </div>
 
-            {/* Reporting Manager & Status */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Reporting Manager (Optional)</Label>
-                <Select value={reportingManagerId} onValueChange={setReportingManagerId}>
+                <Label className="text-xs">Designation</Label>
+                <Input
+                  value={inviteDesignation}
+                  onChange={(e) => setInviteDesignation(e.target.value)}
+                  placeholder="e.g. Sales Executive"
+                  className="h-8 text-xs bg-background"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Reports To (Optional)</Label>
+                <Select value={inviteReportsTo} onValueChange={setInviteReportsTo}>
                   <SelectTrigger className="h-8 text-xs bg-background">
                     <SelectValue placeholder="Select Manager" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">None (Direct)</SelectItem>
-                    {users.map((u) => (
-                      <SelectItem key={u.id} value={u.id} className="text-xs">
-                        {u.name} ({u.role})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs">Account Status</Label>
-                <Select value={userStatus} onValueChange={setUserStatus}>
-                  <SelectTrigger className="h-8 text-xs bg-background">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Inactive">Inactive</SelectItem>
+                    <SelectItem value="" className="text-xs">None (Direct)</SelectItem>
+                    {users
+                      .filter((u) => u.id !== editUser?.id)
+                      .map((u) => (
+                        <SelectItem key={u.id} value={u.id} className="text-xs">
+                          {u.fullName} ({(u.role || "").replace("ROLE_", "")})
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
-            {/* Quota & Capacity */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Max Active Leads</Label>
-                <Input
-                  type="number"
-                  value={maxActiveLeads}
-                  onChange={(e) => setMaxActiveLeads(e.target.value)}
-                  placeholder="25"
-                  className="h-8 text-xs bg-background tabular-nums"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs">Distribution Weight</Label>
-                <Input
-                  type="number"
-                  value={distWeight}
-                  onChange={(e) => setDistWeight(e.target.value)}
-                  placeholder="1"
-                  className="h-8 text-xs bg-background tabular-nums"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs">Territory / Specialization</Label>
-                <Input
-                  value={territory}
-                  onChange={(e) => setTerritory(e.target.value)}
-                  placeholder="e.g. South Jaipur"
-                  className="h-8 text-xs bg-background"
-                />
-              </div>
-            </div>
-
-            {/* Auto-Distribution Switch */}
-            <div className="flex items-center justify-between pt-2 border-t border-border">
-              <div>
-                <div className="font-semibold text-foreground text-xs">Auto Lead Distribution</div>
-                <div className="text-[10px] text-muted-foreground">Eligible for real-time round-robin queue</div>
-              </div>
-              <Switch checked={autoDistribute} onCheckedChange={setAutoDistribute} />
-            </div>
-
             <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsAddUserOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => { resetInviteForm(); setIsAddUserOpen(false); }}
+              >
                 Cancel
               </Button>
-              <Button type="submit" size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">
-                Save & Provision User
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create Team Dialog */}
-      <Dialog open={isCreateTeamOpen} onOpenChange={setIsCreateTeamOpen}>
-        <DialogContent className="sm:max-w-[400px]">
-          <form onSubmit={handleCreateTeamSubmit} className="space-y-4 text-xs">
-            <DialogHeader>
-              <DialogTitle className="font-heading font-extrabold text-base">Create Team</DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground">
-                Define a lightweight organizational grouping for lead routing.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-1.5 pt-2">
-              <Label className="text-xs">Team Name</Label>
-              <Input
-                value={newTeamName}
-                onChange={(e) => setNewTeamName(e.target.value)}
-                placeholder="e.g. Commercial Interior Squad"
-                required
-                className="h-8 text-xs bg-background"
-              />
-            </div>
-
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsCreateTeamOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">
-                Create Team
+              <Button
+                type="submit"
+                size="sm"
+                disabled={isSubmitting}
+                className="bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
+              >
+                {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {editUser ? "Save Changes" : "Send Invite"}
               </Button>
             </DialogFooter>
           </form>

@@ -63,6 +63,7 @@ export function RuleBuilderSheet({
   const allocationMethod = watch("allocationMethod");
 
   useEffect(() => {
+    if (!open) return; // only reset when sheet opens
     if (initialRule) {
       reset({
         name: initialRule.name || "",
@@ -90,7 +91,7 @@ export function RuleBuilderSheet({
       });
       setLogic("AND");
     }
-  }, [initialRule, defaultPriority, reset]);
+  }, [open, initialRule, defaultPriority, reset]);
 
   const handleAddCondition = () => {
     if (fields.length < 5) {

@@ -4,14 +4,15 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Settings, Palette, Globe } from "lucide-react";
+import { Settings, Palette, Globe, SlidersHorizontal } from "lucide-react";
 
 export function SettingsNav() {
   const pathname = usePathname();
 
   const tabs = [
-    { name: "General Settings", href: "/settings", icon: Settings },
+    { name: "General", href: "/settings", icon: Settings },
     { name: "Branding & Theme", href: "/settings/branding", icon: Palette },
+    { name: "Custom Fields", href: "/settings/custom-fields", icon: SlidersHorizontal },
     { name: "Custom Domain", href: "/settings/domain", icon: Globe },
   ];
 

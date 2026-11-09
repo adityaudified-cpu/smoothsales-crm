@@ -12,13 +12,14 @@ export default function PartnersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Channel Partners Directory"
-        description="Manage franchise brokers, affiliate networks, KYC compliance, conversion metrics, and commission payouts."
-      >
-        <Button size="sm" className="h-8 gap-1.5 text-xs bg-primary text-primary-foreground">
-          <Plus className="h-3.5 w-3.5" />
-          <span>Onboard Partner</span>
-        </Button>
-      </PageHeader>
+        subtitle="Manage franchise brokers, affiliate networks, KYC compliance, conversion metrics, and commission payouts."
+        actions={
+          <Button size="sm" className="h-8 gap-1.5 text-xs bg-primary text-primary-foreground">
+            <Plus className="h-3.5 w-3.5" />
+            <span>Onboard Partner</span>
+          </Button>
+        }
+      />
 
       <Card className="p-5 bg-card border border-border rounded-md shadow-none overflow-hidden">
         <div className="overflow-x-auto">

@@ -10,6 +10,7 @@ export const DEFAULT_PIPELINE_STAGES = [
   { id: "meeting_scheduled", name: "Meeting Scheduled", badgeClass: "bg-purple-950 text-purple-200 border-purple-800", dotColor: "bg-purple-400" },
   { id: "proposal_sent", name: "Proposal Sent", badgeClass: "bg-amber-950 text-amber-200 border-amber-800", dotColor: "bg-amber-400" },
   { id: "deal_won", name: "Deal Won", badgeClass: "bg-green-950 text-green-200 border-green-800", dotColor: "bg-green-400" },
+  { id: "lost", name: "Lost", badgeClass: "bg-zinc-900 text-zinc-200 border-zinc-700", dotColor: "bg-zinc-400" },
   { id: "disqualified", name: "Disqualified", badgeClass: "bg-rose-950 text-rose-200 border-rose-800", dotColor: "bg-rose-400" },
 ];
 

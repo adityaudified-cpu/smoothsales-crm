@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useRef, useEffect, useState, useCallback } from "react";
 import {
   Search,
   Filter,
@@ -10,6 +10,7 @@ import {
   Bookmark,
   X,
   Download,
+  Loader2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -24,15 +25,48 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ColumnChooser } from "./column-chooser";
 import { cn } from "@/lib/utils";
+import { customersApi } from "@/lib/api/customers";
+import { isApiMode } from "@/lib/api/client";
+import { customerToLead } from "@/lib/api/mappers";
+import { useRouter } from "next/navigation";
+import { encodeLeadId } from "@/lib/lead-id-codec";
 
 export const SAVED_VIEWS = [
-  { id: "all_active", label: "All Active", count: 24 },
-  { id: "my_leads", label: "My Leads", count: 8 },
-  { id: "unassigned", label: "Unassigned Pool", count: 1 },
-  { id: "high_intent", label: "High Intent / VIP", count: 9 },
-  { id: "tat_overdue", label: "Follow-up Overdue", count: 4 },
-  { id: "proposal_sent", label: "Proposal Sent", count: 3 },
+  { id: "all_active", label: "All Active" },
+  { id: "my_leads", label: "My Leads" },
+  { id: "unassigned", label: "Unassigned Pool" },
+  { id: "high_intent", label: "High Intent / VIP" },
+  { id: "tat_overdue", label: "Follow-up Overdue" },
+  { id: "proposal_sent", label: "Proposal Sent" },
 ];
+
+// Global search dropdown result item
+function SearchResultItem({ lead, onSelect }) {
+  const name = lead.lead_name || lead.name || "Unnamed";
+  const phone = lead.mobile_number || lead.phone || "";
+  const stage = lead.lead_stage || "";
+  const initials = name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(lead)}
+      className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-muted/60 transition-colors text-left group"
+    >
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+        {initials}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-xs font-semibold text-foreground truncate">{name}</div>
+        <div className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
+          {phone && <span className="font-mono">{phone}</span>}
+          {phone && stage && <span>·</span>}
+          {stage && <span>{stage}</span>}
+        </div>
+      </div>
+    </button>
+  );
+}
 
 export function LeadsToolbar({
   // Selection
@@ -40,11 +74,12 @@ export function LeadsToolbar({
   isIndeterminate,
   onSelectAll,
   // My / All Toggle
-  ownershipView = "all", // "my" | "all"
+  ownershipView = "all",
   onOwnershipChange,
   // Saved View / Filters
   currentSavedView = "all_active",
   onSavedViewChange,
+  savedViewCounts = {},
   onOpenFilterDrawer,
   activeFilterCount = 0,
   // Search
@@ -64,16 +99,81 @@ export function LeadsToolbar({
   onResetColumns,
   onSelectAllColumns,
   onClearAllColumns,
+  onReorderColumns,
 }) {
+  const router = useRouter();
+  const apiMode = isApiMode();
   const selectedSavedViewObj =
     SAVED_VIEWS.find((v) => v.id === currentSavedView) || SAVED_VIEWS[0];
 
+  // Global search state (API mode only)
+  const [apiResults, setApiResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchRef = useRef(null);
+  const dropdownRef = useRef(null);
+  const debounceRef = useRef(null);
+
+  const handleSearchInput = useCallback(
+    (value) => {
+      onSearchChange(value);
+      if (!apiMode) return;
+
+      clearTimeout(debounceRef.current);
+      if (!value.trim() || value.trim().length < 2) {
+        setApiResults([]);
+        setShowDropdown(false);
+        return;
+      }
+
+      setIsSearching(true);
+      setShowDropdown(true);
+      debounceRef.current = setTimeout(async () => {
+        try {
+          const result = await customersApi.search(value.trim(), { page: 0, size: 8 });
+          const leads = (result.items || []).map(customerToLead);
+          setApiResults(leads);
+        } catch {
+          setApiResults([]);
+        } finally {
+          setIsSearching(false);
+        }
+      }, 300);
+    },
+    [apiMode, onSearchChange]
+  );
+
+  const handleSelectResult = useCallback(
+    (lead) => {
+      setShowDropdown(false);
+      onSearchChange("");
+      router.push(`/leads/active/${encodeLeadId(lead.id)}`);
+    },
+    [router, onSearchChange]
+  );
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (
+        searchRef.current &&
+        !searchRef.current.contains(e.target) &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target)
+      ) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2.5 p-2 bg-card border border-border rounded-lg shadow-2xs text-xs">
-      {/* Left toolbar cluster: Select-all, My / All toggle, Filter button, Saved View */}
+    <div className="flex flex-wrap items-center justify-between gap-2.5 p-2 bg-card border border-border rounded-xl shadow-sm text-xs">
+      {/* LEFT: Checkbox first, then Search, then filters */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* Select All Checkbox */}
-        <div className="flex items-center justify-center pl-1 pr-1.5 py-1">
+        {/* Select All Checkbox — leftmost */}
+        <div className="flex items-center justify-center px-1 py-1">
           <Checkbox
             checked={isAllSelected || (isIndeterminate ? "indeterminate" : false)}
             onCheckedChange={onSelectAll}
@@ -82,8 +182,73 @@ export function LeadsToolbar({
           />
         </div>
 
-        {/* My | All Segmented Toggle - using our design system tokens */}
-        <div className="inline-flex items-center p-0.5 rounded-md bg-muted border border-border select-none">
+        {/* Search Input */}
+        <div className="relative" ref={searchRef}>
+          <div className="relative w-56 sm:w-64">
+            {isSearching ? (
+              <Loader2 className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground animate-spin" />
+            ) : (
+              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+            )}
+            <Input
+              value={searchQuery}
+              onChange={(e) => handleSearchInput(e.target.value)}
+              onFocus={() => {
+                if (apiMode && apiResults.length > 0) setShowDropdown(true);
+              }}
+              data-leads-search
+              aria-keyshortcuts="/ Control+K"
+              title="Search leads (press / or Ctrl+K)"
+              placeholder="Search leads…  ( / )"
+              className="pl-8 pr-7 h-8 text-xs bg-background border-border focus-visible:ring-1 focus-visible:ring-primary rounded-lg"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  onSearchChange("");
+                  setApiResults([]);
+                  setShowDropdown(false);
+                }}
+                title="Clear search"
+                className="absolute right-2 top-2 p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Global search dropdown (API mode) */}
+          {apiMode && showDropdown && (
+            <div
+              ref={dropdownRef}
+              className="absolute top-full left-0 mt-1 w-72 bg-popover border border-border rounded-xl shadow-lg z-50 overflow-hidden"
+            >
+              {isSearching ? (
+                <div className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Searching…</span>
+                </div>
+              ) : apiResults.length > 0 ? (
+                <div className="py-1">
+                  <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/60">
+                    Results
+                  </div>
+                  {apiResults.map((lead) => (
+                    <SearchResultItem key={lead.id} lead={lead} onSelect={handleSelectResult} />
+                  ))}
+                </div>
+              ) : searchQuery.trim().length >= 2 ? (
+                <div className="px-3 py-3 text-xs text-muted-foreground">
+                  No leads found for &ldquo;{searchQuery}&rdquo;
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        {/* My | All Segmented Toggle */}
+        <div className="inline-flex items-center p-0.5 rounded-lg bg-muted border border-border select-none">
           <button
             type="button"
             onClick={() => onOwnershipChange("my")}
@@ -116,8 +281,8 @@ export function LeadsToolbar({
           size="sm"
           onClick={onOpenFilterDrawer}
           className={cn(
-            "h-8 text-xs gap-1.5 border-border bg-background hover:bg-secondary/60 text-foreground relative",
-            activeFilterCount > 0 && "border-primary text-primary font-semibold"
+            "h-8 text-xs gap-1.5 border-border bg-background hover:bg-muted text-foreground relative rounded-lg",
+            activeFilterCount > 0 && "border-primary/60 text-primary font-semibold bg-primary/5"
           )}
         >
           <Filter className="h-3.5 w-3.5" />
@@ -135,12 +300,12 @@ export function LeadsToolbar({
             <Button
               variant="outline"
               size="sm"
-              className="h-8 text-xs gap-1.5 border-border bg-background hover:bg-secondary/60 text-foreground font-medium"
+              className="h-8 text-xs gap-1.5 border-border bg-background hover:bg-muted text-foreground font-medium rounded-lg"
             >
               <Bookmark className="h-3.5 w-3.5 text-muted-foreground" />
               <span>{selectedSavedViewObj.label}</span>
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-secondary text-secondary-foreground font-semibold">
-                {selectedSavedViewObj.count}
+                {savedViewCounts[currentSavedView] ?? 0}
               </span>
               <ChevronDown className="h-3 w-3 text-muted-foreground opacity-70" />
             </Button>
@@ -158,14 +323,12 @@ export function LeadsToolbar({
                   onClick={() => onSavedViewChange(view.id)}
                   className="flex items-center justify-between cursor-pointer py-1.5 text-xs"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className={cn(isSelected && "font-semibold text-primary")}>
-                      {view.label}
-                    </span>
-                  </div>
+                  <span className={cn(isSelected && "font-semibold text-primary")}>
+                    {view.label}
+                  </span>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] px-1.5 py-0.2 bg-muted rounded-full text-muted-foreground font-mono">
-                      {view.count}
+                      {savedViewCounts[view.id] ?? 0}
                     </span>
                     {isSelected && <Check className="h-3.5 w-3.5 text-primary" />}
                   </div>
@@ -176,29 +339,8 @@ export function LeadsToolbar({
         </DropdownMenu>
       </div>
 
-      {/* Right toolbar cluster: Search, Export, ColumnChooser, Refresh */}
-      <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-        {/* Search Input */}
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search name, phone, email, city..."
-            className="pl-8 pr-7 h-8 text-xs bg-background border-border focus-visible:ring-1 focus-visible:ring-primary rounded-md"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => onSearchChange("")}
-              title="Clear search"
-              className="absolute right-2 top-2 p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-
+      {/* RIGHT: Export, Columns, Refresh */}
+      <div className="flex items-center gap-2">
         {/* Export to CSV Dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -236,7 +378,7 @@ export function LeadsToolbar({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Column Chooser Component (Prompt #15 Part C2) */}
+        {/* Column Chooser */}
         <ColumnChooser
           columns={columns}
           visibleColumnIds={visibleColumnIds}
@@ -244,6 +386,7 @@ export function LeadsToolbar({
           onResetColumns={onResetColumns}
           onSelectAllColumns={onSelectAllColumns}
           onClearAllColumns={onClearAllColumns}
+          onReorderColumns={onReorderColumns}
         />
 
         {/* Refresh Icon Button */}

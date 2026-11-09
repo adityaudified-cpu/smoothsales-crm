@@ -137,7 +137,7 @@ export function ColumnsPopover({
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search 63 columns..."
+              placeholder={`Search ${columns.length} columns...`}
               className="h-8 pl-8 text-xs bg-background border-border"
             />
             {searchQuery && (

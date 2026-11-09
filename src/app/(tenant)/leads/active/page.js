@@ -1,17 +1,41 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useLeads } from "@/lib/hooks/use-leads";
-import { buildLeadsColumns, LEADS_COLUMNS_CONFIG } from "@/lib/leads-columns.config";
+import { useAuth } from "@/lib/auth/auth-context";
+import { buildLeadsColumns, DEFAULT_VISIBLE_COLUMN_IDS } from "@/lib/leads-columns.config";
 import { getTenantCustomFields } from "@/lib/mock-data/tenant-custom-fields";
 import { SampleDataBanner } from "@/components/leads/sample-data-banner";
 import { LeadsToolbar } from "@/components/leads/leads-toolbar";
 import { LeadTable } from "@/components/leads/lead-table";
 import { LeadsFilterDrawer } from "@/components/leads/leads-filter-drawer";
 import { FloatingBulkActions } from "@/components/leads/floating-bulk-actions";
+import { ExcelUploadModal } from "@/components/leads/excel-upload-modal";
 import { exportLeadsToCSV } from "@/lib/export-utils";
+import { Kanban, Rows3, UploadCloud, UserPlus, X, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { LeadFormDialog } from "@/components/leads/lead-form-dialog";
+import { LeadsKanban } from "@/components/leads/leads-kanban";
+import { PermissionGate } from "@/components/auth/permission-gate";
+import { useTeamMembers } from "@/lib/hooks/use-team-members";
+import { encodeLeadId } from "@/lib/lead-id-codec";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { LOCAL_STORAGE_COLUMNS_KEY } from "@/components/leads/column-chooser";
-import { Users, Clock, Star, AlertTriangle } from "lucide-react";
+import { ATTENTION_QUEUES, matchesAttentionQueue } from "@/lib/leads-workspace";
 
 export default function ActiveLeadsPage() {
   const {
@@ -23,74 +47,100 @@ export default function ActiveLeadsPage() {
     refreshData,
     batchDeleteLeads,
     batchUpdateLeads,
+    addLeads,
+    createLead,
   } = useLeads();
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isEditLead, setIsEditLead] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [viewMode, setViewMode] = useState("table");
+  const router = useRouter();
+  const { user } = useAuth();
+  const myName = user?.name || "";
+  const { reps: teamReps } = useTeamMembers();
 
-  // Multi-tenant custom fields (Part B2)
-  const tenantCustomFields = useMemo(() => getTenantCustomFields("real_estate"), []);
-  const fullColumnsConfig = useMemo(() => buildLeadsColumns(tenantCustomFields), [tenantCustomFields]);
+  const availableCities = useMemo(() => [...new Set(allLeads.map((l) => l.city).filter(Boolean))].sort(), [allLeads]);
+  const availableReps = useMemo(() => {
+    // Merge API reps with any owners found in leads (covers leads assigned before rep was in API)
+    const repMap = new Map(teamReps.map((r) => [r.name, r]));
+    allLeads.forEach((l) => { if (l.lead_owner?.name && !repMap.has(l.lead_owner.name)) repMap.set(l.lead_owner.name, { id: l.lead_owner.id || l.lead_owner.name, name: l.lead_owner.name, initials: l.lead_owner.initials || l.lead_owner.name.slice(0, 2).toUpperCase() }); });
+    return [...repMap.values()];
+  }, [allLeads, teamReps]);
 
-  // All 63 columns visible by default
-  const allColumnIds = useMemo(() => {
-    return fullColumnsConfig.map((c) => c.id);
-  }, [fullColumnsConfig]);
+  const tenantCustomFields = useMemo(() => [], []);
+  const fullColumnsConfig = useMemo(() => buildLeadsColumns([]), []);
 
-  // Column Visibility state persisted to localStorage (defaults to ALL 63 columns)
-  const [visibleColumnIds, setVisibleColumnIds] = useState(() => allColumnIds);
+  const [visibleColumnIds, setVisibleColumnIds] = useState(DEFAULT_VISIBLE_COLUMN_IDS);
+  const [columnOrder, setColumnOrder] = useState([]);
+  const [columnSizing, setColumnSizing] = useState({});
+  const [hasLoadedColumnPreferences, setHasLoadedColumnPreferences] = useState(false);
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_COLUMNS_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Only use saved if it contains the full modern 63-column set, otherwise show all 63
-        if (Array.isArray(parsed) && parsed.length >= 50) {
-          setVisibleColumnIds(parsed);
-          return;
-        }
+      const stored = JSON.parse(localStorage.getItem(LOCAL_STORAGE_COLUMNS_KEY) || "null");
+      if (
+        Array.isArray(stored?.visibleColumnIds) &&
+        stored.visibleColumnIds.length >= 8 &&
+        stored.visibleColumnIds.includes("lead_name")
+      ) {
+        setVisibleColumnIds(stored.visibleColumnIds);
+      } else {
+        setVisibleColumnIds(DEFAULT_VISIBLE_COLUMN_IDS);
       }
-      setVisibleColumnIds(allColumnIds);
+      if (Array.isArray(stored?.columnOrder)) setColumnOrder(stored.columnOrder);
+      if (stored?.columnSizing && typeof stored.columnSizing === "object") setColumnSizing(stored.columnSizing);
     } catch {
-      setVisibleColumnIds(allColumnIds);
+      setVisibleColumnIds(DEFAULT_VISIBLE_COLUMN_IDS);
+    } finally {
+      setHasLoadedColumnPreferences(true);
     }
-  }, [allColumnIds]);
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedColumnPreferences) return;
+    localStorage.setItem(
+      LOCAL_STORAGE_COLUMNS_KEY,
+      JSON.stringify({ visibleColumnIds, columnOrder, columnSizing })
+    );
+  }, [visibleColumnIds, columnOrder, columnSizing, hasLoadedColumnPreferences]);
+
+  const handleReorderColumns = (fromId, toId) => {
+    const ordered = columnOrder.length ? [...columnOrder] : fullColumnsConfig.map((c) => c.id);
+    const fromIdx = ordered.indexOf(fromId);
+    const toIdx = ordered.indexOf(toId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const next = [...ordered];
+    next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, fromId);
+    setColumnOrder(next);
+  };
 
   const handleToggleColumn = useCallback((colId) => {
-    if (colId === "lead_name") return; // cannot be hidden
-    setVisibleColumnIds((prev) => {
-      const next = prev.includes(colId)
-        ? prev.filter((id) => id !== colId)
-        : [...prev, colId];
-      try {
-        localStorage.setItem(LOCAL_STORAGE_COLUMNS_KEY, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  }, []);
-
-  const handleResetColumns = useCallback(() => {
-    setVisibleColumnIds(allColumnIds);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_COLUMNS_KEY, JSON.stringify(allColumnIds));
-    } catch {}
-  }, [allColumnIds]);
-
-  const handleSelectAllColumns = useCallback(() => {
-    const allIds = fullColumnsConfig.map((c) => c.id);
-    setVisibleColumnIds(allIds);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_COLUMNS_KEY, JSON.stringify(allIds));
-    } catch {}
+    const col = fullColumnsConfig.find((c) => c.id === colId);
+    if (col?.alwaysVisible) return;
+    setVisibleColumnIds((prev) =>
+      prev.includes(colId) ? prev.filter((id) => id !== colId) : [...prev, colId]
+    );
   }, [fullColumnsConfig]);
 
-  const handleClearAllColumns = useCallback(() => {
-    setVisibleColumnIds(["lead_name"]);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_COLUMNS_KEY, JSON.stringify(["lead_name"]));
-    } catch {}
+  const handleResetColumns = useCallback(() => {
+    setVisibleColumnIds(DEFAULT_VISIBLE_COLUMN_IDS);
+    setColumnOrder([]);
+    setColumnSizing({});
   }, []);
 
-  // Toolbar & Filtering States
-  const [ownershipView, setOwnershipView] = useState("all"); // "my" | "all"
+  const handleSelectAllColumns = useCallback(
+    () => setVisibleColumnIds(fullColumnsConfig.map((c) => c.id)),
+    [fullColumnsConfig]
+  );
+
+  const handleClearAllColumns = useCallback(() => {
+    const locked = fullColumnsConfig.filter((c) => c.alwaysVisible).map((c) => c.id);
+    setVisibleColumnIds(locked.length ? locked : ["lead_name"]);
+  }, [fullColumnsConfig]);
+
+  const [ownershipView, setOwnershipView] = useState("all");
   const [currentSavedView, setCurrentSavedView] = useState("all_active");
   const [searchQuery, setSearchQuery] = useState("");
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
@@ -102,125 +152,99 @@ export default function ActiveLeadsPage() {
     cities: [],
     awaitingTouch: "all",
   });
-
-  const handleFilterChange = (key, value) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleResetFilters = () => {
-    setFilters({
-      stages: [],
-      owner: "all",
-      sources: [],
-      priority: null,
-      cities: [],
-      awaitingTouch: "all",
-    });
-  };
-
-  // Row selection state
   const [rowSelection, setRowSelection] = useState({});
+  const [attentionQueue, setAttentionQueue] = useState(null);
 
-  // Filtered leads computation
+  const handleFilterChange = (key, value) => setFilters((prev) => ({ ...prev, [key]: value }));
+  const handleResetFilters = () => {
+    setFilters({ stages: [], owner: "all", sources: [], priority: null, cities: [], awaitingTouch: "all" });
+    setCurrentSavedView("all_active");
+    setOwnershipView("all");
+    setSearchQuery("");
+    setAttentionQueue(null);
+  };
+
   const filteredLeads = useMemo(() => {
+    const now = new Date();
     return allLeads.filter((lead) => {
-      // 1. Ownership toggle: "My" filters to leads owned by mock user "Aarav Sharma"
-      if (ownershipView === "my") {
-        if (lead.lead_owner?.name !== "Aarav Sharma") return false;
-      }
-
-      // 2. Saved views preset filter
-      if (currentSavedView === "my_leads") {
-        if (lead.lead_owner?.name !== "Aarav Sharma") return false;
-      } else if (currentSavedView === "unassigned") {
-        if (lead.lead_owner !== null && lead.lead_owner !== undefined) return false;
-      } else if (currentSavedView === "high_intent") {
-        if (lead.lead_priority < 5 && !(lead.tags || []).includes("High Intent")) {
-          return false;
-        }
+      if (attentionQueue && !matchesAttentionQueue(lead, attentionQueue, now)) return false;
+      if (ownershipView === "my" && lead.lead_owner?.name !== myName) return false;
+      if (currentSavedView === "my_leads" && lead.lead_owner?.name !== myName) return false;
+      else if (currentSavedView === "unassigned" && lead.lead_owner != null) return false;
+      else if (currentSavedView === "high_intent") {
+        if (lead.lead_priority < 4 && !(lead.tags || []).includes("High Intent")) return false;
       } else if (currentSavedView === "tat_overdue") {
-        if (!lead.next_followup) return false;
-        const d = new Date(lead.next_followup);
-        if (d >= new Date()) return false;
-      } else if (currentSavedView === "proposal_sent") {
-        if (lead.lead_stage !== "Proposal Sent") return false;
-      }
+        if (!lead.next_followup || new Date(lead.next_followup) >= new Date()) return false;
+      } else if (currentSavedView === "proposal_sent" && lead.lead_stage !== "Proposal Sent") return false;
 
-      // 3. Search query across multiple fields
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchesName = (lead.lead_name || lead.name || "").toLowerCase().includes(q);
-        const matchesPhone = (lead.mobile_number || lead.phone || "").toLowerCase().includes(q);
-        const matchesBusiness = (lead.business || "").toLowerCase().includes(q);
-        const matchesEmail = (lead.email || "").toLowerCase().includes(q);
-        const matchesCity = (lead.city || "").toLowerCase().includes(q);
-        const matchesOwner = (lead.lead_owner?.name || "").toLowerCase().includes(q);
-        const matchesTags = (lead.tags || []).some((t) => t.toLowerCase().includes(q));
-
-        if (
-          !matchesName &&
-          !matchesPhone &&
-          !matchesBusiness &&
-          !matchesEmail &&
-          !matchesCity &&
-          !matchesOwner &&
-          !matchesTags
-        ) {
-          return false;
-        }
+        const fields = [
+          lead.lead_name,
+          lead.name,
+          lead.mobile_number,
+          lead.phone,
+          lead.business,
+          lead.email,
+          lead.city,
+          lead.lead_owner?.name,
+        ];
+        const tagMatch = (lead.tags || []).some((t) => t.toLowerCase().includes(q));
+        if (!fields.some((f) => (f || "").toLowerCase().includes(q)) && !tagMatch) return false;
       }
 
-      // 4. Drawer filters
-      if (filters.stages.length > 0 && !filters.stages.includes(lead.lead_stage)) {
-        return false;
-      }
+      if (filters.stages.length > 0 && !filters.stages.includes(lead.lead_stage)) return false;
       if (filters.owner !== "all") {
         if (filters.owner === "unassigned") {
-          if (lead.lead_owner !== null && lead.lead_owner !== undefined) return false;
-        } else if (lead.lead_owner?.name !== filters.owner) {
-          return false;
-        }
+          if (lead.lead_owner != null) return false;
+        } else if (lead.lead_owner?.name !== filters.owner) return false;
       }
-      if (filters.sources.length > 0 && !filters.sources.includes(lead.lead_source)) {
-        return false;
-      }
-      if (filters.priority && lead.lead_priority !== filters.priority) {
-        return false;
-      }
-      if (filters.cities.length > 0 && !filters.cities.includes(lead.city)) {
-        return false;
-      }
-      if (filters.awaitingTouch !== "all") {
-        if (lead.awaiting_first_touch !== filters.awaitingTouch) return false;
-      }
-
+      if (filters.sources.length > 0 && !filters.sources.includes(lead.lead_source)) return false;
+      if (filters.priority && lead.lead_priority < filters.priority) return false;
+      if (filters.cities.length > 0 && !filters.cities.includes(lead.city)) return false;
+      if (filters.awaitingTouch !== "all" && lead.awaiting_first_touch !== filters.awaitingTouch) return false;
       return true;
     });
-  }, [allLeads, ownershipView, currentSavedView, searchQuery, filters]);
+  }, [allLeads, ownershipView, currentSavedView, searchQuery, filters, attentionQueue, myName]);
 
-  // Selection helpers
   const selectedRowKeys = Object.keys(rowSelection);
   const selectedCount = selectedRowKeys.length;
-  const isAllSelected =
-    filteredLeads.length > 0 && selectedCount === filteredLeads.length;
-  const isIndeterminate =
-    selectedCount > 0 && selectedCount < filteredLeads.length;
+  const isAllSelected = filteredLeads.length > 0 && selectedCount === filteredLeads.length;
+  const isIndeterminate = selectedCount > 0 && selectedCount < filteredLeads.length;
 
   const handleSelectAll = (checked) => {
     if (checked) {
-      const allSelectedMap = {};
-      filteredLeads.forEach((_, idx) => {
-        allSelectedMap[idx] = true;
-      });
-      setRowSelection(allSelectedMap);
+      const map = {};
+      filteredLeads.forEach((lead) => { map[lead.id] = true; });
+      setRowSelection(map);
     } else {
       setRowSelection({});
     }
   };
 
-  const selectedLeadIds = useMemo(() => {
-    return selectedRowKeys.map((idx) => filteredLeads[idx]?.id).filter(Boolean);
-  }, [selectedRowKeys, filteredLeads]);
+  const selectedLeadIds = useMemo(() => selectedRowKeys, [selectedRowKeys]);
+
+  // Telecaller keyboard shortcuts: "/" or Ctrl+K focuses search, Ctrl+Shift+A selects visible rows, Esc clears selection.
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      const target = event.target;
+      const typing = target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+      const mod = event.ctrlKey || event.metaKey;
+      if ((event.key === "/" && !typing) || (mod && event.key.toLowerCase() === "k")) {
+        event.preventDefault();
+        document.querySelector("[data-leads-search]")?.focus();
+      } else if (mod && event.shiftKey && event.key.toLowerCase() === "a" && !typing) {
+        event.preventDefault();
+        const map = {};
+        filteredLeads.forEach((lead) => { map[lead.id] = true; });
+        setRowSelection(map);
+      } else if (event.key === "Escape" && !typing && Object.keys(rowSelection).length) {
+        setRowSelection({});
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [filteredLeads, rowSelection]);
 
   const activeDrawerFilterCount = useMemo(() => {
     let count = 0;
@@ -233,77 +257,117 @@ export default function ActiveLeadsPage() {
     return count;
   }, [filters]);
 
-  // Quick Pipeline Intelligence Metrics
-  const pipelineStats = useMemo(() => {
-    const total = allLeads.length;
-    const awaitingTouch = allLeads.filter(
-      (l) => l.awaiting_first_touch === "YES" || l.awaiting_first_touch === true
-    ).length;
-    const highIntent = allLeads.filter(
-      (l) => l.lead_priority >= 4 || (l.tags || []).includes("High Intent")
-    ).length;
-    const overdueFollowups = allLeads.filter((l) => {
-      if (!l.next_followup) return false;
-      const d = new Date(l.next_followup);
-      return d < new Date();
-    }).length;
+  const savedViewCounts = useMemo(() => {
+    const now = new Date();
+    return {
+      all_active: allLeads.length,
+      my_leads: allLeads.filter((l) => l.lead_owner?.name === myName).length,
+      unassigned: allLeads.filter((l) => !l.lead_owner).length,
+      high_intent: allLeads.filter((l) => l.lead_priority >= 4 || (l.tags || []).includes("High Intent")).length,
+      tat_overdue: allLeads.filter((l) => l.next_followup && new Date(l.next_followup) < now).length,
+      proposal_sent: allLeads.filter((l) => l.lead_stage === "Proposal Sent").length,
+    };
+  }, [allLeads, myName]);
 
-    return { total, awaitingTouch, highIntent, overdueFollowups };
+  const attentionCounts = useMemo(() => {
+    const now = new Date();
+    return Object.fromEntries(ATTENTION_QUEUES.map((queue) => [queue.id, allLeads.filter((lead) => queue.test(lead, now)).length]));
   }, [allLeads]);
 
   return (
-    <div className="space-y-3 pb-20 w-full">
-      {/* Sample Data Banner */}
-      <SampleDataBanner
-        isSampleData={isSampleData}
-        onExit={dismissSampleData}
-        onRestore={restoreSampleData}
-      />
-
-      {/* Pipeline Intelligence Metric Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <div className="flex items-center gap-3 p-2.5 px-3 bg-card border border-border rounded-lg shadow-2xs">
-          <div className="h-8 w-8 rounded-md bg-primary/10 text-primary flex items-center justify-center font-bold shrink-0">
-            <Users className="h-4 w-4" />
-          </div>
-          <div className="min-w-0">
-            <div className="text-[11px] text-muted-foreground font-medium truncate">Total Leads</div>
-            <div className="text-base font-bold text-foreground font-mono leading-tight">{pipelineStats.total}</div>
-          </div>
+    <div className="flex flex-col gap-2.5 pb-10 w-full">
+      {/* Page Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-base font-bold text-foreground tracking-tight">Active Leads</h1>
+          <p className="text-[11px] text-muted-foreground">
+            {allLeads.length} total leads in pipeline
+          </p>
         </div>
-
-        <div className="flex items-center gap-3 p-2.5 px-3 bg-card border border-border rounded-lg shadow-2xs">
-          <div className="h-8 w-8 rounded-md bg-warning/10 text-warning flex items-center justify-center font-bold shrink-0">
-            <Clock className="h-4 w-4" />
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5" role="group" aria-label="View">
+            {[["table", Rows3, "Table"], ["board", Kanban, "Board"]].map(([mode, Icon, label]) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={viewMode === mode}
+                onClick={() => setViewMode(mode)}
+                className={cn("flex h-6 items-center gap-1 rounded-md px-2 text-[11px] font-semibold", viewMode === mode ? "bg-card text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground")}
+              >
+                <Icon className="h-3 w-3" />{label}
+              </button>
+            ))}
           </div>
-          <div className="min-w-0">
-            <div className="text-[11px] text-muted-foreground font-medium truncate">Awaiting Touch</div>
-            <div className="text-base font-bold text-warning font-mono leading-tight">{pipelineStats.awaitingTouch}</div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 p-2.5 px-3 bg-card border border-border rounded-lg shadow-2xs">
-          <div className="h-8 w-8 rounded-md bg-success/10 text-success flex items-center justify-center font-bold shrink-0">
-            <Star className="h-4 w-4" />
-          </div>
-          <div className="min-w-0">
-            <div className="text-[11px] text-muted-foreground font-medium truncate">High Intent VIP</div>
-            <div className="text-base font-bold text-success font-mono leading-tight">{pipelineStats.highIntent}</div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 p-2.5 px-3 bg-card border border-border rounded-lg shadow-2xs">
-          <div className="h-8 w-8 rounded-md bg-destructive/10 text-destructive flex items-center justify-center font-bold shrink-0">
-            <AlertTriangle className="h-4 w-4" />
-          </div>
-          <div className="min-w-0">
-            <div className="text-[11px] text-muted-foreground font-medium truncate">Overdue Follow-ups</div>
-            <div className="text-base font-bold text-destructive font-mono leading-tight">{pipelineStats.overdueFollowups}</div>
-          </div>
+          <PermissionGate action="create" resource="leads">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsUploadOpen(true)}
+              className="h-7 text-xs px-2.5 gap-1.5 font-semibold rounded-lg"
+            >
+              <UploadCloud className="h-3 w-3" />
+              <span>Import</span>
+            </Button>
+          </PermissionGate>
+          <PermissionGate action="create" resource="leads">
+            <Button
+              size="sm"
+              onClick={() => setIsAddOpen(true)}
+              className="h-7 text-xs px-2.5 gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-2xs rounded-lg"
+            >
+              <UserPlus className="h-3 w-3" />
+              <span>Add Lead</span>
+            </Button>
+          </PermissionGate>
         </div>
       </div>
 
-      {/* Toolbar: My/All toggle, ColumnChooser, Search, Filters, Export */}
+      <SampleDataBanner
+        isSampleData={isSampleData}
+        onExit={dismissSampleData}
+      />
+
+      {/* Attention queues */}
+      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-6">
+        {ATTENTION_QUEUES.map((queue) => {
+          const isActive = attentionQueue === queue.id;
+          const count = attentionCounts[queue.id] || 0;
+          return (
+            <button
+              key={queue.id}
+              type="button"
+              onClick={() => { setAttentionQueue(isActive ? null : queue.id); setRowSelection({}); }}
+              title={queue.hint}
+              aria-pressed={isActive}
+              className="relative flex items-center gap-2.5 rounded-lg border border-border bg-white dark:bg-card px-3 py-2.5 text-left w-full hover:border-border"
+            >
+              <div className="text-sm font-bold leading-none tabular-nums shrink-0 min-w-[1.5rem] text-right text-foreground">
+                {count}
+              </div>
+              <div className="flex flex-col min-w-0 flex-1">
+                <div className="text-[11px] font-semibold leading-tight truncate text-foreground">
+                  {queue.label}
+                </div>
+                <div className="text-[10px] leading-tight truncate text-muted-foreground mt-0.5">
+                  {queue.hint}
+                </div>
+              </div>
+              {isActive && (
+                <X className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {attentionQueue && (
+        <div className="-mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span>Showing <b className="text-foreground">{ATTENTION_QUEUES.find((q) => q.id === attentionQueue)?.label}</b> · {filteredLeads.length} lead{filteredLeads.length === 1 ? "" : "s"}</span>
+          <button type="button" onClick={() => setAttentionQueue(null)} className="text-primary hover:underline">Clear</button>
+        </div>
+      )}
+
+      {/* Toolbar */}
       <LeadsToolbar
         isAllSelected={isAllSelected}
         isIndeterminate={isIndeterminate}
@@ -312,15 +376,14 @@ export default function ActiveLeadsPage() {
         onOwnershipChange={setOwnershipView}
         currentSavedView={currentSavedView}
         onSavedViewChange={setCurrentSavedView}
+        savedViewCounts={savedViewCounts}
         onOpenFilterDrawer={() => setIsFilterDrawerOpen(true)}
         activeFilterCount={activeDrawerFilterCount}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         isRefreshing={isLoading}
         onRefresh={refreshData}
-        onExportAll={() =>
-          exportLeadsToCSV(filteredLeads, fullColumnsConfig, "smoothsales_active_leads.csv")
-        }
+        onExportAll={() => exportLeadsToCSV(filteredLeads, fullColumnsConfig, "smoothsales_active_leads.csv")}
         onExportSelected={() => {
           const selectedRows = filteredLeads.filter((l) => selectedLeadIds.includes(l.id));
           exportLeadsToCSV(selectedRows, fullColumnsConfig, "smoothsales_selected_leads.csv");
@@ -332,30 +395,47 @@ export default function ActiveLeadsPage() {
         onResetColumns={handleResetColumns}
         onSelectAllColumns={handleSelectAllColumns}
         onClearAllColumns={handleClearAllColumns}
+        onReorderColumns={handleReorderColumns}
       />
 
-      {/* Leads Table Component with Sticky lead_name and 60+ Data Columns */}
+      {/* Board view (stage Kanban) or Table */}
+      {viewMode === "board" ? (
+        <LeadsKanban
+          leads={filteredLeads}
+          onStageChange={(leadId, stage) => {
+            batchUpdateLeads([leadId], { lead_stage: stage, last_updated: new Date().toISOString() });
+            toast.success(`Moved to ${stage}`);
+          }}
+        />
+      ) : (
       <LeadTable
         data={filteredLeads}
         columnsConfig={fullColumnsConfig}
         visibleColumnIds={visibleColumnIds}
+        columnOrder={columnOrder}
+        columnSizing={columnSizing}
+        onColumnSizingChange={setColumnSizing}
+        onReorderColumns={handleReorderColumns}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
         isLoading={isLoading}
         onResetFilters={handleResetFilters}
+        onEditLead={(lead) => setIsEditLead(lead)}
+        onDeleteLead={(lead) => setDeleteTarget(lead)}
       />
+      )}
 
-      {/* Slide-out Filter Drawer */}
       <LeadsFilterDrawer
         isOpen={isFilterDrawerOpen}
-        onClose={setIsFilterDrawerOpen}
+        onClose={() => setIsFilterDrawerOpen(false)}
         filters={filters}
         onFilterChange={handleFilterChange}
         onResetFilters={handleResetFilters}
         totalResultsCount={filteredLeads.length}
+        availableReps={availableReps}
+        availableCities={availableCities}
       />
 
-      {/* Floating Bulk Action Bar */}
       <FloatingBulkActions
         selectedCount={selectedCount}
         selectedLeadIds={selectedLeadIds}
@@ -363,6 +443,74 @@ export default function ActiveLeadsPage() {
         onBatchUpdate={batchUpdateLeads}
         onBatchDelete={batchDeleteLeads}
       />
+
+      <ExcelUploadModal
+        open={isUploadOpen}
+        onOpenChange={setIsUploadOpen}
+        onLeadsImported={addLeads}
+        existingLeads={allLeads}
+      />
+
+      {isAddOpen && (
+        <LeadFormDialog
+          open
+          onOpenChange={setIsAddOpen}
+          existingLeads={allLeads}
+          onSubmit={async (values) => {
+            const saved = await createLead({
+              ...values,
+              id: `manual_${Date.now()}`,
+              attempts: 0,
+              awaiting_first_touch: "YES",
+              created_at: new Date().toISOString(),
+              started_work_on: new Date().toISOString(),
+              tags: [],
+            });
+            setIsAddOpen(false);
+            toast.success(`${saved.lead_name} added`, { action: { label: "Open", onClick: () => router.push(`/leads/active/${encodeLeadId(saved.id)}`) } });
+          }}
+        />
+      )}
+
+      {isEditLead && (
+        <LeadFormDialog
+          key={isEditLead.id}
+          open
+          lead={isEditLead}
+          onOpenChange={(open) => { if (!open) setIsEditLead(null); }}
+          existingLeads={allLeads}
+          onSubmit={async (values) => {
+            batchUpdateLeads([isEditLead.id], { ...values, last_updated: new Date().toISOString() });
+            setIsEditLead(null);
+            toast.success(`${values.lead_name} updated`);
+          }}
+        />
+      )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {deleteTarget?.lead_name || deleteTarget?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the lead. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (!deleteTarget) return;
+                batchDeleteLeads([deleteTarget.id]);
+                toast.success(`${deleteTarget.lead_name || deleteTarget.name} deleted`);
+                setDeleteTarget(null);
+              }}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

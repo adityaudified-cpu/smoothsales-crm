@@ -18,9 +18,13 @@ export function AuthSplitLayout({ children }) {
 
         {/* Brand Wordmark Top */}
         <div className="relative z-10">
-          <Link href="/" className="inline-flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded bg-white text-primary flex items-center justify-center font-heading font-extrabold text-base shadow-sm">
-              S
+          <Link href="/" className="inline-flex items-center gap-3 group">
+            <div className="relative w-9 h-9 rounded-xl overflow-hidden border border-white/30 shadow-md group-hover:scale-105 transition-transform shrink-0 bg-white">
+              <img
+                src="/images/smoothsales-logo.jpg"
+                alt="SmoothSales Logo"
+                className="w-full h-full object-cover"
+              />
             </div>
             <span className="font-heading font-extrabold text-xl tracking-tight text-white">
               SmoothSales<span className="opacity-80 font-normal">.ai</span>

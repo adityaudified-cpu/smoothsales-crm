@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { MOCK_USERS } from "@/lib/mock-data/users";
-import { urls } from "@smoothsales/lib/urls";
+import { urls } from "@/lib/urls";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

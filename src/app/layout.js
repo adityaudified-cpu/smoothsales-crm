@@ -16,6 +16,9 @@ const plexSans = IBM_Plex_Sans({
 export const metadata = {
   title: "SmoothSales.ai — Multi-Tenant SaaS CRM",
   description: "High-velocity sales CRM with automated lead distribution and channel commissions",
+  icons: {
+    icon: "/images/smoothsales-logo.jpg",
+  },
 };
 
 export const viewport = {
@@ -31,8 +34,8 @@ import { AuthProvider } from "@/lib/auth/auth-context";
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${manrope.variable} ${plexSans.variable}`} suppressHydrationWarning>
-      <body className="min-h-screen bg-background font-sans antialiased text-foreground">
-        <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light" enableSystem={false}>
+      <body className="min-h-screen bg-background font-sans antialiased text-foreground" suppressHydrationWarning>
+        <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light" enableSystem={false} disableTransitionOnChange>
           <AuthProvider>
             {children}
             <Toaster position="bottom-right" richColors />

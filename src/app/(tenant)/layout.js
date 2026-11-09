@@ -22,15 +22,26 @@ export default function TenantLayout({ children }) {
   // Check role-based route access
   const isAllowed = user ? hasRouteAccess(user, pathname) : true;
 
+  const isWhatsAppChat = pathname === "/whatsapp/chat" || pathname?.startsWith("/whatsapp/chat");
+  const isWhatsApp = pathname?.startsWith("/whatsapp");
+
   return (
-    <div className="flex min-h-screen bg-background text-foreground antialiased w-full">
+    <div suppressHydrationWarning className="flex h-screen bg-background text-foreground antialiased w-full overflow-hidden">
       {/* Dynamic Left Sidebar (Collapsible & Compact) */}
       <Sidebar />
 
-      {/* Scrollable Main Area */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
+      {/* Main Area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Topbar />
-        <main className="p-6 max-w-[1700px] w-full mx-auto flex-1">
+        <main
+          className={
+            isWhatsAppChat
+              ? "flex-1 min-h-0 overflow-hidden"
+              : isWhatsApp
+              ? "flex-1 min-h-0 overflow-y-auto"
+              : "flex-1 overflow-y-auto p-6 max-w-[1700px] w-full mx-auto"
+          }
+        >
           {!isAllowed ? <AccessDenied targetRoute={pathname} /> : children}
         </main>
       </div>

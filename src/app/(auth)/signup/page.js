@@ -28,8 +28,18 @@ export default function SignupPage() {
       <div className="space-y-6">
         {/* Header */}
         <div className="space-y-2">
-          <div className="h-8 w-8 rounded bg-primary flex items-center justify-center text-primary-foreground font-heading font-extrabold text-sm shadow-sm lg:hidden">
-            S
+          {/* Mobile brand header */}
+          <div className="flex items-center gap-2.5 lg:hidden mb-2">
+            <div className="w-8 h-8 rounded-lg overflow-hidden border border-border shadow-xs shrink-0">
+              <img
+                src="/images/smoothsales-logo.jpg"
+                alt="SmoothSales Logo"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <span className="font-heading font-extrabold text-base tracking-tight text-foreground">
+              SmoothSales<span className="text-primary font-normal">.ai</span>
+            </span>
           </div>
           <h2 className="font-heading text-2xl font-extrabold text-foreground tracking-tight">
             Start your free trial

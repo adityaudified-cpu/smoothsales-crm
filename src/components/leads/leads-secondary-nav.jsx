@@ -10,17 +10,15 @@ import {
   Building,
   FileText,
   Layers,
-  UploadCloud,
   Share2,
 } from "lucide-react";
 
 export const LEADS_NAV_TABS = [
-  { id: "active", label: "Active Leads", href: "/leads/active", icon: Users, badge: "24" },
+  { id: "active", label: "Active Leads", href: "/leads/active", icon: Users },
   { id: "worked", label: "Worked Leads", href: "/leads/worked", icon: CheckCircle },
   { id: "businesses", label: "Businesses", href: "/leads/businesses", icon: Building },
   { id: "documents", label: "Documents", href: "/leads/documents", icon: FileText },
   { id: "segments", label: "Segments / Lists", href: "/leads/segments", icon: Layers },
-  { id: "uploads", label: "Uploads", href: "/leads/uploads", icon: UploadCloud },
   { id: "distributions", label: "Distributions", href: "/leads/distributions", icon: Share2 },
 ];
 
@@ -55,18 +53,6 @@ export function LeadsSecondaryNav() {
                   )}
                 />
                 <span>{tab.label}</span>
-                {tab.badge && (
-                  <span
-                    className={cn(
-                      "text-[10px] px-1.5 py-0.2 rounded-full font-bold leading-tight",
-                      isActive
-                        ? "bg-emerald-400 text-[#0a2f26]"
-                        : "bg-emerald-900/60 text-emerald-300 border border-emerald-700/50"
-                    )}
-                  >
-                    {tab.badge}
-                  </span>
-                )}
               </Link>
             );
           })}
