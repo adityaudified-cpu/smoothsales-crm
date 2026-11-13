@@ -65,6 +65,11 @@ import {
   SlidersHorizontal,
   Workflow,
   Share2,
+  PhoneCall,
+  Bot,
+  Calendar,
+  Video,
+  FileSpreadsheet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -78,29 +83,29 @@ import {
   sendMetaCapiConversion,
   sendGoogleOciConversion,
 } from "@/lib/api/integrations";
+import { UniversalConfigModal } from "@/components/integrations/universal-config-modal";
 
-// ── Default Catalog Metadata ──────────────────────────────────────────────────
+// ── Master 20-Channel Integration Catalog ─────────────────────────────────────
 
-const INTEGRATION_CATALOG = [
+const MASTER_INTEGRATIONS_CATALOG = [
+  // 1. Advertising & Social Capture
   {
     key: "meta_ads",
     displayName: "Meta Ads & Lead Capture",
     category: "Advertising",
     iconLetter: "M",
     iconBg: "bg-blue-600 text-white",
-    description: "Real-time sync of Facebook & Instagram Lead Ads with sub-60s ingestion into CRM.",
-    badges: ["Instant Lead Ads", "HMAC Signature", "Graph API v19.0"],
-    docsUrl: "https://developers.facebook.com/docs/marketing-api/guides/lead-ads",
+    description: "Instant sub-60s sync of Facebook & Instagram Lead Ads directly into CRM with HMAC verification.",
+    badges: ["Instant Lead Ads", "HMAC-SHA256", "Graph API v19.0"],
   },
   {
     key: "meta_capi",
     displayName: "Meta Conversions API (CAPI)",
     category: "Advertising",
-    iconLetter: "M",
+    iconLetter: "C",
     iconBg: "bg-indigo-600 text-white",
-    description: "Server-side event dispatching for lead qualifications and deal completions with SHA-256 PII hashing.",
+    description: "Server-side feedback loop sending qualified lead milestones back to Meta Ads with SHA-256 PII hashing.",
     badges: ["Server-Side CAPI", "SHA-256 Hashed", "ROAS Optimization"],
-    docsUrl: "https://developers.facebook.com/docs/marketing-api/conversions-api",
   },
   {
     key: "google_ads",
@@ -109,38 +114,36 @@ const INTEGRATION_CATALOG = [
     iconLetter: "G",
     iconBg: "bg-red-600 text-white",
     description: "Capture search, YouTube, and Discovery lead form submissions directly with GCLID attribution.",
-    badges: ["Google Key Auth", "GCLID Tracking", "Lead Extensions"],
-    docsUrl: "https://support.google.com/google-ads/answer/9463428",
+    badges: ["Google Key Auth", "GCLID Tracking", "Search & YouTube"],
   },
   {
     key: "google_oci",
     displayName: "Google Offline Conversion Import (OCI)",
     category: "Advertising",
-    iconLetter: "G",
+    iconLetter: "O",
     iconBg: "bg-amber-600 text-white",
     description: "Push closed deal and site-visit milestones back to Google Ads for Smart Bidding optimization.",
     badges: ["Smart Bidding", "Offline Conversions", "GCLID Match"],
-    docsUrl: "https://support.google.com/google-ads/answer/2998031",
   },
   {
-    key: "website_webhook",
-    displayName: "Website Inbound Webhook & Form Builder",
-    category: "Web",
-    iconLetter: "W",
-    iconBg: "bg-emerald-600 text-white",
-    description: "Universal token-authenticated REST webhook and embeddable forms for WordPress, Webflow, and custom sites.",
-    badges: ["Embed Generator", "CORS Ready", "Field Mapping"],
-    docsUrl: "#",
+    key: "instagram_ads",
+    displayName: "Instagram Ads & Direct Message Capture",
+    category: "Advertising",
+    iconLetter: "I",
+    iconBg: "bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white",
+    description: "Direct social lead capture from Instagram Story ads, reels lead forms, and automated DM routing.",
+    badges: ["Story Ads", "DM Routing", "Social Leads"],
   },
+
+  // 2. Listing Portals (Real Estate & B2B)
   {
     key: "indiamart",
     displayName: "IndiaMART Webhook Lead Manager",
     category: "Listing Portals",
     iconLetter: "I",
     iconBg: "bg-orange-600 text-white",
-    description: "Instant push notification of B2B buyer inquiries with product requirement tags and CRM push key.",
+    description: "Instant push notification of B2B buyer inquiries with product requirement tags and GLUSR CRM key.",
     badges: ["Push API", "GLUSR_CRM_KEY", "B2B Enquiries"],
-    docsUrl: "https://help.indiamart.com/lead-manager-api",
   },
   {
     key: "99acres",
@@ -150,7 +153,6 @@ const INTEGRATION_CATALOG = [
     iconBg: "bg-sky-700 text-white",
     description: "Automatic lead sync from builder project listings, buyer callbacks, and verified inquiries.",
     badges: ["Real Estate Feed", "Project Tagging", "Auto-Routing"],
-    docsUrl: "https://www.99acres.com",
   },
   {
     key: "magicbricks",
@@ -160,19 +162,122 @@ const INTEGRATION_CATALOG = [
     iconBg: "bg-rose-600 text-white",
     description: "Direct webhook pipeline for property seeker inquiries and virtual tour booking requests.",
     badges: ["Buyer Gateway", "Callback Webhook", "Instant Sync"],
-    docsUrl: "https://www.magicbricks.com",
+  },
+  {
+    key: "justdial",
+    displayName: "Justdial Lead Webhook",
+    category: "Listing Portals",
+    iconLetter: "J",
+    iconBg: "bg-amber-500 text-slate-900",
+    description: "Local buyer triggers and automated category dispatch from Justdial verified listings.",
+    badges: ["Local Leads", "Category Match", "Instant Webhook"],
+  },
+
+  // 3. Messaging & AI
+  {
+    key: "whatsapp",
+    displayName: "WhatsApp Business Cloud API",
+    category: "Messaging",
+    iconLetter: "W",
+    iconBg: "bg-emerald-600 text-white",
+    description: "Official Meta Cloud API integration for instant sub-60s auto-replies and template broadcasts.",
+    badges: ["Official WABA", "Sub-60s SLA", "Meta Verified"],
+  },
+  {
+    key: "openai",
+    displayName: "OpenAI / ChatGPT GPT-4o Engine",
+    category: "Messaging",
+    iconLetter: "AI",
+    iconBg: "bg-teal-600 text-white",
+    description: "Automated AI lead scoring, budget parsing, conversation qualification, and closing scripts.",
+    badges: ["GPT-4o Engine", "Lead Scoring", "Auto-Qualification"],
+  },
+  {
+    key: "exotel",
+    displayName: "Exotel Cloud Telephony & IVR",
+    category: "Messaging",
+    iconLetter: "E",
+    iconBg: "bg-indigo-700 text-white",
+    description: "Click-to-call, automated call recording sync, virtual number routing, and multi-agent IVR greeting.",
+    badges: ["Click-to-Call", "Cloud Calling", "IVR Bridge"],
+  },
+
+  // 4. Web Capture & Form Builders
+  {
+    key: "website_webhook",
+    displayName: "Website Inbound Webhook & Form Builder",
+    category: "Web",
+    iconLetter: "W",
+    iconBg: "bg-emerald-700 text-white",
+    description: "Universal token-authenticated REST webhook and embeddable forms for WordPress, Webflow, and custom landing pages.",
+    badges: ["Embed Generator", "CORS Ready", "Field Mapping"],
+  },
+  {
+    key: "google_forms",
+    displayName: "Google Forms Instant Ingestion",
+    category: "Web",
+    iconLetter: "F",
+    iconBg: "bg-purple-600 text-white",
+    description: "Capture survey responses and internal lead registration forms without manual data entry.",
+    badges: ["Instant Ingest", "Survey Intake", "Zero Manual Entry"],
+  },
+  {
+    key: "jotform",
+    displayName: "Jotform REST Webhook",
+    category: "Web",
+    iconLetter: "J",
+    iconBg: "bg-orange-500 text-white",
+    description: "REST webhook receiver for multi-page custom web capture and client registration forms.",
+    badges: ["REST Webhook", "Custom Forms", "File Uploads"],
+  },
+
+  // 5. Payments & Productivity
+  {
+    key: "razorpay",
+    displayName: "Razorpay Subscriptions & Smart Collect",
+    category: "Payments",
+    iconLetter: "R",
+    iconBg: "bg-sky-600 text-white",
+    description: "Automated booking token collection, UPI recurring autopay, and instant TDS commission payouts.",
+    badges: ["UPI Smart Collect", "TDS Ledger", "Token Booking"],
+  },
+  {
+    key: "cashfree",
+    displayName: "Cashfree Payment Gateway & Partner Split",
+    category: "Payments",
+    iconLetter: "C",
+    iconBg: "bg-cyan-700 text-white",
+    description: "Instant vendor disbursements and payment split settlements with automated receipting.",
+    badges: ["Direct Bank Split", "Instant Payouts", "Partner Commission"],
+  },
+  {
+    key: "google_sheets",
+    displayName: "Google Sheets Two-Way Live Sync",
+    category: "Productivity",
+    iconLetter: "S",
+    iconBg: "bg-green-600 text-white",
+    description: "Continuous real-time export and backup of leads, deals, and commission ledger records.",
+    badges: ["Continuous Sync", "Two-Way Live", "Realtime Backup"],
+  },
+  {
+    key: "calendly",
+    displayName: "Calendly Site Visit Scheduler",
+    category: "Productivity",
+    iconLetter: "C",
+    iconBg: "bg-blue-500 text-white",
+    description: "Automated calendar event creation and WhatsApp appointment reminders for client site visits.",
+    badges: ["Site Visit Scheduler", "Calendar Sync", "WhatsApp Reminder"],
+  },
+  {
+    key: "google_meet",
+    displayName: "Google Meet Auto Video Discovery",
+    category: "Productivity",
+    iconLetter: "M",
+    iconBg: "bg-yellow-600 text-white",
+    description: "Automatic video consultation link generation and calendar sync on demo bookings.",
+    badges: ["Auto Link Gen", "Video Discovery", "Demo Scheduler"],
   },
 ];
-
-// ── Zod Validation Schemas ────────────────────────────────────────────────────
-
-const configValidationSchema = z.object({
-  displayName: z.string().min(2, "Name must be at least 2 characters"),
-  category: z.string().min(1, "Category is required"),
-  enabled: z.boolean(),
-});
-
-// ── Main Page Component ───────────────────────────────────────────────────────
 
 export default function IntegrationsPage() {
   const [activeTab, setActiveTab] = useState("catalog");
@@ -182,11 +287,11 @@ export default function IntegrationsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
 
-  // Selected Integration for Edit / Manage Modal
-  const [editingIntegration, setEditingIntegration] = useState(null);
-  const [editFormData, setEditFormData] = useState({});
-  const [testingKey, setTestingKey] = useState(null);
+  // Selected Integration for Universal Config Modal
+  const [selectedIntegration, setSelectedIntegration] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [savingKey, setSavingKey] = useState(false);
+  const [testingKey, setTestingKey] = useState(null);
 
   // Copied states for tooltips
   const [copiedKey, setCopiedKey] = useState(null);
@@ -196,17 +301,6 @@ export default function IntegrationsPage() {
   const [loadingAudit, setLoadingAudit] = useState(false);
   const [selectedAuditPayload, setSelectedAuditPayload] = useState(null);
   const [reprocessingId, setReprocessingId] = useState(null);
-
-  // Live Simulator State
-  const [simulatorSource, setSimulatorSource] = useState("website");
-  const [simulatorFields, setSimulatorFields] = useState({
-    name: "Vikram Singhania",
-    phone: "+919876501234",
-    email: "vikram.singhania@example.com",
-    city: "Gurugram, Cyber City",
-    notes: "High intent: looking for 3BHK high-rise apartment near golf course road",
-  });
-  const [simulating, setSimulating] = useState(false);
 
   // Meta CAPI Test State
   const [capiData, setCapiData] = useState({
@@ -284,7 +378,7 @@ export default function IntegrationsPage() {
       configMap.set(item.integrationKey, item);
     });
 
-    return INTEGRATION_CATALOG.map((cat) => {
+    return MASTER_INTEGRATIONS_CATALOG.map((cat) => {
       const serverItem = configMap.get(cat.key);
       let parsedConfig = {};
       if (serverItem?.configJson) {
@@ -331,7 +425,7 @@ export default function IntegrationsPage() {
         enabled: nextStatus,
         config: item.config,
       });
-      toast.success(`${item.displayName} is now ${nextStatus ? "Enabled" : "Disabled"}`);
+      toast.success(`${item.displayName} is now ${nextStatus ? "Active" : "Disabled"}`);
       loadData(true);
     } catch (err) {
       toast.error(`Failed to update ${item.displayName}: ${err.message}`);
@@ -357,63 +451,22 @@ export default function IntegrationsPage() {
     }
   };
 
-  const handleOpenEdit = (item) => {
-    setEditingIntegration(item);
-    setEditFormData({
-      displayName: item.displayName,
-      category: item.category,
-      enabled: item.enabled,
-      ...item.config,
-    });
+  const handleOpenConfigModal = (item) => {
+    setSelectedIntegration(item);
+    setIsModalOpen(true);
   };
 
-  const handleSaveEdit = async () => {
-    if (!editingIntegration) return;
+  const handleSaveConfig = async (key, payload) => {
     setSavingKey(true);
-
     try {
-      const { displayName, category, enabled, ...restConfig } = editFormData;
-      configValidationSchema.parse({ displayName, category, enabled });
-
-      await saveIntegration(editingIntegration.key, {
-        displayName,
-        category,
-        enabled,
-        config: restConfig,
-      });
-
-      toast.success(`${displayName} configuration saved successfully`);
-      setEditingIntegration(null);
+      await saveIntegration(key, payload);
+      toast.success(`${payload.displayName} configuration saved successfully`);
+      setIsModalOpen(false);
       loadData(true);
     } catch (err) {
-      if (err instanceof z.ZodError) {
-        toast.error(err.errors[0]?.message || "Validation error");
-      } else {
-        toast.error(`Save failed: ${err.message}`);
-      }
+      toast.error(`Save failed: ${err.message}`);
     } finally {
       setSavingKey(false);
-    }
-  };
-
-  // ── Simulator Submission ───────────────────────────────────────────────────
-
-  const handleSimulateLead = async (e) => {
-    e?.preventDefault();
-    setSimulating(true);
-
-    try {
-      const res = await simulateLead(simulatorSource, simulatorFields);
-      toast.success("Lead Ingested & Captured!", {
-        description: `Lead "${res.name}" created with ID: ${res.leadId} via ${res.source}. Visible in Active Leads table.`,
-      });
-      if (activeTab === "audit") {
-        loadAuditData();
-      }
-    } catch (err) {
-      toast.error(`Simulation Failed: ${err.message}`);
-    } finally {
-      setSimulating(false);
     }
   };
 
@@ -481,7 +534,8 @@ export default function IntegrationsPage() {
 
       const matchesCat =
         categoryFilter === "all" ||
-        item.category.toLowerCase().replace(/\s+/g, "_") === categoryFilter.toLowerCase().replace(/\s+/g, "_");
+        item.category.toLowerCase().replace(/\s+/g, "_") ===
+          categoryFilter.toLowerCase().replace(/\s+/g, "_");
 
       return matchesSearch && matchesCat;
     });
@@ -496,15 +550,18 @@ export default function IntegrationsPage() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-bold font-heading text-foreground tracking-tight">
-              Integrations & Lead Ingestion Hub
+              Enterprise Integrations Marketplace
             </h1>
-            <Badge variant="outline" className="text-xs bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 font-semibold gap-1.5 py-0.5">
+            <Badge
+              variant="outline"
+              className="text-xs bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 font-semibold gap-1.5 py-0.5"
+            >
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              {activeCount} of {mergedCatalog.length} Active
+              {activeCount} of {mergedCatalog.length} Active Channels
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
-            Seamlessly connect Meta Lead Ads, Google Ads Webhooks, Conversions APIs (CAPI/OCI), Website Form Builders, and Indian Real Estate portals (IndiaMART, 99acres, MagicBricks) with real-time lead capture into SmoothSales CRM.
+            Configure Meta Lead Ads, Google Ads Webhooks, Conversions APIs (CAPI/OCI), IndiaMART, 99acres, MagicBricks, Justdial, WhatsApp Cloud API, OpenAI GPT-4o, and Payment Gateways in under two clicks.
           </p>
         </div>
 
@@ -521,7 +578,10 @@ export default function IntegrationsPage() {
           </Button>
           <Button
             size="sm"
-            onClick={() => setActiveTab("website")}
+            onClick={() => {
+              const item = mergedCatalog.find((i) => i.key === "website_webhook");
+              if (item) handleOpenConfigModal(item);
+            }}
             className="text-xs h-9 gap-1.5 bg-primary text-primary-foreground font-semibold shadow-xs"
           >
             <Code2 className="h-3.5 w-3.5" />
@@ -534,12 +594,13 @@ export default function IntegrationsPage() {
       <div className="border-b border-border/80">
         <nav className="flex space-x-6 overflow-x-auto no-scrollbar" aria-label="Tabs">
           {[
-            { id: "catalog", label: "All Integrations", icon: Layers, count: mergedCatalog.length },
-            { id: "meta", label: "Meta Ads & CAPI", icon: Megaphone, count: "v19.0" },
-            { id: "google", label: "Google Ads Suite", icon: Globe, count: "GCLID" },
-            { id: "website", label: "Website Webhooks & Embed", icon: Code2, count: "Form API" },
-            { id: "portals", label: "IndiaMART & Portals", icon: Building, count: "3 Feeds" },
-            { id: "audit", label: "Inbound Audit & Logs", icon: Activity, count: auditLogs.length > 0 ? `${auditLogs.length}` : "Live" },
+            { id: "catalog", label: "All Integrations", icon: Layers, count: `${mergedCatalog.length}` },
+            { id: "meta", label: "Meta Suite", icon: Megaphone, count: "Lead Ads & CAPI" },
+            { id: "google", label: "Google Ads Suite", icon: Globe, count: "Forms & OCI" },
+            { id: "portals", label: "Portals & Webhooks", icon: Building, count: "IndiaMART, 99acres" },
+            { id: "messaging", label: "Messaging & AI", icon: MessageSquare, count: "WhatsApp & GPT-4o" },
+            { id: "productivity", label: "Payments & Productivity", icon: CreditCard, count: "Razorpay, Sheets" },
+            { id: "audit", label: "Inbound Audit & Stream", icon: Activity, count: auditLogs.length > 0 ? `${auditLogs.length}` : "Live" },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -574,24 +635,32 @@ export default function IntegrationsPage() {
         </nav>
       </div>
 
-      {/* ── TAB 1: ALL INTEGRATIONS CATALOG ─────────────────────────────────── */}
+      {/* ── TAB 1: ALL INTEGRATIONS CATALOG (BENTO GRID) ────────────────────── */}
       {activeTab === "catalog" && (
         <div className="space-y-6">
-          {/* Filter Bar */}
+          {/* Category Filter Pills & Search */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/30 p-3 rounded-xl border border-border/70">
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              {["all", "Advertising", "Listing Portals", "Web"].map((cat) => (
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto">
+              {[
+                { id: "all", label: "All (20)" },
+                { id: "Advertising", label: "Advertising (5)" },
+                { id: "Listing Portals", label: "Portals (4)" },
+                { id: "Messaging", label: "Messaging & AI (3)" },
+                { id: "Web", label: "Web & Forms (3)" },
+                { id: "Payments", label: "Payments (2)" },
+                { id: "Productivity", label: "Productivity (3)" },
+              ].map((cat) => (
                 <button
-                  key={cat}
-                  onClick={() => setCategoryFilter(cat)}
+                  key={cat.id}
+                  onClick={() => setCategoryFilter(cat.id)}
                   className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                    categoryFilter === cat
-                      ? "bg-card text-foreground shadow-xs border border-border/80 font-semibold"
+                    "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all",
+                    categoryFilter === cat.id
+                      ? "bg-card text-foreground shadow-xs border border-border/80 font-bold"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {cat === "all" ? "All Channels" : cat}
+                  {cat.label}
                 </button>
               ))}
             </div>
@@ -600,7 +669,7 @@ export default function IntegrationsPage() {
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder="Search integrations..."
+                placeholder="Search integrations, keys, webhooks..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-8 h-8 text-xs bg-card border-border"
@@ -614,12 +683,12 @@ export default function IntegrationsPage() {
               <div
                 key={item.key}
                 className={cn(
-                  "p-5 rounded-xl flex flex-col justify-between border bg-card transition-all relative overflow-hidden shadow-xs hover:border-border/90",
+                  "p-5 rounded-xl flex flex-col justify-between border bg-card transition-all relative overflow-hidden shadow-xs hover:border-border/90 hover:shadow-sm",
                   item.enabled ? "border-emerald-300 dark:border-emerald-800/80" : "border-border"
                 )}
               >
-                {/* Top Badge Strip */}
                 <div className="space-y-3.5">
+                  {/* Top Bar with Icon, Name, Category & Switch */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div
@@ -662,7 +731,7 @@ export default function IntegrationsPage() {
                     ))}
                   </div>
 
-                  {/* Last Test Status */}
+                  {/* Health Dot */}
                   <div className="pt-2 text-[11px] flex items-center gap-1.5 text-muted-foreground border-t border-border/40">
                     {item.lastTestedAt ? (
                       <>
@@ -674,13 +743,13 @@ export default function IntegrationsPage() {
                     ) : (
                       <>
                         <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                        <span>Ready to test</span>
+                        <span>Ready to configure & test</span>
                       </>
                     )}
                   </div>
                 </div>
 
-                {/* Card Actions Footer */}
+                {/* Footer Buttons */}
                 <div className="pt-4 mt-3 border-t border-border/60 flex items-center justify-between gap-2">
                   <Button
                     variant="outline"
@@ -700,7 +769,7 @@ export default function IntegrationsPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => handleOpenEdit(item)}
+                    onClick={() => handleOpenConfigModal(item)}
                     className="h-8 text-xs gap-1 font-semibold"
                   >
                     <Settings2 className="h-3.5 w-3.5" />
@@ -713,7 +782,7 @@ export default function IntegrationsPage() {
         </div>
       )}
 
-      {/* ── TAB 2: META ADS & CAPI SUITE ────────────────────────────────────── */}
+      {/* ── TAB 2: META SUITE (LEAD ADS + CAPI) ─────────────────────────────── */}
       {activeTab === "meta" && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -740,10 +809,9 @@ export default function IntegrationsPage() {
               </div>
 
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Connect your Meta Developer App and Facebook Business Pages. When a user completes a Lead Form on Facebook or Instagram, Meta sends an encrypted webhook payload verified via HMAC-SHA256, instantly creating a CRM lead.
+                Connect Facebook Business Pages & Lead Ads forms. Webhooks verified with HMAC-SHA256 automatically ingest prospect details into the active leads pipeline.
               </p>
 
-              {/* Endpoint URLs */}
               <div className="space-y-3 pt-2">
                 <div>
                   <Label className="text-xs font-semibold text-muted-foreground">
@@ -786,18 +854,6 @@ export default function IntegrationsPage() {
                     </Button>
                   </div>
                 </div>
-
-                <div className="p-3 rounded-lg bg-muted/30 border border-border/70 text-xs space-y-1.5">
-                  <div className="font-semibold text-foreground flex items-center gap-1.5">
-                    <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
-                    Required Meta Permissions:
-                  </div>
-                  <div className="text-[11px] text-muted-foreground space-y-1 font-mono">
-                    <div>✓ `leads_retrieval` (Access raw leadgen form submissions)</div>
-                    <div>✓ `pages_manage_ads` (Link ad campaigns to CRM customer records)</div>
-                    <div>✓ `pages_read_engagement` (Verify real-time lead webhook subscriptions)</div>
-                  </div>
-                </div>
               </div>
 
               <div className="pt-2 flex items-center justify-between border-t border-border/60">
@@ -816,7 +872,7 @@ export default function IntegrationsPage() {
                   size="sm"
                   onClick={() => {
                     const item = mergedCatalog.find((i) => i.key === "meta_ads");
-                    if (item) handleOpenEdit(item);
+                    if (item) handleOpenConfigModal(item);
                   }}
                   className="text-xs h-9 gap-1.5"
                 >
@@ -848,7 +904,7 @@ export default function IntegrationsPage() {
               </div>
 
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Send server-side qualification events back to Meta when sales reps update CRM lead stages (e.g. Lead Qualified, Site Visit Booked, Deal Closed). Bypasses iOS ad blockers and trains Meta AI to deliver higher-quality buyers.
+                Send server-side qualification events back to Meta when sales reps update CRM lead stages. Bypasses browser ad blockers to train Meta AI to target genuine buyers.
               </p>
 
               {/* Interactive CAPI Test Widget */}
@@ -930,7 +986,6 @@ export default function IntegrationsPage() {
                     </div>
                     <div>Hashed Phone: {capiResult.hashedPhone}</div>
                     <div>Hashed Email: {capiResult.hashedEmail}</div>
-                    <div>Dispatched At: {new Date(capiResult.timestamp).toLocaleTimeString()}</div>
                   </div>
                 )}
               </div>
@@ -952,7 +1007,7 @@ export default function IntegrationsPage() {
                   variant="secondary"
                   onClick={() => {
                     const item = mergedCatalog.find((i) => i.key === "meta_capi");
-                    if (item) handleOpenEdit(item);
+                    if (item) handleOpenConfigModal(item);
                   }}
                   className="text-xs h-9 gap-1.5"
                 >
@@ -992,13 +1047,13 @@ export default function IntegrationsPage() {
               </div>
 
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Capture high-intent search prospects directly from Google Search and YouTube lead forms. SmoothSales automatically parses user column data, extracts campaign IDs, and associates the Google Click ID (GCLID) with the customer profile.
+                Capture high-intent search prospects directly from Google Search and YouTube lead forms. SmoothSales automatically parses user column data and captures GCLID for closed-loop attribution.
               </p>
 
               <div className="space-y-3 pt-2">
                 <div>
                   <Label className="text-xs font-semibold text-muted-foreground">
-                    Google Ads Webhook URL (Tools & Settings → Extensions → Webhook)
+                    Google Ads Webhook URL
                   </Label>
                   <div className="mt-1.5 flex items-center gap-2">
                     <Input
@@ -1037,13 +1092,6 @@ export default function IntegrationsPage() {
                     </Button>
                   </div>
                 </div>
-
-                <div className="p-3 rounded-lg bg-muted/30 border border-border/70 text-xs space-y-1">
-                  <span className="font-semibold text-foreground">Standard Field Normalization:</span>
-                  <p className="text-[11px] text-muted-foreground">
-                    Automatically maps <code className="font-mono bg-card px-1 rounded">FULL_NAME</code>, <code className="font-mono bg-card px-1 rounded">PHONE_NUMBER</code>, <code className="font-mono bg-card px-1 rounded">EMAIL</code>, and <code className="font-mono bg-card px-1 rounded">CITY</code> into CRM customer columns.
-                  </p>
-                </div>
               </div>
 
               <div className="pt-2 flex items-center justify-between border-t border-border/60">
@@ -1062,7 +1110,7 @@ export default function IntegrationsPage() {
                   size="sm"
                   onClick={() => {
                     const item = mergedCatalog.find((i) => i.key === "google_ads");
-                    if (item) handleOpenEdit(item);
+                    if (item) handleOpenConfigModal(item);
                   }}
                   className="text-xs h-9 gap-1.5"
                 >
@@ -1094,7 +1142,7 @@ export default function IntegrationsPage() {
               </div>
 
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Connect CRM deal milestones to Google Ads smart bidding algorithms. Whenever a lead generated from Google Ads reaches a qualified milestone, SmoothSales uploads the conversion using their captured GCLID.
+                Connect CRM deal milestones to Google Ads smart bidding algorithms. Whenever a lead reaches a qualified milestone, SmoothSales uploads the conversion using their captured GCLID.
               </p>
 
               {/* Interactive OCI Upload Test */}
@@ -1165,7 +1213,6 @@ export default function IntegrationsPage() {
                     </div>
                     <div>GCLID: {ociResult.gclid}</div>
                     <div>Value: ₹{ociResult.value.toLocaleString()}</div>
-                    <div>Uploaded At: {new Date(ociResult.conversionTime).toLocaleTimeString()}</div>
                   </div>
                 )}
               </div>
@@ -1187,7 +1234,7 @@ export default function IntegrationsPage() {
                   variant="secondary"
                   onClick={() => {
                     const item = mergedCatalog.find((i) => i.key === "google_oci");
-                    if (item) handleOpenEdit(item);
+                    if (item) handleOpenConfigModal(item);
                   }}
                   className="text-xs h-9 gap-1.5"
                 >
@@ -1200,538 +1247,256 @@ export default function IntegrationsPage() {
         </div>
       )}
 
-      {/* ── TAB 4: WEBSITE WEBHOOKS & EMBED BUILDER ─────────────────────────── */}
-      {activeTab === "website" && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left 7 Cols: Endpoints & Embed Snippets */}
-            <div className="lg:col-span-7 space-y-6">
-              {/* Endpoint Card */}
-              <div className="p-6 rounded-xl border border-border bg-card shadow-xs space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-heading font-bold text-base text-foreground">
-                      Inbound Website Lead Webhook
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      Public REST Endpoint · CORS Enabled · Token Authentication
-                    </p>
-                  </div>
-                  <Badge variant="outline" className="text-xs bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-300">
-                    Live & Accepting
-                  </Badge>
-                </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <Label className="text-xs font-semibold text-muted-foreground">
-                      Webhook Submission Endpoint URL
-                    </Label>
-                    <div className="mt-1 flex items-center gap-2">
-                      <Input
-                        readOnly
-                        value="http://103.180.110.190/api/webhooks/website"
-                        className="text-xs font-mono bg-muted/40 border-border"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyToClipboard("http://103.180.110.190/api/webhooks/website", "web_url")}
-                        className="h-9 px-3 shrink-0"
-                      >
-                        {copiedKey === "web_url" ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label className="text-xs font-semibold text-muted-foreground">
-                      API Authorization Key (<code className="font-mono">X-API-Key</code> or <code className="font-mono">?api_key=</code>)
-                    </Label>
-                    <div className="mt-1 flex items-center gap-2">
-                      <Input
-                        readOnly
-                        value="ss_live_webhook_7f8a9e2b1c"
-                        className="text-xs font-mono bg-muted/40 border-border"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyToClipboard("ss_live_webhook_7f8a9e2b1c", "web_apikey")}
-                        className="h-9 px-3 shrink-0"
-                      >
-                        {copiedKey === "web_apikey" ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Embed Code Snippet Generator */}
-              <div className="p-6 rounded-xl border border-border bg-card shadow-xs space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Code2 className="h-5 w-5 text-primary" />
-                    <div>
-                      <h3 className="font-heading font-bold text-sm text-foreground">
-                        Website Form Embed Snippets
-                      </h3>
-                      <p className="text-xs text-muted-foreground">
-                        Copy and paste into your website landing pages
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 bg-muted p-1 rounded-lg">
-                    {["html", "react", "curl"].map((tab) => (
-                      <button
-                        key={tab}
-                        onClick={() => setEmbedTab(tab)}
-                        className={cn(
-                          "px-2.5 py-1 rounded text-[11px] font-semibold transition-all",
-                          embedTab === tab
-                            ? "bg-card text-foreground shadow-xs font-bold"
-                            : "text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        {tab.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Snippet Display */}
-                <div className="relative">
-                  <pre className="p-4 rounded-xl bg-slate-950 text-slate-100 text-[11px] font-mono overflow-x-auto leading-relaxed border border-slate-800">
-                    {embedTab === "html" &&
-`<!-- SmoothSales CRM Inbound Lead Form Embed -->
-<form action="http://103.180.110.190/api/webhooks/website" method="POST">
-  <input type="hidden" name="api_key" value="ss_live_webhook_7f8a9e2b1c" />
-  
-  <input type="text" name="name" placeholder="Full Name" required />
-  <input type="tel" name="phone" placeholder="Phone Number" required />
-  <input type="email" name="email" placeholder="Email Address" />
-  <input type="text" name="city" placeholder="City / Location" />
-  <textarea name="notes" placeholder="Requirement Details"></textarea>
-  
-  <button type="submit">Submit Enquiry</button>
-</form>`}
-
-                    {embedTab === "react" &&
-`// SmoothSales CRM Inbound Lead Submission Hook (Next.js / React)
-async function submitLead(formData) {
-  const response = await fetch("http://103.180.110.190/api/webhooks/website", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-Key": "ss_live_webhook_7f8a9e2b1c",
-    },
-    body: JSON.stringify({
-      name: formData.name,
-      phone: formData.phone,
-      email: formData.email,
-      city: formData.city,
-      notes: formData.requirement,
-    }),
-  });
-  return response.json();
-}`}
-
-                    {embedTab === "curl" &&
-`# Test Inbound Lead Webhook via cURL
-curl -X POST http://103.180.110.190/api/webhooks/website \\
-  -H "Content-Type: application/json" \\
-  -H "X-API-Key: ss_live_webhook_7f8a9e2b1c" \\
-  -d '{
-    "name": "Ananya Roy",
-    "phone": "+919811223344",
-    "email": "ananya@example.com",
-    "city": "Mumbai",
-    "notes": "Looking for commercial office space in BKC"
-  }'`}
-                  </pre>
-
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      const snippet =
-                        embedTab === "html"
-                          ? `<form action="http://103.180.110.190/api/webhooks/website" method="POST">\n  <input type="hidden" name="api_key" value="ss_live_webhook_7f8a9e2b1c" />\n  <input type="text" name="name" placeholder="Full Name" required />\n  <input type="tel" name="phone" placeholder="Phone Number" required />\n  <input type="email" name="email" placeholder="Email Address" />\n  <textarea name="notes" placeholder="Requirement Details"></textarea>\n  <button type="submit">Submit Enquiry</button>\n</form>`
-                          : embedTab === "react"
-                          ? `async function submitLead(data) {\n  return fetch("http://103.180.110.190/api/webhooks/website", {\n    method: "POST",\n    headers: { "Content-Type": "application/json", "X-API-Key": "ss_live_webhook_7f8a9e2b1c" },\n    body: JSON.stringify(data)\n  }).then(r => r.json());\n}`
-                          : `curl -X POST http://103.180.110.190/api/webhooks/website -H "Content-Type: application/json" -H "X-API-Key: ss_live_webhook_7f8a9e2b1c" -d '{"name":"Test","phone":"+919876543210"}'`;
-                      copyToClipboard(snippet, "code_snippet");
-                    }}
-                    className="absolute top-3 right-3 h-7 text-xs gap-1 font-medium bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700"
-                  >
-                    {copiedKey === "code_snippet" ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                    Copy Code
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Right 5 Cols: Live Interactive Payload Simulator */}
-            <div className="lg:col-span-5">
-              <div className="p-6 rounded-xl border border-emerald-300 dark:border-emerald-800/80 bg-card shadow-xs space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-                      <Play className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <h3 className="font-heading font-bold text-sm text-foreground">
-                        Live Webhook Simulator
-                      </h3>
-                      <p className="text-[11px] text-muted-foreground">
-                        Test end-to-end ingestion directly into CRM
-                      </p>
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="text-[10px] font-mono bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 border-emerald-300">
-                    Real Ingestion
-                  </Badge>
-                </div>
-
-                <form onSubmit={handleSimulateLead} className="space-y-3.5">
-                  <div>
-                    <Label className="text-xs font-semibold text-muted-foreground">Source Channel</Label>
-                    <Select
-                      value={simulatorSource}
-                      onValueChange={setSimulatorSource}
-                    >
-                      <SelectTrigger className="h-9 text-xs mt-1 bg-card">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="website">Website Webhook Form</SelectItem>
-                        <SelectItem value="google_ads">Google Ads Lead Form</SelectItem>
-                        <SelectItem value="indiamart">IndiaMART Buyer Inquiry</SelectItem>
-                        <SelectItem value="99acres">99acres Real Estate Lead</SelectItem>
-                        <SelectItem value="magicbricks">MagicBricks Buyer Callback</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label className="text-xs font-semibold text-muted-foreground">Prospect Full Name</Label>
-                    <Input
-                      required
-                      value={simulatorFields.name}
-                      onChange={(e) => setSimulatorFields({ ...simulatorFields, name: e.target.value })}
-                      placeholder="e.g. Rahul Verma"
-                      className="h-9 text-xs mt-1 bg-card"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div>
-                      <Label className="text-xs font-semibold text-muted-foreground">Phone Number</Label>
-                      <Input
-                        required
-                        value={simulatorFields.phone}
-                        onChange={(e) => setSimulatorFields({ ...simulatorFields, phone: e.target.value })}
-                        placeholder="+91..."
-                        className="h-9 text-xs mt-1 bg-card font-mono"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs font-semibold text-muted-foreground">Email</Label>
-                      <Input
-                        type="email"
-                        value={simulatorFields.email}
-                        onChange={(e) => setSimulatorFields({ ...simulatorFields, email: e.target.value })}
-                        placeholder="prospect@..."
-                        className="h-9 text-xs mt-1 bg-card font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label className="text-xs font-semibold text-muted-foreground">City / Preferred Location</Label>
-                    <Input
-                      value={simulatorFields.city}
-                      onChange={(e) => setSimulatorFields({ ...simulatorFields, city: e.target.value })}
-                      placeholder="e.g. Golf Course Extension Road, Gurugram"
-                      className="h-9 text-xs mt-1 bg-card"
-                    />
-                  </div>
-
-                  <div>
-                    <Label className="text-xs font-semibold text-muted-foreground">Requirement / Notes</Label>
-                    <Textarea
-                      rows={3}
-                      value={simulatorFields.notes}
-                      onChange={(e) => setSimulatorFields({ ...simulatorFields, notes: e.target.value })}
-                      placeholder="Requirements..."
-                      className="text-xs mt-1 bg-card resize-none"
-                    />
-                  </div>
-
-                  <Button
-                    type="submit"
-                    disabled={simulating}
-                    className="w-full h-9 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1.5 shadow-xs"
-                  >
-                    {simulating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-                    Simulate Ingestion & Create CRM Lead
-                  </Button>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── TAB 5: INDIAN REAL ESTATE & B2B PORTALS ─────────────────────────── */}
+      {/* ── TAB 4: PORTALS & CUSTOM WEBHOOKS ────────────────────────────────── */}
       {activeTab === "portals" && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* IndiaMART */}
-            <div className="p-6 rounded-xl border border-border bg-card shadow-xs space-y-4 flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="w-10 h-10 rounded-lg bg-orange-600 text-white flex items-center justify-center font-heading font-extrabold text-sm">
-                    I
-                  </div>
-                  <Badge variant="outline" className="text-xs bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 border-orange-300">
-                    Push API Active
-                  </Badge>
-                </div>
-
-                <div>
-                  <h3 className="font-heading font-bold text-base text-foreground">
-                    IndiaMART Webhook Lead Manager
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Direct push notifications for buyer RFQs, catalog inquiries, and verified MCAT categories.
-                  </p>
-                </div>
-
-                <div className="space-y-2 pt-2 text-xs">
-                  <div>
-                    <span className="text-muted-foreground font-semibold">Push Callback URL:</span>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <Input
-                        readOnly
-                        value="http://103.180.110.190/api/webhooks/leads/indiamart"
-                        className="text-[11px] font-mono bg-muted/40 h-8"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyToClipboard("http://103.180.110.190/api/webhooks/leads/indiamart", "im_url")}
-                        className="h-8 px-2"
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            {mergedCatalog
+              .filter((i) => i.category === "Listing Portals")
+              .map((portal) => (
+                <div
+                  key={portal.key}
+                  className="p-5 rounded-xl border border-border bg-card shadow-xs flex flex-col justify-between space-y-4"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div
+                        className={cn(
+                          "w-10 h-10 rounded-lg flex items-center justify-center font-heading font-extrabold text-sm text-white",
+                          portal.iconBg
+                        )}
                       >
-                        <Copy className="h-3.5 w-3.5" />
-                      </Button>
+                        {portal.iconLetter}
+                      </div>
+                      <Badge variant="outline" className="text-xs bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-300">
+                        {portal.enabled ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+
+                    <div>
+                      <h3 className="font-heading font-bold text-sm text-foreground">
+                        {portal.displayName}
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                        {portal.description}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2 pt-1 text-xs">
+                      <div>
+                        <span className="text-[11px] font-semibold text-muted-foreground">
+                          Inbound Webhook:
+                        </span>
+                        <div className="mt-1 flex items-center gap-1">
+                          <Input
+                            readOnly
+                            value={`http://103.180.110.190/api/webhooks/leads/${portal.key}`}
+                            className="text-[10px] font-mono bg-muted/40 h-8"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              copyToClipboard(
+                                `http://103.180.110.190/api/webhooks/leads/${portal.key}`,
+                                portal.key
+                              )
+                            }
+                            className="h-8 px-2"
+                          >
+                            {copiedKey === portal.key ? (
+                              <Check className="h-3 w-3 text-emerald-500" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  <div>
-                    <span className="text-muted-foreground font-semibold">GLUSR_CRM_KEY:</span>
-                    <Input
-                      readOnly
-                      value="m_crm_key_991823714"
-                      className="text-[11px] font-mono bg-muted/40 h-8 mt-1"
-                    />
+                  <div className="pt-3 border-t border-border/60 flex items-center justify-between">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleTestConnection(portal.key)}
+                      disabled={testingKey === portal.key}
+                      className="text-xs h-8 gap-1"
+                    >
+                      <Zap className="h-3 w-3 text-amber-500" />
+                      Test
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleOpenConfigModal(portal)}
+                      className="text-xs h-8 gap-1 font-semibold"
+                    >
+                      <Settings2 className="h-3 w-3" />
+                      Configure
+                    </Button>
                   </div>
                 </div>
-              </div>
-
-              <div className="pt-3 border-t border-border/60 flex items-center justify-between">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleTestConnection("indiamart")}
-                  disabled={testingKey === "indiamart"}
-                  className="text-xs h-8 gap-1"
-                >
-                  <Zap className="h-3 w-3 text-amber-500" />
-                  Test Push
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    const item = mergedCatalog.find((i) => i.key === "indiamart");
-                    if (item) handleOpenEdit(item);
-                  }}
-                  className="text-xs h-8 gap-1"
-                >
-                  <Settings2 className="h-3 w-3" />
-                  Configure
-                </Button>
-              </div>
-            </div>
-
-            {/* 99acres */}
-            <div className="p-6 rounded-xl border border-border bg-card shadow-xs space-y-4 flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="w-10 h-10 rounded-lg bg-sky-700 text-white flex items-center justify-center font-heading font-extrabold text-sm">
-                    9
-                  </div>
-                  <Badge variant="outline" className="text-xs bg-sky-50 dark:bg-sky-950/30 text-sky-700 dark:text-sky-400 border-sky-300">
-                    Feed Active
-                  </Badge>
-                </div>
-
-                <div>
-                  <h3 className="font-heading font-bold text-base text-foreground">
-                    99acres Property Portal
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Auto-ingest buyer leads from premium project listings, property alerts, and direct developer callbacks.
-                  </p>
-                </div>
-
-                <div className="space-y-2 pt-2 text-xs">
-                  <div>
-                    <span className="text-muted-foreground font-semibold">Feed Webhook URL:</span>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <Input
-                        readOnly
-                        value="http://103.180.110.190/api/webhooks/leads/99acres"
-                        className="text-[11px] font-mono bg-muted/40 h-8"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyToClipboard("http://103.180.110.190/api/webhooks/leads/99acres", "99_url")}
-                        className="h-8 px-2"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-muted-foreground font-semibold">Project Listing ID:</span>
-                    <Input
-                      readOnly
-                      value="PROP_99A_55219"
-                      className="text-[11px] font-mono bg-muted/40 h-8 mt-1"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-border/60 flex items-center justify-between">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleTestConnection("99acres")}
-                  disabled={testingKey === "99acres"}
-                  className="text-xs h-8 gap-1"
-                >
-                  <Zap className="h-3 w-3 text-amber-500" />
-                  Test Feed
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    const item = mergedCatalog.find((i) => i.key === "99acres");
-                    if (item) handleOpenEdit(item);
-                  }}
-                  className="text-xs h-8 gap-1"
-                >
-                  <Settings2 className="h-3 w-3" />
-                  Configure
-                </Button>
-              </div>
-            </div>
-
-            {/* MagicBricks */}
-            <div className="p-6 rounded-xl border border-border bg-card shadow-xs space-y-4 flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="w-10 h-10 rounded-lg bg-rose-600 text-white flex items-center justify-center font-heading font-extrabold text-sm">
-                    M
-                  </div>
-                  <Badge variant="outline" className="text-xs bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 border-rose-300">
-                    Gateway Ready
-                  </Badge>
-                </div>
-
-                <div>
-                  <h3 className="font-heading font-bold text-base text-foreground">
-                    MagicBricks Real Estate Gateway
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Real-time webhook sync for buyer callback requests, virtual tour bookings, and residential enquiries.
-                  </p>
-                </div>
-
-                <div className="space-y-2 pt-2 text-xs">
-                  <div>
-                    <span className="text-muted-foreground font-semibold">Callback Webhook URL:</span>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <Input
-                        readOnly
-                        value="http://103.180.110.190/api/webhooks/leads/magicbricks"
-                        className="text-[11px] font-mono bg-muted/40 h-8"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyToClipboard("http://103.180.110.190/api/webhooks/leads/magicbricks", "mb_url")}
-                        className="h-8 px-2"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-muted-foreground font-semibold">Account ID:</span>
-                    <Input
-                      readOnly
-                      value="MB_ACC_774910"
-                      className="text-[11px] font-mono bg-muted/40 h-8 mt-1"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-border/60 flex items-center justify-between">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleTestConnection("magicbricks")}
-                  disabled={testingKey === "magicbricks"}
-                  className="text-xs h-8 gap-1"
-                >
-                  <Zap className="h-3 w-3 text-amber-500" />
-                  Test Gateway
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    const item = mergedCatalog.find((i) => i.key === "magicbricks");
-                    if (item) handleOpenEdit(item);
-                  }}
-                  className="text-xs h-8 gap-1"
-                >
-                  <Settings2 className="h-3 w-3" />
-                  Configure
-                </Button>
-              </div>
-            </div>
+              ))}
           </div>
         </div>
       )}
 
-      {/* ── TAB 6: INBOUND AUDIT & LOGS ─────────────────────────────────────── */}
+      {/* ── TAB 5: MESSAGING & AI ───────────────────────────────────────────── */}
+      {activeTab === "messaging" && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {mergedCatalog
+              .filter((i) => i.category === "Messaging")
+              .map((item) => (
+                <div
+                  key={item.key}
+                  className="p-6 rounded-xl border border-border bg-card shadow-xs flex flex-col justify-between space-y-4"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div
+                        className={cn(
+                          "w-10 h-10 rounded-lg flex items-center justify-center font-heading font-extrabold text-sm text-white",
+                          item.iconBg
+                        )}
+                      >
+                        {item.iconLetter}
+                      </div>
+                      <Badge variant="outline" className="text-xs bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-300">
+                        {item.enabled ? "Active" : "Disabled"}
+                      </Badge>
+                    </div>
+
+                    <div>
+                      <h3 className="font-heading font-bold text-base text-foreground">
+                        {item.displayName}
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {item.description}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 pt-2">
+                      {item.badges.map((b) => (
+                        <span
+                          key={b}
+                          className="px-2 py-0.5 rounded text-[10px] font-medium bg-muted/80 text-muted-foreground border border-border/50"
+                        >
+                          {b}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-border/60 flex items-center justify-between">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleTestConnection(item.key)}
+                      disabled={testingKey === item.key}
+                      className="text-xs h-8 gap-1"
+                    >
+                      <Zap className="h-3 w-3 text-amber-500" />
+                      Test Ping
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleOpenConfigModal(item)}
+                      className="text-xs h-8 gap-1 font-semibold"
+                    >
+                      <Settings2 className="h-3 w-3" />
+                      Configure
+                    </Button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB 6: PAYMENTS & PRODUCTIVITY ──────────────────────────────────── */}
+      {activeTab === "productivity" && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {mergedCatalog
+              .filter((i) => i.category === "Payments" || i.category === "Productivity")
+              .map((item) => (
+                <div
+                  key={item.key}
+                  className="p-5 rounded-xl border border-border bg-card shadow-xs flex flex-col justify-between space-y-4"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div
+                        className={cn(
+                          "w-10 h-10 rounded-lg flex items-center justify-center font-heading font-extrabold text-sm text-white",
+                          item.iconBg
+                        )}
+                      >
+                        {item.iconLetter}
+                      </div>
+                      <Badge variant="outline" className="text-xs bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-300">
+                        {item.enabled ? "Active" : "Disabled"}
+                      </Badge>
+                    </div>
+
+                    <div>
+                      <h3 className="font-heading font-bold text-sm text-foreground">
+                        {item.displayName}
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                        {item.description}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {item.badges.map((b) => (
+                        <span
+                          key={b}
+                          className="px-2 py-0.5 rounded text-[10px] font-medium bg-muted/80 text-muted-foreground border border-border/50"
+                        >
+                          {b}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-border/60 flex items-center justify-between">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleTestConnection(item.key)}
+                      disabled={testingKey === item.key}
+                      className="text-xs h-8 gap-1"
+                    >
+                      <Zap className="h-3 w-3 text-amber-500" />
+                      Test
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleOpenConfigModal(item)}
+                      className="text-xs h-8 gap-1 font-semibold"
+                    >
+                      <Settings2 className="h-3 w-3" />
+                      Configure
+                    </Button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB 7: INBOUND AUDIT & LIVE STREAM ──────────────────────────────── */}
       {activeTab === "audit" && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-heading font-bold text-base text-foreground">
-                Inbound Webhook Audit & Raw Event Stream
+                Inbound Webhook Audit & Raw Event Ledger
               </h3>
               <p className="text-xs text-muted-foreground">
-                Inspecting raw payloads received from Meta Lead Ads, Google Ads, IndiaMART, 99acres, and Website webhooks
+                Inspecting raw payloads from Meta, Google Ads, IndiaMART, 99acres, MagicBricks, Justdial, and Website Forms
               </p>
             </div>
 
@@ -1764,7 +1529,9 @@ curl -X POST http://103.180.110.190/api/webhooks/website \\
                   {auditLogs.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="py-8 text-center text-muted-foreground">
-                        {loadingAudit ? "Loading webhook event stream..." : "No inbound webhook events recorded yet. Try running the simulator!"}
+                        {loadingAudit
+                          ? "Loading webhook event stream..."
+                          : "No inbound webhook events recorded yet. Try running a simulation!"}
                       </td>
                     </tr>
                   ) : (
@@ -1774,12 +1541,18 @@ curl -X POST http://103.180.110.190/api/webhooks/website \\
                           <span
                             className={cn(
                               "px-2 py-0.5 rounded text-[10px] font-mono font-bold",
-                              logItem.source?.includes("META") && "bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-300",
-                              logItem.source?.includes("GOOGLE") && "bg-red-500/10 text-red-700 dark:text-red-400 border border-red-300",
-                              logItem.source?.includes("WEBSITE") && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-300",
-                              logItem.source?.includes("INDIAMART") && "bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-300",
-                              logItem.source?.includes("99ACRES") && "bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-300",
-                              logItem.source?.includes("MAGICBRICKS") && "bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-300"
+                              logItem.source?.includes("META") &&
+                                "bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-300",
+                              logItem.source?.includes("GOOGLE") &&
+                                "bg-red-500/10 text-red-700 dark:text-red-400 border border-red-300",
+                              logItem.source?.includes("WEBSITE") &&
+                                "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-300",
+                              logItem.source?.includes("INDIAMART") &&
+                                "bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-300",
+                              logItem.source?.includes("99ACRES") &&
+                                "bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-300",
+                              logItem.source?.includes("MAGICBRICKS") &&
+                                "bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-300"
                             )}
                           >
                             {logItem.source}
@@ -1792,10 +1565,14 @@ curl -X POST http://103.180.110.190/api/webhooks/website \\
                           <span
                             className={cn(
                               "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold",
-                              logItem.status === "PROCESSED" && "bg-emerald-500/10 text-emerald-600 border border-emerald-500/30",
-                              logItem.status === "PROCESSING" && "bg-sky-500/10 text-sky-600 border border-sky-500/30",
-                              logItem.status === "FAILED" && "bg-rose-500/10 text-rose-600 border border-rose-500/30",
-                              logItem.status === "RECEIVED" && "bg-amber-500/10 text-amber-600 border border-amber-500/30"
+                              logItem.status === "PROCESSED" &&
+                                "bg-emerald-500/10 text-emerald-600 border border-emerald-500/30",
+                              logItem.status === "PROCESSING" &&
+                                "bg-sky-500/10 text-sky-600 border border-sky-500/30",
+                              logItem.status === "FAILED" &&
+                                "bg-rose-500/10 text-rose-600 border border-rose-500/30",
+                              logItem.status === "RECEIVED" &&
+                                "bg-amber-500/10 text-amber-600 border border-amber-500/30"
                             )}
                           >
                             <span className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -1803,7 +1580,13 @@ curl -X POST http://103.180.110.190/api/webhooks/website \\
                           </span>
                         </td>
                         <td className="py-3 px-4 text-muted-foreground font-mono text-[11px]">
-                          {logItem.receivedAt ? new Date(logItem.receivedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "-"}
+                          {logItem.receivedAt
+                            ? new Date(logItem.receivedAt).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                second: "2-digit",
+                              })
+                            : "-"}
                         </td>
                         <td className="py-3 px-4 max-w-[200px] truncate font-mono text-[11px] text-muted-foreground">
                           {logItem.payload}
@@ -1825,7 +1608,12 @@ curl -X POST http://103.180.110.190/api/webhooks/website \\
                             disabled={reprocessingId === logItem.id}
                             className="h-7 text-[11px] px-2"
                           >
-                            <RotateCw className={cn("h-3 w-3", reprocessingId === logItem.id && "animate-spin")} />
+                            <RotateCw
+                              className={cn(
+                                "h-3 w-3",
+                                reprocessingId === logItem.id && "animate-spin"
+                              )}
+                            />
                           </Button>
                         </td>
                       </tr>
@@ -1838,118 +1626,21 @@ curl -X POST http://103.180.110.190/api/webhooks/website \\
         </div>
       )}
 
-      {/* ── Universal Configuration Dialog ───────────────────────────────────── */}
-      {editingIntegration && (
-        <Dialog open={Boolean(editingIntegration)} onOpenChange={() => setEditingIntegration(null)}>
-          <DialogContent className="sm:max-w-xl">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-base font-bold font-heading">
-                <Settings2 className="h-4 w-4 text-primary" />
-                Configure {editingIntegration.displayName}
-              </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground">
-                Update credentials, API tokens, webhook subscriptions, and active routing status.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto pr-1">
-              {/* Enabled Switch */}
-              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/40 border border-border">
-                <div>
-                  <Label className="text-xs font-semibold text-foreground">Channel Status</Label>
-                  <p className="text-[11px] text-muted-foreground">
-                    Enable or pause inbound webhook processing for this channel
-                  </p>
-                </div>
-                <Switch
-                  checked={editFormData.enabled}
-                  onCheckedChange={(checked) => setEditFormData({ ...editFormData, enabled: checked })}
-                />
-              </div>
-
-              <div>
-                <Label className="text-xs font-semibold">Display Name</Label>
-                <Input
-                  value={editFormData.displayName || ""}
-                  onChange={(e) => setEditFormData({ ...editFormData, displayName: e.target.value })}
-                  className="h-9 text-xs mt-1"
-                />
-              </div>
-
-              {/* Dynamic Credential Inputs */}
-              {Object.keys(editFormData)
-                .filter((key) => !["displayName", "category", "enabled"].includes(key))
-                .map((key) => {
-                  const val = editFormData[key];
-                  const isObject = typeof val === "object" && val !== null;
-                  return (
-                    <div key={key}>
-                      <Label className="text-xs font-mono font-semibold text-muted-foreground">
-                        {key}
-                      </Label>
-                      {isObject ? (
-                        <Textarea
-                          rows={3}
-                          value={JSON.stringify(val, null, 2)}
-                          onChange={(e) => {
-                            try {
-                              const parsed = JSON.parse(e.target.value);
-                              setEditFormData({ ...editFormData, [key]: parsed });
-                            } catch {}
-                          }}
-                          className="text-xs font-mono mt-1"
-                        />
-                      ) : (
-                        <Input
-                          value={val !== undefined && val !== null ? String(val) : ""}
-                          onChange={(e) => setEditFormData({ ...editFormData, [key]: e.target.value })}
-                          className="h-9 text-xs mt-1 font-mono"
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
-
-            <DialogFooter className="flex items-center justify-between sm:justify-between pt-3 border-t border-border">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleTestConnection(editingIntegration.key)}
-                disabled={testingKey === editingIntegration.key}
-                className="text-xs h-9 gap-1.5"
-              >
-                {testingKey === editingIntegration.key ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3.5 w-3.5 text-amber-500" />}
-                Test Connection
-              </Button>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setEditingIntegration(null)}
-                  className="text-xs h-9"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSaveEdit}
-                  disabled={savingKey}
-                  className="text-xs h-9 gap-1.5 font-semibold"
-                >
-                  {savingKey && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  Save Configuration
-                </Button>
-              </div>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+      {/* ── Universal 5-Tab Enterprise Configuration Modal ───────────────────── */}
+      <UniversalConfigModal
+        integration={selectedIntegration}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSave={handleSaveConfig}
+        saving={savingKey}
+      />
 
       {/* ── Payload Inspection Modal ─────────────────────────────────────────── */}
       {selectedAuditPayload && (
-        <Dialog open={Boolean(selectedAuditPayload)} onOpenChange={() => setSelectedAuditPayload(null)}>
+        <Dialog
+          open={Boolean(selectedAuditPayload)}
+          onOpenChange={() => setSelectedAuditPayload(null)}
+        >
           <DialogContent className="sm:max-w-xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-sm font-bold font-heading">
