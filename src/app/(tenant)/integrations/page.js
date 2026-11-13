@@ -1,13 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -29,12 +27,9 @@ import {
   MessageSquare,
   Building,
   CreditCard,
-  Briefcase,
   Globe,
   CheckCircle2,
   Settings2,
-  Plus,
-  Sparkles,
   RefreshCw,
   RotateCw,
   Copy,
@@ -56,7 +51,6 @@ import {
   Radio,
   Eye,
   EyeOff,
-  Play,
   CheckCircle,
   Clock,
   ArrowRight,
@@ -70,6 +64,8 @@ import {
   Calendar,
   Video,
   FileSpreadsheet,
+  Cpu,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -84,8 +80,9 @@ import {
   sendGoogleOciConversion,
 } from "@/lib/api/integrations";
 import { UniversalConfigModal } from "@/components/integrations/universal-config-modal";
+import { getIntegrationLogo } from "@/components/integrations/brand-logos";
 
-// ── Master 20-Channel Integration Catalog ─────────────────────────────────────
+// ── Master 20-Channel Enterprise Integration Catalog ──────────────────────────
 
 const MASTER_INTEGRATIONS_CATALOG = [
   // 1. Advertising & Social Capture
@@ -93,8 +90,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "meta_ads",
     displayName: "Meta Ads & Lead Capture",
     category: "Advertising",
-    iconLetter: "M",
-    iconBg: "bg-blue-600 text-white",
+    partnerTag: "Meta Business Partner",
+    sla: "<60s Ingestion",
     description: "Instant sub-60s sync of Facebook & Instagram Lead Ads directly into CRM with HMAC verification.",
     badges: ["Instant Lead Ads", "HMAC-SHA256", "Graph API v19.0"],
   },
@@ -102,8 +99,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "meta_capi",
     displayName: "Meta Conversions API (CAPI)",
     category: "Advertising",
-    iconLetter: "C",
-    iconBg: "bg-indigo-600 text-white",
+    partnerTag: "Server-Side Engine",
+    sla: "Instant Event Push",
     description: "Server-side feedback loop sending qualified lead milestones back to Meta Ads with SHA-256 PII hashing.",
     badges: ["Server-Side CAPI", "SHA-256 Hashed", "ROAS Optimization"],
   },
@@ -111,8 +108,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "google_ads",
     displayName: "Google Ads Lead Form Extensions",
     category: "Advertising",
-    iconLetter: "G",
-    iconBg: "bg-red-600 text-white",
+    partnerTag: "Google Ads v16",
+    sla: "Real-Time Ingest",
     description: "Capture search, YouTube, and Discovery lead form submissions directly with GCLID attribution.",
     badges: ["Google Key Auth", "GCLID Tracking", "Search & YouTube"],
   },
@@ -120,8 +117,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "google_oci",
     displayName: "Google Offline Conversion Import (OCI)",
     category: "Advertising",
-    iconLetter: "O",
-    iconBg: "bg-amber-600 text-white",
+    partnerTag: "Smart Bidding Feedback",
+    sla: "Closed-Loop Sync",
     description: "Push closed deal and site-visit milestones back to Google Ads for Smart Bidding optimization.",
     badges: ["Smart Bidding", "Offline Conversions", "GCLID Match"],
   },
@@ -129,8 +126,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "instagram_ads",
     displayName: "Instagram Ads & Direct Message Capture",
     category: "Advertising",
-    iconLetter: "I",
-    iconBg: "bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white",
+    partnerTag: "Meta Graph v19.0",
+    sla: "Sub-60s Inbound",
     description: "Direct social lead capture from Instagram Story ads, reels lead forms, and automated DM routing.",
     badges: ["Story Ads", "DM Routing", "Social Leads"],
   },
@@ -140,8 +137,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "indiamart",
     displayName: "IndiaMART Webhook Lead Manager",
     category: "Listing Portals",
-    iconLetter: "I",
-    iconBg: "bg-orange-600 text-white",
+    partnerTag: "IndiaMART Push API",
+    sla: "Instant Push",
     description: "Instant push notification of B2B buyer inquiries with product requirement tags and GLUSR CRM key.",
     badges: ["Push API", "GLUSR_CRM_KEY", "B2B Enquiries"],
   },
@@ -149,8 +146,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "99acres",
     displayName: "99acres Property Portal",
     category: "Listing Portals",
-    iconLetter: "9",
-    iconBg: "bg-sky-700 text-white",
+    partnerTag: "Builder Partner API",
+    sla: "Auto-Routing",
     description: "Automatic lead sync from builder project listings, buyer callbacks, and verified inquiries.",
     badges: ["Real Estate Feed", "Project Tagging", "Auto-Routing"],
   },
@@ -158,8 +155,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "magicbricks",
     displayName: "MagicBricks Real Estate Gateway",
     category: "Listing Portals",
-    iconLetter: "M",
-    iconBg: "bg-rose-600 text-white",
+    partnerTag: "Developer Gateway",
+    sla: "Direct Webhook",
     description: "Direct webhook pipeline for property seeker inquiries and virtual tour booking requests.",
     badges: ["Buyer Gateway", "Callback Webhook", "Instant Sync"],
   },
@@ -167,8 +164,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "justdial",
     displayName: "Justdial Lead Webhook",
     category: "Listing Portals",
-    iconLetter: "J",
-    iconBg: "bg-amber-500 text-slate-900",
+    partnerTag: "Verified Local Lead",
+    sla: "Instant Dispatch",
     description: "Local buyer triggers and automated category dispatch from Justdial verified listings.",
     badges: ["Local Leads", "Category Match", "Instant Webhook"],
   },
@@ -178,8 +175,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "whatsapp",
     displayName: "WhatsApp Business Cloud API",
     category: "Messaging",
-    iconLetter: "W",
-    iconBg: "bg-emerald-600 text-white",
+    partnerTag: "Official Enterprise WABA",
+    sla: "<60s Auto-reply",
     description: "Official Meta Cloud API integration for instant sub-60s auto-replies and template broadcasts.",
     badges: ["Official WABA", "Sub-60s SLA", "Meta Verified"],
   },
@@ -187,8 +184,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "openai",
     displayName: "OpenAI / ChatGPT GPT-4o Engine",
     category: "Messaging",
-    iconLetter: "AI",
-    iconBg: "bg-teal-600 text-white",
+    partnerTag: "OpenAI Tier-4",
+    sla: "Real-Time AI",
     description: "Automated AI lead scoring, budget parsing, conversation qualification, and closing scripts.",
     badges: ["GPT-4o Engine", "Lead Scoring", "Auto-Qualification"],
   },
@@ -196,8 +193,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "exotel",
     displayName: "Exotel Cloud Telephony & IVR",
     category: "Messaging",
-    iconLetter: "E",
-    iconBg: "bg-indigo-700 text-white",
+    partnerTag: "Enterprise Cloud PBX",
+    sla: "Click-to-Call",
     description: "Click-to-call, automated call recording sync, virtual number routing, and multi-agent IVR greeting.",
     badges: ["Click-to-Call", "Cloud Calling", "IVR Bridge"],
   },
@@ -207,8 +204,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "website_webhook",
     displayName: "Website Inbound Webhook & Form Builder",
     category: "Web",
-    iconLetter: "W",
-    iconBg: "bg-emerald-700 text-white",
+    partnerTag: "REST / CORS Ready",
+    sla: "Zero-Latency Buffer",
     description: "Universal token-authenticated REST webhook and embeddable forms for WordPress, Webflow, and custom landing pages.",
     badges: ["Embed Generator", "CORS Ready", "Field Mapping"],
   },
@@ -216,8 +213,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "google_forms",
     displayName: "Google Forms Instant Ingestion",
     category: "Web",
-    iconLetter: "F",
-    iconBg: "bg-purple-600 text-white",
+    partnerTag: "Apps Script Hook",
+    sla: "Instant Ingest",
     description: "Capture survey responses and internal lead registration forms without manual data entry.",
     badges: ["Instant Ingest", "Survey Intake", "Zero Manual Entry"],
   },
@@ -225,8 +222,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "jotform",
     displayName: "Jotform REST Webhook",
     category: "Web",
-    iconLetter: "J",
-    iconBg: "bg-orange-500 text-white",
+    partnerTag: "Webhook Receiver",
+    sla: "Instant Form Sync",
     description: "REST webhook receiver for multi-page custom web capture and client registration forms.",
     badges: ["REST Webhook", "Custom Forms", "File Uploads"],
   },
@@ -236,8 +233,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "razorpay",
     displayName: "Razorpay Subscriptions & Smart Collect",
     category: "Payments",
-    iconLetter: "R",
-    iconBg: "bg-sky-600 text-white",
+    partnerTag: "Razorpay Enterprise",
+    sla: "Instant Webhook",
     description: "Automated booking token collection, UPI recurring autopay, and instant TDS commission payouts.",
     badges: ["UPI Smart Collect", "TDS Ledger", "Token Booking"],
   },
@@ -245,8 +242,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "cashfree",
     displayName: "Cashfree Payment Gateway & Partner Split",
     category: "Payments",
-    iconLetter: "C",
-    iconBg: "bg-cyan-700 text-white",
+    partnerTag: "Direct Bank Split",
+    sla: "Instant Payouts",
     description: "Instant vendor disbursements and payment split settlements with automated receipting.",
     badges: ["Direct Bank Split", "Instant Payouts", "Partner Commission"],
   },
@@ -254,8 +251,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "google_sheets",
     displayName: "Google Sheets Two-Way Live Sync",
     category: "Productivity",
-    iconLetter: "S",
-    iconBg: "bg-green-600 text-white",
+    partnerTag: "Continuous Sync",
+    sla: "Bi-directional",
     description: "Continuous real-time export and backup of leads, deals, and commission ledger records.",
     badges: ["Continuous Sync", "Two-Way Live", "Realtime Backup"],
   },
@@ -263,8 +260,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "calendly",
     displayName: "Calendly Site Visit Scheduler",
     category: "Productivity",
-    iconLetter: "C",
-    iconBg: "bg-blue-500 text-white",
+    partnerTag: "Calendar Sync",
+    sla: "Real-Time Booking",
     description: "Automated calendar event creation and WhatsApp appointment reminders for client site visits.",
     badges: ["Site Visit Scheduler", "Calendar Sync", "WhatsApp Reminder"],
   },
@@ -272,8 +269,8 @@ const MASTER_INTEGRATIONS_CATALOG = [
     key: "google_meet",
     displayName: "Google Meet Auto Video Discovery",
     category: "Productivity",
-    iconLetter: "M",
-    iconBg: "bg-yellow-600 text-white",
+    partnerTag: "Google Workspace",
+    sla: "Instant Link Gen",
     description: "Automatic video consultation link generation and calendar sync on demo bookings.",
     badges: ["Auto Link Gen", "Video Discovery", "Demo Scheduler"],
   },
@@ -286,6 +283,7 @@ export default function IntegrationsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [onlyConnectedFilter, setOnlyConnectedFilter] = useState(false);
 
   // Selected Integration for Universal Config Modal
   const [selectedIntegration, setSelectedIntegration] = useState(null);
@@ -322,9 +320,6 @@ export default function IntegrationsPage() {
   });
   const [sendingOci, setSendingOci] = useState(false);
   const [ociResult, setOciResult] = useState(null);
-
-  // Embed Snippet Tab
-  const [embedTab, setEmbedTab] = useState("html");
 
   // ── Load Integration Data ───────────────────────────────────────────────────
 
@@ -383,9 +378,10 @@ export default function IntegrationsPage() {
       let parsedConfig = {};
       if (serverItem?.configJson) {
         try {
-          parsedConfig = typeof serverItem.configJson === "string"
-            ? JSON.parse(serverItem.configJson)
-            : serverItem.configJson;
+          parsedConfig =
+            typeof serverItem.configJson === "string"
+              ? JSON.parse(serverItem.configJson)
+              : serverItem.configJson;
         } catch {
           parsedConfig = {};
         }
@@ -537,62 +533,126 @@ export default function IntegrationsPage() {
         item.category.toLowerCase().replace(/\s+/g, "_") ===
           categoryFilter.toLowerCase().replace(/\s+/g, "_");
 
-      return matchesSearch && matchesCat;
+      const matchesConnected = !onlyConnectedFilter || item.enabled;
+
+      return matchesSearch && matchesCat && matchesConnected;
     });
-  }, [mergedCatalog, searchQuery, categoryFilter]);
+  }, [mergedCatalog, searchQuery, categoryFilter, onlyConnectedFilter]);
 
   const activeCount = mergedCatalog.filter((i) => i.enabled).length;
 
   return (
-    <div className="space-y-8 pb-16">
-      {/* ── Top Header ──────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-border/70">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-bold font-heading text-foreground tracking-tight">
-              Enterprise Integrations Marketplace
-            </h1>
-            <Badge
-              variant="outline"
-              className="text-xs bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 font-semibold gap-1.5 py-0.5"
-            >
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              {activeCount} of {mergedCatalog.length} Active Channels
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
-            Configure Meta Lead Ads, Google Ads Webhooks, Conversions APIs (CAPI/OCI), IndiaMART, 99acres, MagicBricks, Justdial, WhatsApp Cloud API, OpenAI GPT-4o, and Payment Gateways in under two clicks.
-          </p>
-        </div>
+    <div className="space-y-8 pb-20">
+      {/* ── Top Executive Banner ──────────────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-card via-card to-primary/[0.04] border border-border/80 p-6 sm:p-8 shadow-xs">
+        <div className="absolute top-0 right-0 -mt-12 -mr-12 w-96 h-96 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="flex items-center gap-2.5 shrink-0">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => loadData(true)}
-            disabled={refreshing}
-            className="text-xs h-9 gap-1.5 border-border"
-          >
-            <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
-            Refresh
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => {
-              const item = mergedCatalog.find((i) => i.key === "website_webhook");
-              if (item) handleOpenConfigModal(item);
-            }}
-            className="text-xs h-9 gap-1.5 bg-primary text-primary-foreground font-semibold shadow-xs"
-          >
-            <Code2 className="h-3.5 w-3.5" />
-            Website Embed Code
-          </Button>
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="space-y-3 max-w-2xl">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold uppercase tracking-wider bg-primary/10 text-primary border border-primary/20">
+                SmoothSales Enterprise Connect
+              </span>
+              <Badge
+                variant="outline"
+                className="text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-semibold gap-1.5 py-0.5"
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+                {activeCount} of {mergedCatalog.length} Active Channels
+              </Badge>
+            </div>
+
+            <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-foreground tracking-tight">
+              Enterprise Integrations &amp; Webhook Hub
+            </h1>
+
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+              Connect Meta Ads, Google Ads Webhooks, CAPI/OCI feedback loops, Indian real estate portals, WhatsApp Cloud API, and payment gateways with sub-60s automated lead ingestion.
+            </p>
+
+            {/* Micro-Metrics Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+              <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60">
+                <div className="text-[10px] uppercase font-mono text-muted-foreground font-semibold">
+                  Ingestion SLA
+                </div>
+                <div className="text-xs font-bold text-foreground mt-0.5 flex items-center gap-1">
+                  <Zap className="h-3 w-3 text-amber-500" /> &lt;60s Sub-minute
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60">
+                <div className="text-[10px] uppercase font-mono text-muted-foreground font-semibold">
+                  Security
+                </div>
+                <div className="text-xs font-bold text-foreground mt-0.5 flex items-center gap-1">
+                  <ShieldCheck className="h-3 w-3 text-emerald-500" /> HMAC-SHA256
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60">
+                <div className="text-[10px] uppercase font-mono text-muted-foreground font-semibold">
+                  Lead Deduping
+                </div>
+                <div className="text-xs font-bold text-foreground mt-0.5 flex items-center gap-1">
+                  <Database className="h-3 w-3 text-blue-500" /> Phone &amp; Email E.164
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60">
+                <div className="text-[10px] uppercase font-mono text-muted-foreground font-semibold">
+                  AI Qualification
+                </div>
+                <div className="text-xs font-bold text-foreground mt-0.5 flex items-center gap-1">
+                  <Bot className="h-3 w-3 text-teal-500" /> GPT-4o Intent
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap lg:flex-col items-stretch sm:items-end gap-2.5 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => loadData(true)}
+              disabled={refreshing}
+              className="text-xs h-9 gap-2 border-border shadow-xs hover:bg-muted font-medium"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+              Refresh Status
+            </Button>
+
+            <Button
+              size="sm"
+              onClick={() => {
+                const item = mergedCatalog.find((i) => i.key === "website_webhook");
+                if (item) handleOpenConfigModal(item);
+              }}
+              className="text-xs h-9 gap-2 bg-primary text-primary-foreground font-semibold shadow-xs hover:opacity-95"
+            >
+              <Code2 className="h-3.5 w-3.5" />
+              Website Embed Code
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setActiveTab("audit")}
+              className="text-xs h-9 gap-2 font-medium"
+            >
+              <Activity className="h-3.5 w-3.5 text-primary" />
+              Inbound Stream ({auditLogs.length})
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* ── Tab Navigation ──────────────────────────────────────────────────── */}
-      <div className="border-b border-border/80">
-        <nav className="flex space-x-6 overflow-x-auto no-scrollbar" aria-label="Tabs">
+      {/* ── Luxury Navigation Pill Bar ────────────────────────────────────────── */}
+      <div className="p-1.5 rounded-2xl bg-muted/40 border border-border/80 shadow-inner">
+        <nav className="flex space-x-1.5 overflow-x-auto no-scrollbar" aria-label="Tabs">
           {[
             { id: "catalog", label: "All Integrations", icon: Layers, count: `${mergedCatalog.length}` },
             { id: "meta", label: "Meta Suite", icon: Megaphone, count: "Lead Ads & CAPI" },
@@ -600,7 +660,7 @@ export default function IntegrationsPage() {
             { id: "portals", label: "Portals & Webhooks", icon: Building, count: "IndiaMART, 99acres" },
             { id: "messaging", label: "Messaging & AI", icon: MessageSquare, count: "WhatsApp & GPT-4o" },
             { id: "productivity", label: "Payments & Productivity", icon: CreditCard, count: "Razorpay, Sheets" },
-            { id: "audit", label: "Inbound Audit & Stream", icon: Activity, count: auditLogs.length > 0 ? `${auditLogs.length}` : "Live" },
+            { id: "audit", label: "Inbound Stream Ledger", icon: Activity, count: auditLogs.length > 0 ? `${auditLogs.length}` : "Live" },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -609,10 +669,10 @@ export default function IntegrationsPage() {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-xs whitespace-nowrap transition-colors",
+                  "flex items-center gap-2 py-2.5 px-3.5 rounded-xl font-semibold text-xs whitespace-nowrap transition-all duration-200",
                   isActive
-                    ? "border-primary text-primary font-semibold"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                    ? "bg-card text-foreground shadow-xs border border-border/80"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
                 )}
               >
                 <Icon className={cn("h-4 w-4", isActive ? "text-primary" : "text-muted-foreground")} />
@@ -620,7 +680,7 @@ export default function IntegrationsPage() {
                 {tab.count && (
                   <span
                     className={cn(
-                      "px-1.5 py-0.5 rounded-full text-[10px] font-mono",
+                      "px-2 py-0.5 rounded-full text-[10px] font-mono",
                       isActive
                         ? "bg-primary/10 text-primary font-bold"
                         : "bg-muted text-muted-foreground"
@@ -638,12 +698,12 @@ export default function IntegrationsPage() {
       {/* ── TAB 1: ALL INTEGRATIONS CATALOG (BENTO GRID) ────────────────────── */}
       {activeTab === "catalog" && (
         <div className="space-y-6">
-          {/* Category Filter Pills & Search */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/30 p-3 rounded-xl border border-border/70">
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto">
+          {/* Category Filter Toolbar & Search */}
+          <div className="flex flex-col md:flex-row items-center justify-between gap-3 p-2 rounded-2xl bg-card border border-border shadow-xs">
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar w-full md:w-auto p-1">
               {[
                 { id: "all", label: "All (20)" },
-                { id: "Advertising", label: "Advertising (5)" },
+                { id: "Advertising", label: "Ad Networks (5)" },
                 { id: "Listing Portals", label: "Portals (4)" },
                 { id: "Messaging", label: "Messaging & AI (3)" },
                 { id: "Web", label: "Web & Forms (3)" },
@@ -654,10 +714,10 @@ export default function IntegrationsPage() {
                   key={cat.id}
                   onClick={() => setCategoryFilter(cat.id)}
                   className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all",
+                    "px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all",
                     categoryFilter === cat.id
-                      ? "bg-card text-foreground shadow-xs border border-border/80 font-bold"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   )}
                 >
                   {cat.label}
@@ -665,56 +725,84 @@ export default function IntegrationsPage() {
               ))}
             </div>
 
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Search integrations, keys, webhooks..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 h-8 text-xs bg-card border-border"
-              />
+            <div className="flex items-center gap-2.5 w-full md:w-auto p-1">
+              <div className="relative w-full md:w-64">
+                <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search integrations, keys..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 h-8 text-xs bg-muted/40 border-border rounded-xl"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setOnlyConnectedFilter(!onlyConnectedFilter)}
+                className={cn(
+                  "px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap border transition-all flex items-center gap-1.5 shrink-0",
+                  onlyConnectedFilter
+                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                    : "bg-muted/40 text-muted-foreground border-border hover:text-foreground"
+                )}
+              >
+                <span
+                  className={cn(
+                    "h-2 w-2 rounded-full",
+                    onlyConnectedFilter ? "bg-emerald-500" : "bg-muted-foreground/50"
+                  )}
+                />
+                Connected Only
+              </button>
             </div>
           </div>
 
-          {/* Cards Grid */}
+          {/* Luxury Cards Bento Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredItems.map((item) => (
               <div
                 key={item.key}
                 className={cn(
-                  "p-5 rounded-xl flex flex-col justify-between border bg-card transition-all relative overflow-hidden shadow-xs hover:border-border/90 hover:shadow-sm",
-                  item.enabled ? "border-emerald-300 dark:border-emerald-800/80" : "border-border"
+                  "group relative flex flex-col justify-between p-6 rounded-2xl bg-card border transition-all duration-300 hover:shadow-md",
+                  item.enabled
+                    ? "border-emerald-500/30 hover:border-emerald-500/60 dark:border-emerald-800/60"
+                    : "border-border hover:border-border/90"
                 )}
               >
-                <div className="space-y-3.5">
-                  {/* Top Bar with Icon, Name, Category & Switch */}
+                <div className="space-y-4">
+                  {/* Top Bar with Authentic Logo, Titles & Switch */}
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={cn(
-                          "w-10 h-10 rounded-lg flex items-center justify-center font-heading font-extrabold text-sm shadow-xs shrink-0",
-                          item.iconBg
-                        )}
-                      >
-                        {item.iconLetter}
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-12 h-12 rounded-2xl bg-card border border-border/80 shadow-xs p-2.5 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-300">
+                        {getIntegrationLogo(item.key, "h-7 w-7")}
                       </div>
                       <div>
-                        <h3 className="font-heading font-bold text-sm text-foreground leading-tight">
+                        <h3 className="font-heading font-bold text-sm text-foreground group-hover:text-primary transition-colors leading-tight">
                           {item.displayName}
                         </h3>
-                        <span className="text-[11px] text-muted-foreground font-mono">
-                          {item.category}
-                        </span>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[11px] font-mono text-muted-foreground font-medium">
+                            {item.partnerTag || item.category}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground/60">•</span>
+                          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            {item.sla}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    <Switch
-                      checked={item.enabled}
-                      onCheckedChange={() => handleToggle(item.key, item.enabled)}
-                    />
+                    <div className="shrink-0 pt-0.5">
+                      <Switch
+                        checked={item.enabled}
+                        onCheckedChange={() => handleToggle(item.key, item.enabled)}
+                        aria-label={`Toggle ${item.displayName}`}
+                      />
+                    </div>
                   </div>
 
+                  {/* Description */}
                   <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
                     {item.description}
                   </p>
@@ -724,42 +812,53 @@ export default function IntegrationsPage() {
                     {item.badges.map((b) => (
                       <span
                         key={b}
-                        className="px-2 py-0.5 rounded text-[10px] font-medium bg-muted/80 text-muted-foreground border border-border/50"
+                        className="px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-muted/80 text-muted-foreground border border-border/60"
                       >
                         {b}
                       </span>
                     ))}
                   </div>
 
-                  {/* Health Dot */}
-                  <div className="pt-2 text-[11px] flex items-center gap-1.5 text-muted-foreground border-t border-border/40">
-                    {item.lastTestedAt ? (
-                      <>
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        <span className="truncate">
-                          Tested: {new Date(item.lastTestedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                        <span>Ready to configure & test</span>
-                      </>
-                    )}
+                  {/* Health & Latency Strip */}
+                  <div className="pt-2.5 text-[11px] flex items-center justify-between text-muted-foreground border-t border-border/40">
+                    <div className="flex items-center gap-1.5">
+                      {item.enabled ? (
+                        <>
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                          </span>
+                          <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                            Connected &amp; Live
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="h-2 w-2 rounded-full bg-muted-foreground/40" />
+                          <span>Available to Connect</span>
+                        </>
+                      )}
+                    </div>
+
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      {item.lastTestedAt
+                        ? `Tested ${new Date(item.lastTestedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                        : "Ready to test"}
+                    </span>
                   </div>
                 </div>
 
                 {/* Footer Buttons */}
-                <div className="pt-4 mt-3 border-t border-border/60 flex items-center justify-between gap-2">
+                <div className="pt-4 mt-4 border-t border-border/60 flex items-center justify-between gap-2.5">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleTestConnection(item.key)}
                     disabled={testingKey === item.key}
-                    className="h-8 text-xs gap-1 border-border font-medium hover:bg-muted"
+                    className="h-8 text-xs gap-1.5 font-medium border-border hover:bg-muted"
                   >
                     {testingKey === item.key ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <Loader2 className="h-3 w-3 animate-spin text-primary" />
                     ) : (
                       <Zap className="h-3 w-3 text-amber-500" />
                     )}
@@ -770,10 +869,11 @@ export default function IntegrationsPage() {
                     variant="secondary"
                     size="sm"
                     onClick={() => handleOpenConfigModal(item)}
-                    className="h-8 text-xs gap-1 font-semibold"
+                    className="h-8 text-xs gap-1.5 font-semibold group/btn"
                   >
-                    <Settings2 className="h-3.5 w-3.5" />
+                    <SlidersHorizontal className="h-3 w-3" />
                     Configure
+                    <ArrowRight className="h-3 w-3 opacity-60 group-hover/btn:translate-x-0.5 transition-transform" />
                   </Button>
                 </div>
               </div>
@@ -787,32 +887,35 @@ export default function IntegrationsPage() {
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Meta Lead Ads Inbound Card */}
-            <div className="p-6 rounded-xl border border-border bg-card shadow-xs space-y-5">
+            <div className="p-6 sm:p-7 rounded-3xl border border-border bg-card shadow-xs space-y-6">
               <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-heading font-extrabold text-sm">
-                    M
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-card border border-border p-2.5 shadow-xs flex items-center justify-center shrink-0">
+                    {getIntegrationLogo("meta_ads", "h-7 w-7")}
                   </div>
                   <div>
                     <h3 className="font-heading font-bold text-base text-foreground">
-                      Meta Lead Ads Webhook Integration
+                      Meta Lead Ads Webhook Engine
                     </h3>
-                    <p className="text-xs text-muted-foreground">
-                      Graph API v19.0 · Instant Sub-60s Ingestion · Lead Ads
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Graph API v19.0 · Sub-60s Inbound Sync · Official App Handshake
                     </p>
                   </div>
                 </div>
-                <Badge variant="outline" className="text-xs bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-300">
+                <Badge
+                  variant="outline"
+                  className="text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-semibold"
+                >
                   <CheckCircle2 className="h-3 w-3 mr-1" />
                   Active
                 </Badge>
               </div>
 
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Connect Facebook Business Pages & Lead Ads forms. Webhooks verified with HMAC-SHA256 automatically ingest prospect details into the active leads pipeline.
+                Connect Facebook Business Pages &amp; Lead Ads forms. Webhooks verified with HMAC-SHA256 automatically ingest prospect details into the active leads pipeline.
               </p>
 
-              <div className="space-y-3 pt-2">
+              <div className="space-y-4 pt-1">
                 <div>
                   <Label className="text-xs font-semibold text-muted-foreground">
                     Inbound Callback URL (Paste in Meta Developer App)
@@ -826,10 +929,16 @@ export default function IntegrationsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => copyToClipboard("http://103.180.110.190/api/webhooks/meta", "meta_webhook")}
+                      onClick={() =>
+                        copyToClipboard("http://103.180.110.190/api/webhooks/meta", "meta_webhook")
+                      }
                       className="h-9 px-3 shrink-0"
                     >
-                      {copiedKey === "meta_webhook" ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                      {copiedKey === "meta_webhook" ? (
+                        <Check className="h-4 w-4 text-emerald-500" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -847,13 +956,29 @@ export default function IntegrationsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => copyToClipboard("smoothsales-meta-verify-token", "meta_token")}
+                      onClick={() =>
+                        copyToClipboard("smoothsales-meta-verify-token", "meta_token")
+                      }
                       className="h-9 px-3 shrink-0"
                     >
-                      {copiedKey === "meta_token" ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                      {copiedKey === "meta_token" ? (
+                        <Check className="h-4 w-4 text-emerald-500" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
                 </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-blue-500/5 border border-blue-500/20 text-xs text-muted-foreground space-y-1">
+                <div className="font-semibold text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
+                  <ShieldCheck className="h-4 w-4" />
+                  Meta Webhook Subscription Required Fields
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  In Meta App Dashboard &gt; Webhooks &gt; Page: subscribe to <code className="font-mono text-foreground font-bold">leadgen</code> and <code className="font-mono text-foreground font-bold">messaging_postbacks</code>.
+                </p>
               </div>
 
               <div className="pt-2 flex items-center justify-between border-t border-border/60">
@@ -864,7 +989,11 @@ export default function IntegrationsPage() {
                   disabled={testingKey === "meta_ads"}
                   className="text-xs h-9 gap-1.5"
                 >
-                  {testingKey === "meta_ads" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3.5 w-3.5 text-amber-500" />}
+                  {testingKey === "meta_ads" ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Zap className="h-3.5 w-3.5 text-amber-500" />
+                  )}
                   Verify Meta Webhook
                 </Button>
 
@@ -874,31 +1003,34 @@ export default function IntegrationsPage() {
                     const item = mergedCatalog.find((i) => i.key === "meta_ads");
                     if (item) handleOpenConfigModal(item);
                   }}
-                  className="text-xs h-9 gap-1.5"
+                  className="text-xs h-9 gap-1.5 font-semibold"
                 >
                   <Settings2 className="h-3.5 w-3.5" />
-                  Edit App ID & Token
+                  Edit App ID &amp; Token
                 </Button>
               </div>
             </div>
 
             {/* Meta Conversions API (CAPI) Card */}
-            <div className="p-6 rounded-xl border border-border bg-card shadow-xs space-y-5">
+            <div className="p-6 sm:p-7 rounded-3xl border border-border bg-card shadow-xs space-y-6">
               <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-heading font-extrabold text-sm">
-                    C
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-card border border-border p-2.5 shadow-xs flex items-center justify-center shrink-0">
+                    {getIntegrationLogo("meta_capi", "h-7 w-7")}
                   </div>
                   <div>
                     <h3 className="font-heading font-bold text-base text-foreground">
                       Meta Conversions API (CAPI)
                     </h3>
-                    <p className="text-xs text-muted-foreground">
-                      Server-Side Lead Scoring · SHA-256 PII Hashed Feedback
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Server-Side Lead Scoring · SHA-256 PII Hashed Closed-Loop Feedback
                     </p>
                   </div>
                 </div>
-                <Badge variant="outline" className="text-xs bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 border-indigo-300">
+                <Badge
+                  variant="outline"
+                  className="text-xs bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 font-semibold"
+                >
                   CAPI Active
                 </Badge>
               </div>
@@ -908,14 +1040,14 @@ export default function IntegrationsPage() {
               </p>
 
               {/* Interactive CAPI Test Widget */}
-              <div className="p-4 rounded-xl bg-muted/40 border border-border/80 space-y-3.5">
+              <div className="p-4 rounded-2xl bg-muted/40 border border-border/80 space-y-3.5">
                 <div className="flex items-center justify-between">
                   <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                     <Terminal className="h-3.5 w-3.5 text-indigo-600" />
                     Test CAPI Server Event Dispatcher
                   </Label>
                   <span className="text-[10px] font-mono text-muted-foreground">
-                    Pixel: 984120394819203
+                    Dataset: 984120394819203
                   </span>
                 </div>
 
@@ -998,7 +1130,11 @@ export default function IntegrationsPage() {
                   disabled={testingKey === "meta_capi"}
                   className="text-xs h-9 gap-1.5"
                 >
-                  {testingKey === "meta_capi" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3.5 w-3.5 text-amber-500" />}
+                  {testingKey === "meta_capi" ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Zap className="h-3.5 w-3.5 text-amber-500" />
+                  )}
                   Verify CAPI Dataset
                 </Button>
 
@@ -1009,10 +1145,10 @@ export default function IntegrationsPage() {
                     const item = mergedCatalog.find((i) => i.key === "meta_capi");
                     if (item) handleOpenConfigModal(item);
                   }}
-                  className="text-xs h-9 gap-1.5"
+                  className="text-xs h-9 gap-1.5 font-semibold"
                 >
                   <Settings2 className="h-3.5 w-3.5" />
-                  Configure Pixel & Rules
+                  Configure Pixel &amp; Rules
                 </Button>
               </div>
             </div>
@@ -1025,22 +1161,25 @@ export default function IntegrationsPage() {
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Google Ads Lead Form Extension Card */}
-            <div className="p-6 rounded-xl border border-border bg-card shadow-xs space-y-5">
+            <div className="p-6 sm:p-7 rounded-3xl border border-border bg-card shadow-xs space-y-6">
               <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-red-600 text-white flex items-center justify-center font-heading font-extrabold text-sm">
-                    G
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-card border border-border p-2.5 shadow-xs flex items-center justify-center shrink-0">
+                    {getIntegrationLogo("google_ads", "h-7 w-7")}
                   </div>
                   <div>
                     <h3 className="font-heading font-bold text-base text-foreground">
                       Google Ads Lead Form Extensions
                     </h3>
-                    <p className="text-xs text-muted-foreground">
-                      Search & YouTube Lead Ingestion · GCLID Tracking
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Search &amp; YouTube Lead Ingestion · GCLID Tracking
                     </p>
                   </div>
                 </div>
-                <Badge variant="outline" className="text-xs bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-300">
+                <Badge
+                  variant="outline"
+                  className="text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-semibold"
+                >
                   <CheckCircle2 className="h-3 w-3 mr-1" />
                   Active
                 </Badge>
@@ -1050,7 +1189,7 @@ export default function IntegrationsPage() {
                 Capture high-intent search prospects directly from Google Search and YouTube lead forms. SmoothSales automatically parses user column data and captures GCLID for closed-loop attribution.
               </p>
 
-              <div className="space-y-3 pt-2">
+              <div className="space-y-4 pt-1">
                 <div>
                   <Label className="text-xs font-semibold text-muted-foreground">
                     Google Ads Webhook URL
@@ -1064,10 +1203,19 @@ export default function IntegrationsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => copyToClipboard("http://103.180.110.190/api/webhooks/google-ads", "google_webhook")}
+                      onClick={() =>
+                        copyToClipboard(
+                          "http://103.180.110.190/api/webhooks/google-ads",
+                          "google_webhook"
+                        )
+                      }
                       className="h-9 px-3 shrink-0"
                     >
-                      {copiedKey === "google_webhook" ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                      {copiedKey === "google_webhook" ? (
+                        <Check className="h-4 w-4 text-emerald-500" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -1085,10 +1233,16 @@ export default function IntegrationsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => copyToClipboard("gkey_sec_893041_ss_crm", "google_key")}
+                      onClick={() =>
+                        copyToClipboard("gkey_sec_893041_ss_crm", "google_key")
+                      }
                       className="h-9 px-3 shrink-0"
                     >
-                      {copiedKey === "google_key" ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                      {copiedKey === "google_key" ? (
+                        <Check className="h-4 w-4 text-emerald-500" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -1102,7 +1256,11 @@ export default function IntegrationsPage() {
                   disabled={testingKey === "google_ads"}
                   className="text-xs h-9 gap-1.5"
                 >
-                  {testingKey === "google_ads" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3.5 w-3.5 text-amber-500" />}
+                  {testingKey === "google_ads" ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Zap className="h-3.5 w-3.5 text-amber-500" />
+                  )}
                   Test Google Webhook Key
                 </Button>
 
@@ -1112,7 +1270,7 @@ export default function IntegrationsPage() {
                     const item = mergedCatalog.find((i) => i.key === "google_ads");
                     if (item) handleOpenConfigModal(item);
                   }}
-                  className="text-xs h-9 gap-1.5"
+                  className="text-xs h-9 gap-1.5 font-semibold"
                 >
                   <Settings2 className="h-3.5 w-3.5" />
                   Edit Configuration
@@ -1121,22 +1279,25 @@ export default function IntegrationsPage() {
             </div>
 
             {/* Google Offline Conversion Import (OCI) Card */}
-            <div className="p-6 rounded-xl border border-border bg-card shadow-xs space-y-5">
+            <div className="p-6 sm:p-7 rounded-3xl border border-border bg-card shadow-xs space-y-6">
               <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-amber-600 text-white flex items-center justify-center font-heading font-extrabold text-sm">
-                    O
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-card border border-border p-2.5 shadow-xs flex items-center justify-center shrink-0">
+                    {getIntegrationLogo("google_oci", "h-7 w-7")}
                   </div>
                   <div>
                     <h3 className="font-heading font-bold text-base text-foreground">
                       Google Offline Conversion Import (OCI)
                     </h3>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       Closed-Loop Attribution · Smart Bidding Value Feedback
                     </p>
                   </div>
                 </div>
-                <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border-amber-300">
+                <Badge
+                  variant="outline"
+                  className="text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 font-semibold"
+                >
                   OCI Enabled
                 </Badge>
               </div>
@@ -1146,7 +1307,7 @@ export default function IntegrationsPage() {
               </p>
 
               {/* Interactive OCI Upload Test */}
-              <div className="p-4 rounded-xl bg-muted/40 border border-border/80 space-y-3.5">
+              <div className="p-4 rounded-2xl bg-muted/40 border border-border/80 space-y-3.5">
                 <div className="flex items-center justify-between">
                   <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                     <Terminal className="h-3.5 w-3.5 text-amber-600" />
@@ -1162,7 +1323,9 @@ export default function IntegrationsPage() {
                     <Label className="text-[11px] text-muted-foreground">Conversion Action</Label>
                     <Select
                       value={ociData.conversionAction}
-                      onValueChange={(val) => setOciData({ ...ociData, conversionAction: val })}
+                      onValueChange={(val) =>
+                        setOciData({ ...ociData, conversionAction: val })
+                      }
                     >
                       <SelectTrigger className="h-8 text-xs bg-card">
                         <SelectValue />
@@ -1180,14 +1343,18 @@ export default function IntegrationsPage() {
                     <Input
                       type="number"
                       value={ociData.conversionValue}
-                      onChange={(e) => setOciData({ ...ociData, conversionValue: Number(e.target.value) })}
+                      onChange={(e) =>
+                        setOciData({ ...ociData, conversionValue: Number(e.target.value) })
+                      }
                       className="h-8 text-xs bg-card"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <Label className="text-[11px] text-muted-foreground">GCLID (Google Click Identifier)</Label>
+                  <Label className="text-[11px] text-muted-foreground">
+                    GCLID (Google Click Identifier)
+                  </Label>
                   <Input
                     value={ociData.gclid}
                     onChange={(e) => setOciData({ ...ociData, gclid: e.target.value })}
@@ -1225,7 +1392,11 @@ export default function IntegrationsPage() {
                   disabled={testingKey === "google_oci"}
                   className="text-xs h-9 gap-1.5"
                 >
-                  {testingKey === "google_oci" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3.5 w-3.5 text-amber-500" />}
+                  {testingKey === "google_oci" ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Zap className="h-3.5 w-3.5 text-amber-500" />
+                  )}
                   Verify OCI Pipeline
                 </Button>
 
@@ -1236,7 +1407,7 @@ export default function IntegrationsPage() {
                     const item = mergedCatalog.find((i) => i.key === "google_oci");
                     if (item) handleOpenConfigModal(item);
                   }}
-                  className="text-xs h-9 gap-1.5"
+                  className="text-xs h-9 gap-1.5 font-semibold"
                 >
                   <Settings2 className="h-3.5 w-3.5" />
                   Manage Conversion Rules
@@ -1256,19 +1427,22 @@ export default function IntegrationsPage() {
               .map((portal) => (
                 <div
                   key={portal.key}
-                  className="p-5 rounded-xl border border-border bg-card shadow-xs flex flex-col justify-between space-y-4"
+                  className="p-6 rounded-3xl border border-border bg-card shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-all"
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between">
-                      <div
+                      <div className="w-12 h-12 rounded-2xl bg-card border border-border p-2.5 shadow-xs flex items-center justify-center shrink-0">
+                        {getIntegrationLogo(portal.key, "h-7 w-7")}
+                      </div>
+                      <Badge
+                        variant="outline"
                         className={cn(
-                          "w-10 h-10 rounded-lg flex items-center justify-center font-heading font-extrabold text-sm text-white",
-                          portal.iconBg
+                          "text-xs font-semibold",
+                          portal.enabled
+                            ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                            : "bg-muted text-muted-foreground border-border"
                         )}
                       >
-                        {portal.iconLetter}
-                      </div>
-                      <Badge variant="outline" className="text-xs bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-300">
                         {portal.enabled ? "Active" : "Inactive"}
                       </Badge>
                     </div>
@@ -1285,7 +1459,7 @@ export default function IntegrationsPage() {
                     <div className="space-y-2 pt-1 text-xs">
                       <div>
                         <span className="text-[11px] font-semibold text-muted-foreground">
-                          Inbound Webhook:
+                          Inbound Webhook Endpoint:
                         </span>
                         <div className="mt-1 flex items-center gap-1">
                           <Input
@@ -1350,19 +1524,22 @@ export default function IntegrationsPage() {
               .map((item) => (
                 <div
                   key={item.key}
-                  className="p-6 rounded-xl border border-border bg-card shadow-xs flex flex-col justify-between space-y-4"
+                  className="p-6 sm:p-7 rounded-3xl border border-border bg-card shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-all"
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between">
-                      <div
+                      <div className="w-12 h-12 rounded-2xl bg-card border border-border p-2.5 shadow-xs flex items-center justify-center shrink-0">
+                        {getIntegrationLogo(item.key, "h-7 w-7")}
+                      </div>
+                      <Badge
+                        variant="outline"
                         className={cn(
-                          "w-10 h-10 rounded-lg flex items-center justify-center font-heading font-extrabold text-sm text-white",
-                          item.iconBg
+                          "text-xs font-semibold",
+                          item.enabled
+                            ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                            : "bg-muted text-muted-foreground border-border"
                         )}
                       >
-                        {item.iconLetter}
-                      </div>
-                      <Badge variant="outline" className="text-xs bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-300">
                         {item.enabled ? "Active" : "Disabled"}
                       </Badge>
                     </div>
@@ -1380,7 +1557,7 @@ export default function IntegrationsPage() {
                       {item.badges.map((b) => (
                         <span
                           key={b}
-                          className="px-2 py-0.5 rounded text-[10px] font-medium bg-muted/80 text-muted-foreground border border-border/50"
+                          className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-muted/80 text-muted-foreground border border-border/50"
                         >
                           {b}
                         </span>
@@ -1423,19 +1600,22 @@ export default function IntegrationsPage() {
               .map((item) => (
                 <div
                   key={item.key}
-                  className="p-5 rounded-xl border border-border bg-card shadow-xs flex flex-col justify-between space-y-4"
+                  className="p-6 rounded-3xl border border-border bg-card shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-all"
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between">
-                      <div
+                      <div className="w-12 h-12 rounded-2xl bg-card border border-border p-2.5 shadow-xs flex items-center justify-center shrink-0">
+                        {getIntegrationLogo(item.key, "h-7 w-7")}
+                      </div>
+                      <Badge
+                        variant="outline"
                         className={cn(
-                          "w-10 h-10 rounded-lg flex items-center justify-center font-heading font-extrabold text-sm text-white",
-                          item.iconBg
+                          "text-xs font-semibold",
+                          item.enabled
+                            ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                            : "bg-muted text-muted-foreground border-border"
                         )}
                       >
-                        {item.iconLetter}
-                      </div>
-                      <Badge variant="outline" className="text-xs bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border-emerald-300">
                         {item.enabled ? "Active" : "Disabled"}
                       </Badge>
                     </div>
@@ -1453,7 +1633,7 @@ export default function IntegrationsPage() {
                       {item.badges.map((b) => (
                         <span
                           key={b}
-                          className="px-2 py-0.5 rounded text-[10px] font-medium bg-muted/80 text-muted-foreground border border-border/50"
+                          className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-muted/80 text-muted-foreground border border-border/50"
                         >
                           {b}
                         </span>
@@ -1493,7 +1673,7 @@ export default function IntegrationsPage() {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-heading font-bold text-base text-foreground">
-                Inbound Webhook Audit & Raw Event Ledger
+                Inbound Webhook Audit &amp; Raw Event Ledger
               </h3>
               <p className="text-xs text-muted-foreground">
                 Inspecting raw payloads from Meta, Google Ads, IndiaMART, 99acres, MagicBricks, Justdial, and Website Forms
@@ -1512,17 +1692,17 @@ export default function IntegrationsPage() {
             </Button>
           </div>
 
-          <div className="border border-border rounded-xl overflow-hidden bg-card shadow-xs">
+          <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-xs">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
                 <thead className="bg-muted/50 border-b border-border text-muted-foreground font-semibold">
                   <tr>
-                    <th className="py-3 px-4">Source</th>
-                    <th className="py-3 px-4">Event ID</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Received Time</th>
-                    <th className="py-3 px-4">Payload Preview</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    <th className="py-3.5 px-4">Channel</th>
+                    <th className="py-3.5 px-4">Event ID</th>
+                    <th className="py-3.5 px-4">Status</th>
+                    <th className="py-3.5 px-4">Received Time</th>
+                    <th className="py-3.5 px-4">Payload Preview</th>
+                    <th className="py-3.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">

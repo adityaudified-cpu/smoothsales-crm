@@ -43,10 +43,16 @@ import {
   Send,
   Building2,
   Settings2,
+  Sparkles,
+  Lock,
+  Radio,
+  FileCode,
+  Share2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { testIntegration, simulateLead } from "@/lib/api/integrations";
+import { getIntegrationLogo } from "./brand-logos";
 
 // Standard CRM Columns available for field mapping
 export const CRM_TARGET_COLUMNS = [
@@ -115,14 +121,31 @@ export function UniversalConfigModal({
       if (Array.isArray(cfg.fieldMappings) && cfg.fieldMappings.length > 0) {
         setFieldMappings(cfg.fieldMappings);
       } else {
-        // Set smart default mappings
-        setFieldMappings([
-          { sourceKey: "name", targetField: "name", fallback: "Unknown Lead" },
-          { sourceKey: "phone", targetField: "phone", fallback: "" },
-          { sourceKey: "email", targetField: "email", fallback: "" },
-          { sourceKey: "city", targetField: "preferredLocation", fallback: "Delhi NCR" },
-          { sourceKey: "notes", targetField: "notes", fallback: "Inbound inquiry" },
-        ]);
+        // Smart defaults based on integration key
+        if (integration.key === "indiamart") {
+          setFieldMappings([
+            { sourceKey: "SENDER_NAME", targetField: "name", fallback: "IndiaMART Buyer" },
+            { sourceKey: "SENDER_MOBILE", targetField: "phone", fallback: "" },
+            { sourceKey: "SENDER_EMAIL", targetField: "email", fallback: "" },
+            { sourceKey: "SENDER_CITY", targetField: "preferredLocation", fallback: "Delhi NCR" },
+            { sourceKey: "QUERY_MESSAGE", targetField: "notes", fallback: "Inbound B2B inquiry" },
+          ]);
+        } else if (integration.key === "google_ads") {
+          setFieldMappings([
+            { sourceKey: "FULL_NAME", targetField: "name", fallback: "Google Lead" },
+            { sourceKey: "PHONE_NUMBER", targetField: "phone", fallback: "" },
+            { sourceKey: "EMAIL", targetField: "email", fallback: "" },
+            { sourceKey: "CITY", targetField: "preferredLocation", fallback: "" },
+          ]);
+        } else {
+          setFieldMappings([
+            { sourceKey: "name", targetField: "name", fallback: "Online Lead" },
+            { sourceKey: "phone", targetField: "phone", fallback: "" },
+            { sourceKey: "email", targetField: "email", fallback: "" },
+            { sourceKey: "city", targetField: "preferredLocation", fallback: "" },
+            { sourceKey: "notes", targetField: "notes", fallback: "Website inquiry" },
+          ]);
+        }
       }
 
       // Extract routing
@@ -235,27 +258,429 @@ export function UniversalConfigModal({
       ? "http://103.180.110.190/api/webhooks/website"
       : `http://103.180.110.190/api/webhooks/leads/${integration.key}`);
 
+  // ── Render Tailored Bespoke Credentials View ────────────────────────────────
+  const renderBespokeCredentials = () => {
+    const key = integration.key.toLowerCase();
+
+    if (key === "meta_ads") {
+      return (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="text-xs font-semibold text-foreground">Meta App ID</Label>
+              <Input
+                value={credentials.appId || ""}
+                onChange={(e) => handleCredentialChange("appId", e.target.value)}
+                placeholder="e.g. 1197546510113741"
+                className="h-9 text-xs font-mono bg-card mt-1"
+              />
+              <span className="text-[10px] text-muted-foreground mt-0.5 block">
+                Found in Meta Developer Console under App Settings → Basic
+              </span>
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold text-foreground">Meta App Secret</Label>
+                <button
+                  type="button"
+                  onClick={() => toggleSecret("appSecret")}
+                  className="text-[10px] text-primary hover:underline flex items-center gap-1"
+                >
+                  {showSecrets.appSecret ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  {showSecrets.appSecret ? "Hide" : "Show"}
+                </button>
+              </div>
+              <Input
+                type={showSecrets.appSecret ? "text" : "password"}
+                value={credentials.appSecret || ""}
+                onChange={(e) => handleCredentialChange("appSecret", e.target.value)}
+                placeholder="••••••••••••••••••••••••"
+                className="h-9 text-xs font-mono bg-card mt-1"
+              />
+              <span className="text-[10px] text-muted-foreground mt-0.5 block">
+                Used for HMAC-SHA256 signature verification
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold text-foreground">
+                System User Permanent Access Token
+              </Label>
+              <button
+                type="button"
+                onClick={() => toggleSecret("accessToken")}
+                className="text-[10px] text-primary hover:underline flex items-center gap-1"
+              >
+                {showSecrets.accessToken ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                {showSecrets.accessToken ? "Hide" : "Show"}
+              </button>
+            </div>
+            <Input
+              type={showSecrets.accessToken ? "text" : "password"}
+              value={credentials.accessToken || ""}
+              onChange={(e) => handleCredentialChange("accessToken", e.target.value)}
+              placeholder="EAA..."
+              className="h-9 text-xs font-mono bg-card mt-1"
+            />
+            <span className="text-[10px] text-muted-foreground mt-0.5 block">
+              Generate in Meta Business Settings → System Users with `leads_retrieval` permission
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="text-xs font-semibold text-foreground">Facebook Page ID</Label>
+              <Input
+                value={credentials.pageId || ""}
+                onChange={(e) => handleCredentialChange("pageId", e.target.value)}
+                placeholder="e.g. 4424288871221076"
+                className="h-9 text-xs font-mono bg-card mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-foreground">Page Display Name</Label>
+              <Input
+                value={credentials.pageName || ""}
+                onChange={(e) => handleCredentialChange("pageName", e.target.value)}
+                placeholder="e.g. SmoothSales Realty"
+                className="h-9 text-xs bg-card mt-1"
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (key === "meta_capi") {
+      return (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="text-xs font-semibold text-foreground">Meta Pixel / Dataset ID</Label>
+              <Input
+                value={credentials.pixelId || ""}
+                onChange={(e) => handleCredentialChange("pixelId", e.target.value)}
+                placeholder="e.g. 984120394819203"
+                className="h-9 text-xs font-mono bg-card mt-1"
+              />
+              <span className="text-[10px] text-muted-foreground mt-0.5 block">
+                Found in Meta Events Manager under Datasets
+              </span>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-foreground">Test Event Code (Optional)</Label>
+              <Input
+                value={credentials.testEventCode || ""}
+                onChange={(e) => handleCredentialChange("testEventCode", e.target.value)}
+                placeholder="e.g. TEST78912"
+                className="h-9 text-xs font-mono bg-card mt-1"
+              />
+              <span className="text-[10px] text-muted-foreground mt-0.5 block">
+                Used to verify server events live inside Meta Events Manager
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold text-foreground">CAPI Access Token</Label>
+              <button
+                type="button"
+                onClick={() => toggleSecret("accessToken")}
+                className="text-[10px] text-primary hover:underline flex items-center gap-1"
+              >
+                {showSecrets.accessToken ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                {showSecrets.accessToken ? "Hide" : "Show"}
+              </button>
+            </div>
+            <Input
+              type={showSecrets.accessToken ? "text" : "password"}
+              value={credentials.accessToken || ""}
+              onChange={(e) => handleCredentialChange("accessToken", e.target.value)}
+              placeholder="EAA..."
+              className="h-9 text-xs font-mono bg-card mt-1"
+            />
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-muted/40 border border-border/80 flex items-center justify-between">
+            <div>
+              <Label className="text-xs font-semibold text-foreground">Automatic SHA-256 PII Hashing</Label>
+              <p className="text-[11px] text-muted-foreground">
+                Customer email and phone numbers are irreversibly hashed before transmission
+              </p>
+            </div>
+            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-xs">
+              Enforced
+            </Badge>
+          </div>
+        </div>
+      );
+    }
+
+    if (key === "google_ads") {
+      return (
+        <div className="space-y-4">
+          <div>
+            <Label className="text-xs font-semibold text-foreground">
+              Google Ads Webhook Key (Secret)
+            </Label>
+            <Input
+              value={credentials.googleKey || ""}
+              onChange={(e) => handleCredentialChange("googleKey", e.target.value)}
+              placeholder="e.g. gkey_sec_893041_ss_crm"
+              className="h-9 text-xs font-mono bg-card mt-1"
+            />
+            <span className="text-[10px] text-muted-foreground mt-0.5 block">
+              Enter this in Google Ads Lead Form extension configuration under &quot;Google key&quot;
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="text-xs font-semibold text-foreground">Google Ads Customer ID</Label>
+              <Input
+                value={credentials.customerId || ""}
+                onChange={(e) => handleCredentialChange("customerId", e.target.value)}
+                placeholder="123-456-7890"
+                className="h-9 text-xs font-mono bg-card mt-1"
+              />
+            </div>
+            <div className="flex flex-col justify-end">
+              <div className="p-2.5 rounded-lg bg-muted/30 border border-border flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold text-foreground">GCLID Capture</div>
+                  <div className="text-[10px] text-muted-foreground">Auto-link Click ID</div>
+                </div>
+                <Switch
+                  checked={credentials.captureGclid !== false}
+                  onCheckedChange={(val) => handleCredentialChange("captureGclid", val)}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (key === "indiamart") {
+      return (
+        <div className="space-y-4">
+          <div>
+            <Label className="text-xs font-semibold text-foreground">GLUSR_CRM_KEY</Label>
+            <Input
+              value={credentials.glusrCrmKey || ""}
+              onChange={(e) => handleCredentialChange("glusrCrmKey", e.target.value)}
+              placeholder="e.g. m_crm_key_991823714"
+              className="h-9 text-xs font-mono bg-card mt-1"
+            />
+            <span className="text-[10px] text-muted-foreground mt-0.5 block">
+              Generated from IndiaMART Seller Panel under Lead Manager API Settings
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="text-xs font-semibold text-foreground">Seller Mobile Number</Label>
+              <Input
+                value={credentials.sellerMobile || ""}
+                onChange={(e) => handleCredentialChange("sellerMobile", e.target.value)}
+                placeholder="+91..."
+                className="h-9 text-xs font-mono bg-card mt-1"
+              />
+            </div>
+            <div className="flex flex-col justify-end">
+              <div className="p-2.5 rounded-lg bg-muted/30 border border-border flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold text-foreground">Spam Filter</div>
+                  <div className="text-[10px] text-muted-foreground">Ignore bulk promotional RFQs</div>
+                </div>
+                <Switch
+                  checked={credentials.filterSpam !== false}
+                  onCheckedChange={(val) => handleCredentialChange("filterSpam", val)}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (key === "whatsapp") {
+      return (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="text-xs font-semibold text-foreground">Phone Number ID</Label>
+              <Input
+                value={credentials.phoneId || ""}
+                onChange={(e) => handleCredentialChange("phoneId", e.target.value)}
+                placeholder="e.g. 1197546510113741"
+                className="h-9 text-xs font-mono bg-card mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-foreground">WABA ID</Label>
+              <Input
+                value={credentials.wabaId || ""}
+                onChange={(e) => handleCredentialChange("wabaId", e.target.value)}
+                placeholder="e.g. 4424288871221076"
+                className="h-9 text-xs font-mono bg-card mt-1"
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold text-foreground">Permanent Bearer Token</Label>
+              <button
+                type="button"
+                onClick={() => toggleSecret("bearerToken")}
+                className="text-[10px] text-primary hover:underline flex items-center gap-1"
+              >
+                {showSecrets.bearerToken ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                {showSecrets.bearerToken ? "Hide" : "Show"}
+              </button>
+            </div>
+            <Input
+              type={showSecrets.bearerToken ? "text" : "password"}
+              value={credentials.bearerToken || credentials.accessToken || ""}
+              onChange={(e) => handleCredentialChange("bearerToken", e.target.value)}
+              placeholder="EAA..."
+              className="h-9 text-xs font-mono bg-card mt-1"
+            />
+          </div>
+        </div>
+      );
+    }
+
+    if (key === "openai") {
+      return (
+        <div className="space-y-4">
+          <div>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold text-foreground">OpenAI API Key</Label>
+              <button
+                type="button"
+                onClick={() => toggleSecret("apiKey")}
+                className="text-[10px] text-primary hover:underline flex items-center gap-1"
+              >
+                {showSecrets.apiKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                {showSecrets.apiKey ? "Hide" : "Show"}
+              </button>
+            </div>
+            <Input
+              type={showSecrets.apiKey ? "text" : "password"}
+              value={credentials.apiKey || ""}
+              onChange={(e) => handleCredentialChange("apiKey", e.target.value)}
+              placeholder="sk-proj-..."
+              className="h-9 text-xs font-mono bg-card mt-1"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="text-xs font-semibold text-foreground">Model Engine</Label>
+              <Select
+                value={credentials.model || "gpt-4o"}
+                onValueChange={(val) => handleCredentialChange("model", val)}
+              >
+                <SelectTrigger className="h-9 text-xs mt-1 bg-card">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gpt-4o">GPT-4o (High Speed & Intelligence)</SelectItem>
+                  <SelectItem value="gpt-4o-mini">GPT-4o Mini (Cost Optimized)</SelectItem>
+                  <SelectItem value="o1-mini">o1 Mini (Deep Reasoning)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-foreground">Temperature (Creativity)</Label>
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                max="1"
+                value={credentials.temperature !== undefined ? credentials.temperature : 0.3}
+                onChange={(e) => handleCredentialChange("temperature", Number(e.target.value))}
+                className="h-9 text-xs font-mono bg-card mt-1"
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Default Fallback for other integrations (Clean Form Grid)
+    return (
+      <div className="space-y-3.5">
+        {Object.keys(credentials).map((fieldKey) => {
+          const val = credentials[fieldKey];
+          if (typeof val === "object" && val !== null) return null;
+
+          const isSecret =
+            fieldKey.toLowerCase().includes("secret") ||
+            fieldKey.toLowerCase().includes("token") ||
+            fieldKey.toLowerCase().includes("key") ||
+            fieldKey.toLowerCase().includes("password");
+
+          // Convert camelCase to Human Label (e.g. projectListingId -> Project Listing ID)
+          const humanLabel = fieldKey
+            .replace(/([A-Z])/g, " $1")
+            .replace(/^./, (str) => str.toUpperCase());
+
+          return (
+            <div key={fieldKey} className="space-y-1">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold text-foreground">{humanLabel}</Label>
+                {isSecret && (
+                  <button
+                    type="button"
+                    onClick={() => toggleSecret(fieldKey)}
+                    className="text-[10px] text-primary hover:underline flex items-center gap-1"
+                  >
+                    {showSecrets[fieldKey] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                    {showSecrets[fieldKey] ? "Hide" : "Show"}
+                  </button>
+                )}
+              </div>
+
+              <Input
+                type={isSecret && !showSecrets[fieldKey] ? "password" : "text"}
+                value={val !== undefined && val !== null ? String(val) : ""}
+                onChange={(e) => handleCredentialChange(fieldKey, e.target.value)}
+                className="h-9 text-xs font-mono bg-card"
+              />
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden shadow-2xl border-border/80">
         {/* Header */}
-        <div className="p-6 border-b border-border bg-muted/20">
+        <div className="p-6 border-b border-border bg-gradient-to-r from-muted/30 via-background to-muted/20">
           <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <div
-                className={cn(
-                  "w-11 h-11 rounded-xl flex items-center justify-center font-heading font-extrabold text-base shadow-xs shrink-0",
-                  integration.iconBg || "bg-primary text-primary-foreground"
-                )}
-              >
-                {integration.iconLetter || integration.displayName.slice(0, 1)}
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center p-2.5 bg-card border border-border shadow-xs shrink-0">
+                {getIntegrationLogo(integration.key, "h-7 w-7")}
               </div>
               <div>
-                <DialogTitle className="text-lg font-bold font-heading text-foreground">
-                  {integration.displayName}
-                </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                  {integration.category} · Enterprise Webhook & Direct API Integration
+                <div className="flex items-center gap-2">
+                  <DialogTitle className="text-lg font-bold font-heading text-foreground">
+                    {integration.displayName}
+                  </DialogTitle>
+                  <Badge variant="outline" className="text-[10px] font-mono py-0 text-muted-foreground border-border">
+                    {integration.category}
+                  </Badge>
+                </div>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                  {integration.description}
                 </DialogDescription>
               </div>
             </div>
@@ -268,13 +693,13 @@ export function UniversalConfigModal({
             </div>
           </div>
 
-          {/* Modal Tab Navigation */}
-          <div className="flex space-x-1 mt-6 p-1 rounded-lg bg-muted/60 border border-border/60">
+          {/* Modal Tab Navigation (Executive Segmented Bar) */}
+          <div className="flex space-x-1 mt-6 p-1 rounded-xl bg-muted/60 border border-border/60">
             {[
               { id: "auth", label: "Credentials & Auth", icon: KeyRound },
               { id: "webhook", label: "Webhooks & Security", icon: Webhook },
-              { id: "mapping", label: "Field / Column Mapping", icon: SlidersHorizontal },
-              { id: "routing", label: "Lead Routing Rules", icon: Workflow },
+              { id: "mapping", label: "Column Mapping", icon: SlidersHorizontal },
+              { id: "routing", label: "Lead Routing", icon: Workflow },
               { id: "test", label: "Test & Simulate", icon: Zap },
             ].map((tab) => {
               const Icon = tab.icon;
@@ -285,7 +710,7 @@ export function UniversalConfigModal({
                   type="button"
                   onClick={() => setModalTab(tab.id)}
                   className={cn(
-                    "flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-semibold transition-all",
+                    "flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all",
                     isActive
                       ? "bg-card text-foreground shadow-xs border border-border/80 font-bold"
                       : "text-muted-foreground hover:text-foreground"
@@ -301,11 +726,11 @@ export function UniversalConfigModal({
 
         {/* Modal Body (Scrollable) */}
         <div className="p-6 overflow-y-auto space-y-5 flex-1">
-          {/* ── TAB 1: CREDENTIALS & AUTH ── */}
+          {/* ── TAB 1: BESPOKE CREDENTIALS & AUTH ── */}
           {modalTab === "auth" && (
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div>
-                <Label className="text-xs font-semibold text-foreground">Display Name</Label>
+                <Label className="text-xs font-semibold text-foreground">Integration Channel Name</Label>
                 <Input
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
@@ -313,49 +738,7 @@ export function UniversalConfigModal({
                 />
               </div>
 
-              <div className="space-y-3.5 pt-1">
-                {Object.keys(credentials).map((fieldKey) => {
-                  const val = credentials[fieldKey];
-                  if (typeof val === "object" && val !== null) return null;
-
-                  const isSecret =
-                    fieldKey.toLowerCase().includes("secret") ||
-                    fieldKey.toLowerCase().includes("token") ||
-                    fieldKey.toLowerCase().includes("key") ||
-                    fieldKey.toLowerCase().includes("password");
-
-                  return (
-                    <div key={fieldKey} className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs font-mono font-semibold text-muted-foreground">
-                          {fieldKey}
-                        </Label>
-                        {isSecret && (
-                          <button
-                            type="button"
-                            onClick={() => toggleSecret(fieldKey)}
-                            className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1"
-                          >
-                            {showSecrets[fieldKey] ? (
-                              <EyeOff className="h-3 w-3" />
-                            ) : (
-                              <Eye className="h-3 w-3" />
-                            )}
-                            {showSecrets[fieldKey] ? "Hide" : "Show"}
-                          </button>
-                        )}
-                      </div>
-
-                      <Input
-                        type={isSecret && !showSecrets[fieldKey] ? "password" : "text"}
-                        value={val !== undefined && val !== null ? String(val) : ""}
-                        onChange={(e) => handleCredentialChange(fieldKey, e.target.value)}
-                        className="h-9 text-xs font-mono bg-card"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
+              {renderBespokeCredentials()}
 
               <div className="p-3.5 rounded-xl bg-blue-500/5 border border-blue-500/20 text-xs text-muted-foreground space-y-1">
                 <div className="font-semibold text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
