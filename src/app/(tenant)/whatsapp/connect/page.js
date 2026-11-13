@@ -216,25 +216,25 @@ export default function WhatsAppConnectPage() {
 
   // Test Message Modal State & Validation
   const [testModalOpen, setTestModalOpen] = useState(false);
-  const [testPhone, setTestPhone] = useState("+918750073899");
-  const [testMessage, setTestMessage] = useState(
-    "🔔 *SmoothSales CRM Test Ping*: WhatsApp Meta Cloud API connection is active and working properly!"
-  );
+  const [testPhone, setTestPhone] = useState("");
+  const [testMessage, setTestMessage] = useState("");
   const [testSending, setTestSending] = useState(false);
   const [testErrors, setTestErrors] = useState({});
 
   // Credentials Modal State & Validation
   const [showCredentialsModal, setShowCredentialsModal] = useState(false);
-  const [phoneId, setPhoneId] = useState("1197546510113741");
-  const [wabaId, setWabaId] = useState("4424288871221076");
+  const [phoneId, setPhoneId] = useState("");
+  const [wabaId, setWabaId] = useState("");
   const [token, setToken] = useState("");
-  const [label, setLabel] = useState("SmoothSales Official WhatsApp");
+  const [label, setLabel] = useState("");
   const [showToken, setShowToken] = useState(false);
   const [credentialsErrors, setCredentialsErrors] = useState({});
 
   // QR Modal State
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [qrStep, setQrStep] = useState("generate");
+  const [qrData, setQrData] = useState(null);
+  const [qrError, setQrError] = useState(null);
 
   // Webhook Live Health Check State
   const [webhookChecking, setWebhookChecking] = useState(false);
@@ -283,7 +283,7 @@ export default function WhatsAppConnectPage() {
   const [triggerForm, setTriggerForm] = useState({ template: "", timing: "" });
   const [triggerErrors, setTriggerErrors] = useState({});
 
-  const metaAccount = accounts.find((a) => a.type === "meta") || accounts[0];
+  const metaAccount = accounts.find((a) => a.type === "meta") || null;
 
   // ── Template Sync Handler ──────────────────────────────────────────────────
   const handleSyncTemplates = async () => {
@@ -479,9 +479,19 @@ export default function WhatsAppConnectPage() {
   };
 
   // ── QR Scan Interactive Handlers ──────────────────────────────────────────
-  const handleScanQr = () => {
+  const handleGenerateQr = async () => {
     setQrStep("scanning");
-    setTimeout(() => setQrStep("scanned"), 1800);
+    setQrError(null);
+    try {
+      const res = await fetch("/api/whatsapp/qr-session", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to generate QR session");
+      const data = await res.json();
+      setQrData(data?.qrCode || data?.data?.qrCode || null);
+      setQrStep("scanned");
+    } catch (err) {
+      setQrError(err?.message || "Could not generate QR code. Check backend connection.");
+      setQrStep("generate");
+    }
   };
 
   const handleCompleteQr = async () => {
@@ -489,12 +499,15 @@ export default function WhatsAppConnectPage() {
     try {
       await addAccount({
         type: "personal",
-        label: "Personal WhatsApp Business (Rep SIM)",
-        number: "+91 98201 55432",
+        label: "Personal WhatsApp Business",
+        number: "",
       });
       toast.success("Personal WhatsApp Business paired successfully!");
       setQrModalOpen(false);
       setQrStep("generate");
+      setQrData(null);
+    } catch (err) {
+      toast.error(err?.message || "Pairing failed. Please scan the QR code again.");
     } finally {
       setConnecting(false);
     }
@@ -605,6 +618,38 @@ export default function WhatsAppConnectPage() {
         {activeTab === "connect" && (
           <div className="max-w-6xl mx-auto space-y-6">
 
+            {/* No account connected empty state */}
+            {!metaAccount && (
+              <div className="rounded-2xl border-2 border-dashed border-border bg-card p-10 flex flex-col items-center justify-center text-center gap-4">
+                <div className="h-14 w-14 rounded-2xl bg-muted flex items-center justify-center">
+                  <MessageCircle className="h-7 w-7 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-foreground">No WhatsApp Account Connected</p>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                    Connect your Meta Cloud API account or pair a Personal WhatsApp Business device to start sending messages.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => { setCredentialsErrors({}); setShowCredentialsModal(true); }}
+                  >
+                    <Globe className="h-3.5 w-3.5" /> Connect Meta Cloud API
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs gap-1.5"
+                    onClick={() => setQrModalOpen(true)}
+                  >
+                    <QrCode className="h-3.5 w-3.5" /> Pair via QR Code
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Enterprise Bento Card: Primary Connected Channel */}
             {metaAccount && (
               <div className="rounded-2xl border border-border bg-card p-5 shadow-xs relative overflow-hidden">
@@ -631,12 +676,12 @@ export default function WhatsAppConnectPage() {
                       </div>
                       <p className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
                         <span className="font-semibold text-foreground font-mono">
-                          {metaAccount.number || "+91 87500 73899"}
+                          {metaAccount.number || "—"}
                         </span>
                         <span>·</span>
                         <span>Official Cloud API Primary Channel</span>
                         <span>·</span>
-                        <span>Connected on {metaAccount.connectedAt || "2026-11-03"}</span>
+                        <span>Connected on {metaAccount.connectedAt || "—"}</span>
                       </p>
                     </div>
                   </div>
@@ -667,7 +712,7 @@ export default function WhatsAppConnectPage() {
                 </div>
 
                 {/* 4 Health Metrics Bento Grid (Equal Height & Micro Stats) */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 py-4.5 border-b border-border">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 py-4 border-b border-border">
                   <div className="p-3.5 rounded-xl bg-muted/40 border border-border/80 flex flex-col justify-between">
                     <p className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                       <Activity className="h-3.5 w-3.5 text-emerald-500" />
@@ -688,7 +733,7 @@ export default function WhatsAppConnectPage() {
                     </p>
                     <div className="my-1.5">
                       <p className="text-sm font-bold text-foreground">
-                        1,000 / 24 Hours
+                        {metaAccount.messagingLimit || "1,000 / 24 Hours"}
                       </p>
                     </div>
                     <p className="text-[10px] text-muted-foreground">Automatic tier upgrade to 10k on volume</p>
@@ -731,10 +776,10 @@ export default function WhatsAppConnectPage() {
                     <div className="flex items-center gap-1.5">
                       <span className="text-muted-foreground text-[11px] font-medium">Phone ID:</span>
                       <code className="bg-muted px-2 py-0.5 rounded font-mono text-[11px] text-foreground font-semibold">
-                        {metaAccount.phoneId || "1197546510113741"}
+                        {metaAccount.phoneId || "—"}
                       </code>
                       <button
-                        onClick={() => copyToClipboard(metaAccount.phoneId || "1197546510113741", "Phone ID")}
+                        onClick={() => copyToClipboard(metaAccount.phoneId || "", "Phone ID")}
                         className="text-muted-foreground hover:text-foreground p-0.5 transition-colors"
                         title="Copy Phone ID"
                       >
@@ -745,10 +790,10 @@ export default function WhatsAppConnectPage() {
                     <div className="flex items-center gap-1.5">
                       <span className="text-muted-foreground text-[11px] font-medium">WABA ID:</span>
                       <code className="bg-muted px-2 py-0.5 rounded font-mono text-[11px] text-foreground font-semibold">
-                        {metaAccount.wabaId || "4424288871221076"}
+                        {metaAccount.wabaId || "—"}
                       </code>
                       <button
-                        onClick={() => copyToClipboard(metaAccount.wabaId || "4424288871221076", "WABA ID")}
+                        onClick={() => copyToClipboard(metaAccount.wabaId || "", "WABA ID")}
                         className="text-muted-foreground hover:text-foreground p-0.5 transition-colors"
                         title="Copy WABA ID"
                       >
@@ -803,7 +848,7 @@ export default function WhatsAppConnectPage() {
                             <p className="text-xs font-bold text-foreground">Meta Cloud API (Primary)</p>
                             <Badge className="bg-emerald-600 text-white text-[9.5px] py-0 px-1.5">Default</Badge>
                           </div>
-                          <p className="text-[11px] text-muted-foreground font-mono">+91 87500 73899</p>
+                          <p className="text-[11px] text-muted-foreground font-mono">{metaAccount.number || "—"}</p>
                         </div>
                       </div>
                       <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5">
@@ -922,9 +967,9 @@ export default function WhatsAppConnectPage() {
             </div>
 
             {/* 3 Balanced Equal-Height Bento Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4.5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Card 1: Lead Generation & Profiling */}
-              <div className="rounded-2xl border border-border bg-card p-4.5 flex flex-col justify-between shadow-xs">
+              <div className="rounded-2xl border border-border bg-card p-5 flex flex-col justify-between shadow-xs">
                 <div>
                   <div className="flex items-center gap-2.5 pb-3 border-b border-border">
                     <div className="h-8 w-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
@@ -1017,7 +1062,7 @@ export default function WhatsAppConnectPage() {
               </div>
 
               {/* Card 2: Smart AI Data Extraction */}
-              <div className="rounded-2xl border border-border bg-card p-4.5 flex flex-col justify-between shadow-xs">
+              <div className="rounded-2xl border border-border bg-card p-5 flex flex-col justify-between shadow-xs">
                 <div>
                   <div className="flex items-center gap-2.5 pb-3 border-b border-border">
                     <div className="h-8 w-8 rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0">
@@ -1110,7 +1155,7 @@ export default function WhatsAppConnectPage() {
               </div>
 
               {/* Card 3: Routing & SLA Escalation */}
-              <div className="rounded-2xl border border-border bg-card p-4.5 flex flex-col justify-between shadow-xs">
+              <div className="rounded-2xl border border-border bg-card p-5 flex flex-col justify-between shadow-xs">
                 <div>
                   <div className="flex items-center gap-2.5 pb-3 border-b border-border">
                     <div className="h-8 w-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
@@ -1288,7 +1333,7 @@ export default function WhatsAppConnectPage() {
                 return (
                   <div
                     key={t.id}
-                    className="rounded-2xl border border-border bg-card p-4.5 space-y-3.5 flex flex-col justify-between shadow-xs hover:border-border/80 transition-all"
+                    className="rounded-2xl border border-border bg-card p-5 space-y-3.5 flex flex-col justify-between shadow-xs hover:border-border/80 transition-all"
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2 mb-2">
@@ -1476,7 +1521,7 @@ export default function WhatsAppConnectPage() {
                 {SETUP_STEPS.map((s) => (
                   <div
                     key={s.step}
-                    className="p-4.5 rounded-2xl border border-border bg-card space-y-2.5 flex flex-col justify-between shadow-xs"
+                    className="p-5 rounded-2xl border border-border bg-card space-y-2.5 flex flex-col justify-between shadow-xs"
                   >
                     <div>
                       <div className="flex items-center gap-2.5 mb-1.5">
@@ -1522,7 +1567,10 @@ export default function WhatsAppConnectPage() {
 
           <div className="p-5 space-y-4 text-xs">
             <p className="text-muted-foreground">
-              Verify real-time delivery via your Meta Cloud API connection (<span className="font-semibold text-foreground">+91 87500 73899</span>).
+              Verify real-time delivery via your Meta Cloud API connection
+              {metaAccount?.number ? (
+                <span className="font-semibold text-foreground ml-1">({metaAccount.number})</span>
+              ) : null}.
             </p>
 
             <div className="space-y-1.5">
@@ -1793,7 +1841,7 @@ export default function WhatsAppConnectPage() {
       </Dialog>
 
       {/* ── QR Connect Modal ── */}
-      <Dialog open={qrModalOpen} onOpenChange={setQrModalOpen}>
+      <Dialog open={qrModalOpen} onOpenChange={(open) => { setQrModalOpen(open); if (!open) { setQrStep("generate"); setQrData(null); setQrError(null); } }}>
         <DialogContent className="max-w-sm p-5 space-y-4">
           <DialogHeader>
             <DialogTitle className="text-sm font-bold flex items-center gap-2">
@@ -1807,10 +1855,16 @@ export default function WhatsAppConnectPage() {
               <p className="text-muted-foreground">
                 Pair your phone's WhatsApp Business app via Linked Devices for direct 1-on-1 team chats.
               </p>
+              {qrError && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-[11px] text-red-600 text-left">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  {qrError}
+                </div>
+              )}
               <Button
                 size="sm"
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 font-medium"
-                onClick={handleScanQr}
+                onClick={handleGenerateQr}
               >
                 <QrCode className="h-3.5 w-3.5" /> Generate QR Code
               </Button>
@@ -1820,15 +1874,19 @@ export default function WhatsAppConnectPage() {
           {qrStep === "scanning" && (
             <div className="flex flex-col items-center justify-center py-8 gap-2">
               <Loader2 className="h-8 w-8 text-emerald-500 animate-spin" />
-              <p className="text-xs text-muted-foreground font-medium">Initializing secure multi-device session...</p>
+              <p className="text-xs text-muted-foreground font-medium">Generating secure QR session...</p>
             </div>
           )}
 
           {qrStep === "scanned" && (
             <div className="flex flex-col items-center gap-3 py-2 text-center text-xs">
-              <div className="h-40 w-40 border-2 border-dashed border-emerald-500/40 rounded-2xl flex items-center justify-center bg-emerald-500/5 relative">
-                <QrCode className="h-28 w-28 text-foreground/80" />
-                <div className="absolute inset-x-2 top-1/2 -translate-y-1/2 h-0.5 bg-emerald-500 animate-pulse" />
+              <div className="h-44 w-44 border-2 border-emerald-500/30 rounded-2xl flex items-center justify-center bg-white p-2">
+                {qrData ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={qrData} alt="WhatsApp QR Code" className="h-full w-full object-contain" />
+                ) : (
+                  <QrCode className="h-28 w-28 text-foreground/80" />
+                )}
               </div>
               <p className="text-muted-foreground text-[11px]">
                 Open WhatsApp on phone → Settings → Linked Devices → Link a Device, then point camera here.

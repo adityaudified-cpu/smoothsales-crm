@@ -47,6 +47,105 @@ export function getMetaCredentials() {
   return { token: meta.token, phoneId: meta.phoneId, wabaId: meta.wabaId, label: meta.label };
 }
 
+// ── AI Agent API ─────────────────────────────────────────────────────────────
+
+export const whatsappAiAgentApi = {
+  getConfig: async () => {
+    if (isApiMode()) {
+      try { return await apiRequest("/whatsapp/ai-agent/config"); } catch {}
+    }
+    try { return JSON.parse(localStorage.getItem("wa_ai_agent_config_v1") ?? "null"); } catch { return null; }
+  },
+  saveConfig: async (config) => {
+    if (isApiMode()) {
+      try { return await apiRequest("/whatsapp/ai-agent/config", { method: "PUT", body: config }); } catch {}
+    }
+    try { localStorage.setItem("wa_ai_agent_config_v1", JSON.stringify(config)); } catch {}
+    return config;
+  },
+  getStats: async () => {
+    if (isApiMode()) {
+      try { return await apiRequest("/whatsapp/ai-agent/stats"); } catch {}
+    }
+    return null;
+  },
+  getFaqs: async () => {
+    if (isApiMode()) {
+      try {
+        const res = await apiRequest("/whatsapp/ai-agent/faqs");
+        return Array.isArray(res) ? res : (res?.data || []);
+      } catch {}
+    }
+    try { return JSON.parse(localStorage.getItem("wa_ai_agent_faqs_v1") ?? "null") ?? []; } catch { return []; }
+  },
+  saveFaqs: async (faqs) => {
+    if (isApiMode()) {
+      try { return await apiRequest("/whatsapp/ai-agent/faqs", { method: "PUT", body: faqs }); } catch {}
+    }
+    try { localStorage.setItem("wa_ai_agent_faqs_v1", JSON.stringify(faqs)); } catch {}
+    return faqs;
+  },
+  chat: async (messages, config) => {
+    if (isApiMode()) {
+      return await apiRequest("/whatsapp/ai-agent/test-chat", { method: "POST", body: { messages, config } });
+    }
+    throw new Error("API mode required for AI chat");
+  },
+};
+
+// ── Automation Flows API ──────────────────────────────────────────────────────
+
+export const whatsappAutomationApi = {
+  getAll: async () => {
+    if (isApiMode()) {
+      try {
+        const res = await apiRequest("/whatsapp/automation/flows");
+        return Array.isArray(res) ? res : (res?.data || []);
+      } catch {}
+    }
+    try { return JSON.parse(localStorage.getItem("wa_automation_flows_v1") ?? "null") ?? []; } catch { return []; }
+  },
+  create: async (flow) => {
+    if (isApiMode()) {
+      try { return await apiRequest("/whatsapp/automation/flows", { method: "POST", body: flow }); } catch {}
+    }
+    return { ...flow, id: `f_${Date.now()}` };
+  },
+  update: async (id, flow) => {
+    if (isApiMode()) {
+      try { return await apiRequest(`/whatsapp/automation/flows/${id}`, { method: "PUT", body: flow }); } catch {}
+    }
+    return flow;
+  },
+  delete: async (id) => {
+    if (isApiMode()) {
+      try { await apiRequest(`/whatsapp/automation/flows/${id}`, { method: "DELETE" }); } catch {}
+    }
+    return { success: true };
+  },
+  activate: async (id) => {
+    if (isApiMode()) {
+      try { return await apiRequest(`/whatsapp/automation/flows/${id}/activate`, { method: "POST" }); } catch {}
+    }
+    return { success: true };
+  },
+  pause: async (id) => {
+    if (isApiMode()) {
+      try { return await apiRequest(`/whatsapp/automation/flows/${id}/pause`, { method: "POST" }); } catch {}
+    }
+    return { success: true };
+  },
+  getTemplates: async () => {
+    if (isApiMode()) {
+      try {
+        const res = await apiRequest("/whatsapp/templates/approved");
+        return Array.isArray(res) ? res : (res?.data || []);
+      } catch {}
+    }
+    return [];
+  },
+};
+
 // ── Templates API ─────────────────────────────────────────────────────────────
 
 export const whatsappTemplatesApi = {
@@ -160,6 +259,11 @@ export const whatsappTemplatesApi = {
       return await apiRequest(`/whatsapp/templates/${id}/submit`, { method: "POST" });
     }
     return { success: true, status: "PENDING" };
+  },
+
+  /** Alias for submit — used by templates page */
+  submitDraft: async (id) => {
+    return whatsappTemplatesApi.submit(id);
   },
 
   /** Trigger live sync with Meta Graph API */

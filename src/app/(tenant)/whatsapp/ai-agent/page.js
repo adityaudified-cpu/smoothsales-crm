@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWaAccounts, CHANNEL_BADGE } from "../wa-accounts-context";
+import { whatsappAiAgentApi } from "@/lib/api/whatsapp";
+import { isApiMode } from "@/lib/api/client";
 
 const DEFAULT_PROMPT = `You are {{agent_name}}, a professional sales & customer success specialist at {{company_name}}.
 
@@ -39,20 +41,9 @@ Never:
 
 If asked if you are an AI: Say "I'm a digital assistant at {{company_name}}, happy to help you or connect you with our human team anytime! 😊"`;
 
-const INIT_FAQS = [
-  { id: "f1", q: "What are your business hours?", a: "Our team is available Monday to Saturday, 9:30 AM to 6:30 PM. Inbound messages are answered promptly during business hours!", cat: "General" },
-  { id: "f2", q: "How can I schedule a product demo or consultation?", a: "We would love to connect! Please share your preferred date and time, and our specialist will confirm a meeting invitation with you.", cat: "Process" },
-  { id: "f3", q: "Where can I view your pricing and plans?", a: "Our pricing is structured based on team size and feature requirements. We can share a tailored proposal right after understanding your needs.", cat: "Pricing" },
-  { id: "f4", q: "What solutions do you offer?", a: "We provide lead management, WhatsApp CRM automation, pipeline tracking, and sales analytics to help teams scale revenue.", cat: "General" },
-  { id: "f5", q: "How do I reach human support directly?", a: "You can ask for a callback here or call our support line, and our account executive will connect with you right away.", cat: "Process" },
-];
+const INIT_FAQS = [];
 
-const INIT_CHAT = [
-  { role: "user",  text: "Hi, I'm interested in learning more about your CRM and WhatsApp automation", ts: "10:30 AM" },
-  { role: "agent", text: "Hi! I'm Priya from SmoothSales CRM 😊 Thank you for reaching out! Could you tell me a little about your team size and your main sales goals?", ts: "10:30 AM" },
-  { role: "user",  text: "We have an 8-member sales team and want to automate lead follow-ups via WhatsApp", ts: "10:31 AM" },
-  { role: "agent", text: "That's a great fit! Our WhatsApp Cloud API integration allows automated follow-ups and broadcast campaigns for your entire sales pipeline. Would you like to schedule a quick 15-minute live demo today or tomorrow? 🚀", ts: "10:31 AM" },
-];
+const INIT_CHAT = [];
 
 const VARS = [
   { id: "{{agent_name}}",   label: "Agent Name" },
@@ -117,16 +108,18 @@ export default function WhatsAppAIAgentPage() {
   const metaAccounts = accounts.filter((a) => a.type === "meta");
   // Identity
   const [agentEnabled, setAgentEnabled] = useState(true);
-  const [agentName, setAgentName]       = useState("Priya");
-  const [persona, setPersona]           = useState("Sales & Solutions Specialist at SmoothSales CRM");
+  const [agentName, setAgentName]       = useState("");
+  const [persona, setPersona]           = useState("");
   const [tone, setTone]                 = useState("friendly");
-  const [language, setLanguage]         = useState("hinglish");
+  const [language, setLanguage]         = useState("english");
   const [model, setModel]               = useState("gpt-4o-mini");
-  const [greeting, setGreeting]         = useState("Hi! I'm {{agent_name}} from {{company_name}} 😊 How can I help you today?");
-  const [fallback, setFallback]         = useState("Let me connect you with one of our team members who can better assist you!");
+  const [greeting, setGreeting]         = useState("");
+  const [fallback, setFallback]         = useState("");
   const [workingHours, setWorkingHours] = useState(true);
   const [maxTurns, setMaxTurns]         = useState("10");
   const [responseDelay, setResponseDelay] = useState("2");
+  const [configLoading, setConfigLoading] = useState(false);
+  const [stats, setStats] = useState(null);
 
   // Prompt
   const [systemPrompt, setSystemPrompt] = useState(DEFAULT_PROMPT);
@@ -152,6 +145,35 @@ export default function WhatsAppAIAgentPage() {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat, isTyping]);
 
+  // Load config, FAQs, and stats from API on mount
+  useEffect(() => {
+    setConfigLoading(true);
+    Promise.all([
+      whatsappAiAgentApi.getConfig(),
+      whatsappAiAgentApi.getFaqs(),
+      whatsappAiAgentApi.getStats(),
+    ]).then(([cfg, faqList, statsData]) => {
+      if (cfg) {
+        if (cfg.agentEnabled !== undefined) setAgentEnabled(cfg.agentEnabled);
+        if (cfg.agentName)     setAgentName(cfg.agentName);
+        if (cfg.persona)       setPersona(cfg.persona);
+        if (cfg.tone)          setTone(cfg.tone);
+        if (cfg.language)      setLanguage(cfg.language);
+        if (cfg.model)         setModel(cfg.model);
+        if (cfg.greeting)      setGreeting(cfg.greeting);
+        if (cfg.fallback)      setFallback(cfg.fallback);
+        if (cfg.workingHours !== undefined) setWorkingHours(cfg.workingHours);
+        if (cfg.maxTurns)      setMaxTurns(String(cfg.maxTurns));
+        if (cfg.responseDelay !== undefined) setResponseDelay(String(cfg.responseDelay));
+        if (cfg.systemPrompt)  setSystemPrompt(cfg.systemPrompt);
+        if (cfg.handoffRules)  setHandoffRules(cfg.handoffRules);
+        if (cfg.leadRules)     setLeadRules(cfg.leadRules);
+      }
+      if (Array.isArray(faqList) && faqList.length > 0) setFaqs(faqList);
+      if (statsData) setStats(statsData);
+    }).catch(() => {}).finally(() => setConfigLoading(false));
+  }, []);
+
   const insertVar = (v) => {
     const ta = promptRef.current;
     if (!ta) { setSystemPrompt((p) => p + " " + v); return; }
@@ -161,17 +183,20 @@ export default function WhatsAppAIAgentPage() {
     setTimeout(() => { ta.focus(); ta.setSelectionRange(start + v.length, start + v.length); }, 0);
   };
 
-  const addFaq = () => {
+  const addFaq = async () => {
     if (!newQ.trim() || !newA.trim()) return toast.error("Fill both question and answer");
+    let updated;
     if (editingFaq) {
-      setFaqs((p) => p.map((f) => f.id === editingFaq ? { ...f, q: newQ, a: newA, cat: newCat } : f));
+      updated = faqs.map((f) => f.id === editingFaq ? { ...f, q: newQ, a: newA, cat: newCat } : f);
       setEditingFaq(null);
       toast.success("FAQ updated");
     } else {
-      setFaqs((p) => [...p, { id: `f_${Date.now()}`, q: newQ, a: newA, cat: newCat }]);
+      updated = [...faqs, { id: `f_${Date.now()}`, q: newQ, a: newA, cat: newCat }];
       toast.success("FAQ added");
     }
+    setFaqs(updated);
     setNewQ(""); setNewA(""); setNewCat("General");
+    try { await whatsappAiAgentApi.saveFaqs(updated); } catch {}
   };
 
   const startEditFaq = (faq) => {
@@ -181,23 +206,31 @@ export default function WhatsAppAIAgentPage() {
 
   const cancelEdit = () => { setEditingFaq(null); setNewQ(""); setNewA(""); setNewCat("General"); };
 
-  const sendTest = () => {
+  const sendTest = async () => {
     if (!testInput.trim()) return;
     const userMsg = { role: "user", text: testInput, ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) };
     setChat((p) => [...p, userMsg]);
+    const inputText = testInput;
     setTestInput("");
     setIsTyping(true);
-    setTimeout(() => {
-      const t = testInput.toLowerCase();
-      let reply = `Thanks for reaching out! I'm ${agentName} from Jaipur Interiors. Could you tell me more about your requirements?`;
-      if (t.includes("price") || t.includes("cost") || t.includes("budget")) reply = "Our packages start from ₹8L for 3BHK. We have beautiful designs in every budget! Would you like a free site visit? 😊";
-      else if (t.includes("visit") || t.includes("meet")) reply = "Absolutely! We offer free site visits at your convenience. What day works best for you? 📅";
-      else if (t.includes("time") || t.includes("days") || t.includes("long")) reply = "Typically 45-60 days for a 3BHK. We'll give you a detailed timeline after the site visit! 🏠";
-      else if (t.includes("warranty") || t.includes("guarantee")) reply = "We provide a 10-year warranty on all modular furniture and 1-year on civil work. Quality is our promise! ✅";
-      const agentMsg = { role: "agent", text: reply, ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) };
+    try {
+      if (isApiMode()) {
+        const res = await whatsappAiAgentApi.chat(
+          [...chat, userMsg].map((m) => ({ role: m.role, content: m.text })),
+          { agentName, persona, tone, language, model, systemPrompt }
+        );
+        const reply = res?.reply || res?.message || res?.content || "I couldn't process that. Please try again.";
+        setChat((p) => [...p, { role: "agent", text: reply, ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }]);
+      } else {
+        setTimeout(() => {
+          setChat((p) => [...p, { role: "agent", text: "AI chat requires API mode to be enabled.", ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }]);
+        }, 800);
+      }
+    } catch {
+      setChat((p) => [...p, { role: "agent", text: "Failed to get AI response. Check your API configuration.", ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }]);
+    } finally {
       setIsTyping(false);
-      setChat((p) => [...p, agentMsg]);
-    }, 1200);
+    }
   };
 
   const filteredFaqs = faqCat === "All" ? faqs : faqs.filter((f) => f.cat === faqCat);
@@ -246,7 +279,18 @@ export default function WhatsAppAIAgentPage() {
               {agentEnabled ? "Active" : "Paused"}
             </span>
           </div>
-          <Button size="sm" className="h-8 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700 text-white" onClick={() => toast.success("AI Agent configuration saved!")}>
+          <Button size="sm" className="h-8 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700 text-white" onClick={async () => {
+            try {
+              await whatsappAiAgentApi.saveConfig({
+                agentEnabled, agentName, persona, tone, language, model,
+                greeting, fallback, workingHours, maxTurns: Number(maxTurns),
+                responseDelay: Number(responseDelay), systemPrompt,
+                handoffRules, leadRules,
+              });
+              await whatsappAiAgentApi.saveFaqs(faqs);
+              toast.success("AI Agent configuration saved!");
+            } catch { toast.error("Failed to save configuration"); }
+          }}>
             <Save className="h-3.5 w-3.5" />Save Config
           </Button>
         </div>
@@ -255,10 +299,10 @@ export default function WhatsAppAIAgentPage() {
       {/* ── KPI Strip ───────────────────────────────────────────────────────── */}
       <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 border-b border-border bg-card/60">
         {[
-          { label: "Conversations Handled", value: "1,284", sub: "last 30 days",   Icon: MessageCircle, color: "text-emerald-600", bg: "bg-emerald-500/10" },
-          { label: "Human Escalations",     value: "142",   sub: "11% escalation", Icon: ShieldAlert,   color: "text-amber-600",  bg: "bg-amber-500/10" },
-          { label: "Avg Response Time",     value: "1.2s",  sub: "p95: 2.8s",      Icon: Zap,           color: "text-blue-600",   bg: "bg-blue-500/10" },
-          { label: "Satisfaction Rate",     value: "94%",   sub: "↑ 2% this week", Icon: TrendingUp,    color: "text-violet-600", bg: "bg-violet-500/10" },
+          { label: "Conversations Handled", value: stats?.conversationsHandled ?? "—", sub: "last 30 days",   Icon: MessageCircle, color: "text-emerald-600", bg: "bg-emerald-500/10" },
+          { label: "Human Escalations",     value: stats?.humanEscalations ?? "—",     sub: stats?.escalationRate ? `${stats.escalationRate}% rate` : "no data yet", Icon: ShieldAlert, color: "text-amber-600", bg: "bg-amber-500/10" },
+          { label: "Avg Response Time",     value: stats?.avgResponseTime ?? "—",      sub: stats?.p95ResponseTime ? `p95: ${stats.p95ResponseTime}` : "no data yet", Icon: Zap, color: "text-blue-600", bg: "bg-blue-500/10" },
+          { label: "Satisfaction Rate",     value: stats?.satisfactionRate ?? "—",     sub: stats?.satisfactionTrend ?? "no data yet", Icon: TrendingUp, color: "text-violet-600", bg: "bg-violet-500/10" },
         ].map((s, i) => (
           <div key={s.label} className={`px-5 py-3 flex items-center gap-3 ${i < 3 ? "border-r border-border" : ""}`}>
             <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 ${s.bg}`}>

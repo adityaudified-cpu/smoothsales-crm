@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  MOCK_TEMPLATES, MOCK_SEGMENTS, STATUS_CFG, encodeId,
+  STATUS_CFG, encodeId,
 } from "./data";
 // Note: MOCK_CAMPAIGNS removed — campaigns loaded from API
 import { useWaAccounts } from "../wa-accounts-context";
@@ -59,13 +59,13 @@ function TemplatePreview({ tmpl, varValues }) {
 
 // ─── Create Campaign Modal ────────────────────────────────────────────────────
 
-function CreateCampaignModal({ open, onClose, onSubmit, templates = MOCK_TEMPLATES }) {
+function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments = [] }) {
   const [form, setForm] = useState({ ...BLANK_FORM });
   const [step, setStep] = useState(1);
   const fileRef = useRef(null);
 
   const selectedTemplate = templates.find((t) => t.id === form.templateId);
-  const selectedSegment  = MOCK_SEGMENTS.find((s) => s.id === form.segmentId);
+  const selectedSegment  = segments.find((s) => s.id === form.segmentId);
 
   const setF = (patch) => setForm((p) => ({ ...p, ...patch }));
   const setVar = (key, val) => setForm((p) => ({ ...p, variableValues: { ...p.variableValues, [key]: val } }));
@@ -170,7 +170,7 @@ function CreateCampaignModal({ open, onClose, onSubmit, templates = MOCK_TEMPLAT
                     <Select value={form.segmentId} onValueChange={(v) => setF({ segmentId: v })}>
                       <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select segment" /></SelectTrigger>
                       <SelectContent>
-                        {MOCK_SEGMENTS.map((s) => (
+                        {segments.map((s) => (
                           <SelectItem key={s.id} value={s.id} className="text-xs">
                             {s.label} <span className="text-muted-foreground">({s.count.toLocaleString()} leads)</span>
                           </SelectItem>
@@ -293,7 +293,8 @@ export default function WhatsAppCampaignsPage() {
   const onlyPersonal = accounts.length > 0 && metaAccounts.length === 0;
 
   const [campaigns, setCampaigns] = useState([]);
-  const [apiTemplates, setApiTemplates] = useState(MOCK_TEMPLATES);
+  const [apiTemplates, setApiTemplates] = useState([]);
+  const [segments, setSegments] = useState([]);
   const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(false);
   const [search, setSearch]       = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -335,6 +336,26 @@ export default function WhatsAppCampaignsPage() {
     whatsappTemplatesApi.getApproved()
       .then((data) => { if (Array.isArray(data) && data.length > 0) setApiTemplates(data); })
       .catch(() => {});
+  }, []);
+
+  // Load segments from API
+  useEffect(() => {
+    if (!isApiMode()) return;
+    Promise.all([
+      whatsappCampaignsApi.previewAudience("all_leads"),
+      whatsappCampaignsApi.previewAudience("hot_leads"),
+      whatsappCampaignsApi.previewAudience("scheduled"),
+      whatsappCampaignsApi.previewAudience("quote_sent"),
+      whatsappCampaignsApi.previewAudience("followup_due"),
+    ]).then(([all, hot, sched, quote, followup]) => {
+      setSegments([
+        { id: "all_leads",    label: "All Active Leads",           count: all?.count ?? 0 },
+        { id: "hot_leads",    label: "Hot Leads",                  count: hot?.count ?? 0 },
+        { id: "scheduled",    label: "Meeting / Visit Scheduled",  count: sched?.count ?? 0 },
+        { id: "quote_sent",   label: "Quotation Sent",             count: quote?.count ?? 0 },
+        { id: "followup_due", label: "Follow-up Due",              count: followup?.count ?? 0 },
+      ]);
+    }).catch(() => {});
   }, []);
 
   // WebSocket: live campaign progress
@@ -650,7 +671,7 @@ export default function WhatsAppCampaignsPage() {
         </div>
       </div>
 
-      <CreateCampaignModal open={createOpen} onClose={() => setCreateOpen(false)} onSubmit={handleCreate} templates={apiTemplates} />
+      <CreateCampaignModal open={createOpen} onClose={() => setCreateOpen(false)} onSubmit={handleCreate} templates={apiTemplates} segments={segments} />
 
       <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <DialogContent className="max-w-sm">

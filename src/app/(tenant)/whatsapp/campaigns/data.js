@@ -1,44 +1,5 @@
 import { CheckCircle2, Clock, AlertCircle, Pause, RefreshCw } from "lucide-react";
 
-export const MOCK_TEMPLATES = [
-  {
-    id: "t_welcome", name: "lead_welcome_intro", displayName: "Lead Welcome & Intro",
-    category: "UTILITY", status: "APPROVED",
-    header: "Welcome to {{2}}", footer: "SmoothSales CRM",
-    body: "Hi {{1}}! 👋 Thank you for your interest in {{2}}. We are excited to assist you. Would you be available for a quick discovery call this week? Reply YES to connect with our specialist.",
-    variables: ["customer_name", "company_name"],
-  },
-  {
-    id: "t_demo_reminder", name: "meeting_demo_reminder", displayName: "Meeting / Demo Reminder",
-    category: "UTILITY", status: "APPROVED",
-    header: "Reminder: Scheduled Session", footer: "Reply CANCEL to reschedule",
-    body: "Hi {{1}}, this is a friendly reminder for your scheduled session with {{4}} on *{{2}}* at *{{3}}*. Please reply YES to confirm your attendance.",
-    variables: ["customer_name", "meeting_date", "meeting_time", "rep_name"],
-  },
-  {
-    id: "t_quote_ready", name: "quotation_ready", displayName: "Quotation Ready",
-    category: "UTILITY", status: "APPROVED",
-    header: "Your Quotation is Ready", footer: "SmoothSales CRM",
-    body: "Hi {{1}}, your customized proposal is ready! 📋 Estimated value: *{{2}}*. Please review and let us know if you would like to discuss next steps.",
-    variables: ["customer_name", "quote_amount"],
-  },
-  {
-    id: "t_followup", name: "lead_nudge_followup", displayName: "Product Follow-up",
-    category: "MARKETING", status: "APPROVED",
-    header: null, footer: "Reply STOP to unsubscribe",
-    body: "Hi {{1}}! We wanted to check if you had any questions regarding our solutions. Reply YES to schedule a 10-minute demo, or call us directly at {{2}}.",
-    variables: ["customer_name", "contact_phone"],
-  },
-];
-
-export const MOCK_SEGMENTS = [
-  { id: "all_leads", label: "All Active Leads", count: 242 },
-  { id: "hot_leads", label: "Hot Leads", count: 48 },
-  { id: "scheduled", label: "Meeting / Visit Scheduled", count: 34 },
-  { id: "quote_sent", label: "Quotation Sent", count: 29 },
-  { id: "followup_due", label: "Follow-up Due", count: 62 },
-];
-
 export const STATUS_CFG = {
   completed: { label: "Completed", cls: "bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:border-emerald-800 dark:text-emerald-400", dot: "bg-emerald-500", Icon: CheckCircle2 },
   running:   { label: "Running",   cls: "bg-blue-500/10 text-blue-700 border-blue-200 dark:border-blue-800 dark:text-blue-400",               dot: "bg-blue-500",    Icon: RefreshCw },

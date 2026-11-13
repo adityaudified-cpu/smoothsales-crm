@@ -275,7 +275,7 @@ export default function ActiveLeadsPage() {
   }, [allLeads]);
 
   return (
-    <div className="flex flex-col gap-2.5 pb-10 w-full">
+    <div className="flex flex-col gap-2.5 pb-10 w-full" suppressHydrationWarning>
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>

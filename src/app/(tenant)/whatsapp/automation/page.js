@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWaAccounts, CHANNEL_BADGE } from "../wa-accounts-context";
+import { whatsappAutomationApi } from "@/lib/api/whatsapp";
+import { isApiMode } from "@/lib/api/client";
 
 // ─── Static Data ──────────────────────────────────────────────────────────────
 
@@ -29,13 +31,6 @@ const TRIGGERS = [
   { id: "keyword_received", label: "Keyword Received", bg: "bg-pink-500", hex: "#ec4899", Icon: MousePointerClick },
   { id: "deal_stage_changed", label: "Deal Stage Changed", bg: "bg-indigo-500", hex: "#6366f1", Icon: GitBranch },
   { id: "webhook", label: "Webhook Trigger", bg: "bg-orange-500", hex: "#f97316", Icon: Webhook },
-];
-
-const TEMPLATES = [
-  { id: "t_welcome", name: "lead_welcome_intro", display: "Lead Welcome & Intro", body: "Hi {{1}}! Welcome to {{2}}. Would you like to schedule a discovery demo?", vars: ["customer_name", "company_name"] },
-  { id: "t_demo_reminder", name: "meeting_demo_reminder", display: "Meeting / Demo Reminder", body: "Hi {{1}}, this is a reminder for your scheduled meeting on {{2}} at {{3}}.", vars: ["customer_name", "visit_date", "visit_time"] },
-  { id: "t_followup", name: "product_followup", display: "Product Follow-up", body: "Hi {{1}}! Following up on your enquiry. Reply YES or call {{2}}.", vars: ["customer_name", "phone_number"] },
-  { id: "t_quote_ready", name: "quotation_ready", display: "Quotation Ready", body: "Hi {{1}}, your quotation is ready! Estimated value: {{2}}.", vars: ["customer_name", "quote_amount"] },
 ];
 
 const LEAD_FIELDS = [
@@ -75,57 +70,14 @@ const NODE_TYPES = [
   { id: "end", label: "End Flow", Icon: CheckCircle2, hex: "#6b7280", light: "rgba(107,114,128,0.05)", border: "rgba(107,114,128,0.18)" },
 ];
 
-const MOCK_FLOWS = [
-  {
-    id: "f1", name: "New Lead Instant Welcome Flow", active: true,
-    trigger: "lead_created", triggerLabel: "New Lead Created", triggerBg: "bg-blue-500",
-    leadsProcessed: 842, lastRun: "2 min ago", lastEdited: "Today",
-    stats: { sent: 842, delivered: 801, replied: 312, converted: 89 },
-    reenrollAfterDays: 0,
-    steps: [
-      { id: "s1", type: "send_template", label: "Send Welcome & Intro", templateId: "t_welcome", varMap: { "1": "lead.name", "2": "company.name" }, delayValue: "", delayUnit: "hours" },
-      { id: "s2", type: "wait", label: "Wait 24 Hours", delayValue: "24", delayUnit: "hours" },
-      { id: "s3", type: "condition", label: "Did they reply?", conditionId: "replied" },
-      { id: "s4", type: "send_template", label: "Send Follow-up", templateId: "t_followup", varMap: { "1": "lead.name", "2": "company.phone" }, delayValue: "", delayUnit: "hours" },
-      { id: "s5", type: "end", label: "End Flow" },
-    ],
-  },
-  {
-    id: "f2", name: "Meeting / Demo Confirmation", active: true,
-    trigger: "visit_scheduled", triggerLabel: "Meeting Scheduled", triggerBg: "bg-violet-500",
-    leadsProcessed: 234, lastRun: "1 hour ago", lastEdited: "Yesterday",
-    stats: { sent: 234, delivered: 228, replied: 198, converted: 54 },
-    reenrollAfterDays: 0,
-    steps: [
-      { id: "s1", type: "send_template", label: "Send Confirmation", templateId: "t_demo_reminder", varMap: { "1": "lead.name", "2": "lead.visit_date", "3": "lead.visit_time" }, delayValue: "", delayUnit: "hours" },
-      { id: "s2", type: "wait", label: "Wait 2 Hours Before", delayValue: "2", delayUnit: "hours" },
-      { id: "s3", type: "end", label: "End Flow" },
-    ],
-  },
-  {
-    id: "f3", name: "Quotation Follow-up", active: false,
-    trigger: "quotation_sent", triggerLabel: "Quotation Sent", triggerBg: "bg-amber-500",
-    leadsProcessed: 156, lastRun: "3 days ago", lastEdited: "3 days ago",
-    stats: { sent: 156, delivered: 149, replied: 67, converted: 23 },
-    reenrollAfterDays: 7,
-    steps: [
-      { id: "s1", type: "send_template", label: "Quotation Notification", templateId: "t_quote_ready", varMap: { "1": "lead.name", "2": "lead.quote_amount" }, delayValue: "", delayUnit: "hours" },
-      { id: "s2", type: "wait", label: "Wait 48 Hours", delayValue: "48", delayUnit: "hours" },
-      { id: "s3", type: "condition", label: "If No Reply", conditionId: "replied" },
-      { id: "s4", type: "send_template", label: "Send Reminder", templateId: "t_followup", varMap: { "1": "lead.name", "2": "company.phone" }, delayValue: "", delayUnit: "hours" },
-      { id: "s5", type: "end", label: "End Flow" },
-    ],
-  },
-];
-
 const BLANK = { type: "send_template", label: "", templateId: "", varMap: {}, delayValue: "", delayUnit: "hours", conditionId: "" };
 
 // ─── Canvas Node ──────────────────────────────────────────────────────────────
 
-function CanvasNode({ step, index, isLast, onDelete, onEdit, onMoveUp, onMoveDown, canMoveUp, canMoveDown, onAddAfter }) {
+function CanvasNode({ step, index, isLast, onDelete, onEdit, onMoveUp, onMoveDown, canMoveUp, canMoveDown, onAddAfter, templates = [] }) {
   const nt = NODE_TYPES.find((t) => t.id === step.type) || NODE_TYPES[0];
   const { Icon } = nt;
-  const tmpl = step.templateId ? TEMPLATES.find((t) => t.id === step.templateId) : null;
+  const tmpl = step.templateId ? templates.find((t) => t.id === step.templateId) : null;
   const cond = step.conditionId ? CONDITIONS.find((c) => c.id === step.conditionId) : null;
   const isEnd = step.type === "end";
 
@@ -244,14 +196,14 @@ function CanvasNode({ step, index, isLast, onDelete, onEdit, onMoveUp, onMoveDow
 
 // ─── Step Config Dialog ───────────────────────────────────────────────────────
 
-function StepDialog({ open, onOpenChange, initial, onSave, mode }) {
+function StepDialog({ open, onOpenChange, initial, onSave, mode, templates = [] }) {
   const { accounts = [] } = useWaAccounts();
   const metaAccounts = (accounts || []).filter((a) => a.type === "meta");
   const personalAccounts = (accounts || []).filter((a) => a.type === "personal");
   const [step, setStep] = useState({ ...BLANK });
   React.useEffect(() => { if (open) setStep({ ...initial }); }, [open]);
 
-  const tmpl = step.templateId ? TEMPLATES.find((t) => t.id === step.templateId) : null;
+  const tmpl = step.templateId ? templates.find((t) => t.id === step.templateId) : null;
 
   const setType = (type) => setStep({ ...BLANK, type, id: step.id });
 
@@ -304,27 +256,30 @@ function StepDialog({ open, onOpenChange, initial, onSave, mode }) {
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">Template *</Label>
                 <Select value={step.templateId} onValueChange={(v) => {
-                  const t = TEMPLATES.find((x) => x.id === v);
-                  setStep((p) => ({ ...p, templateId: v, label: t?.display || "", varMap: {} }));
+                  const t = templates.find((x) => x.id === v);
+                  setStep((p) => ({ ...p, templateId: v, label: t?.display || t?.displayName || "", varMap: {} }));
                 }}>
-                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Choose approved template" /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs"><SelectValue placeholder={templates.length === 0 ? "No approved templates — sync from Meta" : "Choose approved template"} /></SelectTrigger>
                   <SelectContent>
-                    {TEMPLATES.map((t) => (
+                    {templates.map((t) => (
                       <SelectItem key={t.id} value={t.id} className="text-xs">
-                        <span className="font-semibold">{t.display}</span>
+                        <span className="font-semibold">{t.display || t.displayName}</span>
                         <span className="text-muted-foreground ml-1.5 font-mono text-[10px]">{t.name}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {templates.length === 0 && (
+                  <p className="text-[10px] text-amber-600">No templates loaded. Go to Templates tab and sync from Meta first.</p>
+                )}
               </div>
               {tmpl && (
                 <>
                   <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-[11px] text-foreground leading-relaxed">{tmpl.body}</div>
-                  {tmpl.vars.length > 0 && (
+                  {(tmpl.vars || tmpl.variables || []).length > 0 && (
                     <div className="space-y-2">
                       <Label className="text-xs font-semibold">Variable Mapping</Label>
-                      {tmpl.vars.map((_, i) => (
+                      {(tmpl.vars || tmpl.variables || []).map((_, i) => (
                         <div key={i} className="flex items-center gap-2">
                           <span className="text-[10px] font-mono font-bold bg-muted px-2 py-1.5 rounded-lg border border-border w-14 text-center shrink-0 text-emerald-600">{`{{${i + 1}}}`}</span>
                           <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
@@ -419,22 +374,77 @@ export default function WhatsAppAutomationPage() {
   const metaAccounts = accounts.filter((a) => a.type === "meta");
   const personalAccounts = accounts.filter((a) => a.type === "personal");
 
-  const [flows, setFlows] = useState(() => {
-    if (typeof window !== "undefined") {
+  const [flows, setFlows] = useState([]);
+  const [apiTemplates, setApiTemplates] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [flowsLoading, setFlowsLoading] = useState(false);
+
+  // Load flows and templates from API on mount
+  useEffect(() => {
+    setFlowsLoading(true);
+    Promise.all([
+      whatsappAutomationApi.getAll(),
+      whatsappAutomationApi.getTemplates(),
+    ]).then(([flowList, tmplList]) => {
+      if (Array.isArray(flowList) && flowList.length > 0) {
+        const mapped = flowList.map((f) => ({
+          id: String(f.id),
+          name: f.name || "",
+          active: Boolean(f.active || f.enabled),
+          trigger: f.triggerType || f.trigger || "",
+          triggerLabel: f.triggerLabel || f.triggerType || f.trigger || "",
+          triggerBg: TRIGGERS.find((t) => t.id === (f.triggerType || f.trigger))?.bg || "bg-muted",
+          leadsProcessed: f.leadsProcessed || f.executionCount || 0,
+          lastRun: f.lastRunAt ? new Date(f.lastRunAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "Never",
+          lastEdited: f.updatedAt ? new Date(f.updatedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "",
+          reenrollAfterDays: f.reenrollAfterDays || 0,
+          stats: { sent: f.sentCount || 0, delivered: f.deliveredCount || 0, replied: f.repliedCount || 0, converted: f.convertedCount || 0 },
+          steps: Array.isArray(f.steps) ? f.steps : [{ id: "s_end", type: "end", label: "End Flow" }],
+        }));
+        setFlows(mapped);
+        setSelected(mapped[0] || null);
+      } else {
+        // fallback to localStorage
+        try {
+          const stored = localStorage.getItem("wa_automation_flows_v1");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setFlows(parsed);
+              setSelected(parsed[0] || null);
+            }
+          }
+        } catch {}
+      }
+      if (Array.isArray(tmplList) && tmplList.length > 0) {
+        setApiTemplates(tmplList.map((t) => ({
+          id: String(t.id || t.templateName),
+          name: t.templateName || t.name || "",
+          display: t.displayName || t.templateName || "",
+          body: t.bodyText || t.body || "",
+          vars: t.variables || [],
+        })));
+      }
+    }).catch(() => {
       try {
         const stored = localStorage.getItem("wa_automation_flows_v1");
-        if (stored) return JSON.parse(stored);
-      } catch { }
-    }
-    return MOCK_FLOWS;
-  });
-  const [selected, setSelected] = useState(MOCK_FLOWS[0]);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) { setFlows(parsed); setSelected(parsed[0] || null); }
+        }
+      } catch {}
+    }).finally(() => setFlowsLoading(false));
+  }, []);
 
+  // Persist flows to localStorage as fallback
   useEffect(() => {
-    try {
-      localStorage.setItem("wa_automation_flows_v1", JSON.stringify(flows));
-    } catch { }
-  }, [flows]);
+    if (!flowsLoading && flows.length > 0) {
+      try { localStorage.setItem("wa_automation_flows_v1", JSON.stringify(flows)); } catch {}
+    }
+  }, [flows, flowsLoading]);
+
+  // Use apiTemplates if loaded, otherwise empty
+  const ACTIVE_TEMPLATES = apiTemplates;
   const [createOpen, setCreateOpen] = useState(false);
   const [stepOpen, setStepOpen] = useState(false);
   const [stepMode, setStepMode] = useState("add");
@@ -456,18 +466,24 @@ export default function WhatsAppAutomationPage() {
     });
   }, []);
 
-  const toggleFlow = (id) => {
+  const toggleFlow = async (id) => {
     const f = flows.find((x) => x.id === id);
-    mutate((prev) => prev.map((x) => x.id === id ? { ...x, active: !x.active } : x));
-    toast.success(`"${f?.name}" ${f?.active ? "paused" : "activated"}`);
+    const next = !f?.active;
+    mutate((prev) => prev.map((x) => x.id === id ? { ...x, active: next } : x));
+    try {
+      if (next) await whatsappAutomationApi.activate(id);
+      else await whatsappAutomationApi.pause(id);
+    } catch {}
+    toast.success(`"${f?.name}" ${next ? "activated" : "paused"}`);
   };
 
-  const deleteFlow = (id) => {
+  const deleteFlow = async (id) => {
     setFlows((prev) => {
       const next = prev.filter((f) => f.id !== id);
       setSelected((sel) => sel?.id === id ? (next[0] || null) : sel);
       return next;
     });
+    try { await whatsappAutomationApi.delete(id); } catch {}
     toast.success("Flow deleted");
   };
 
@@ -544,7 +560,7 @@ export default function WhatsAppAutomationPage() {
     setInsertAfter(null);
   };
 
-  const createFlow = () => {
+  const createFlow = async () => {
     if (!form.name.trim() || !form.trigger) return toast.error("Fill all required fields");
     const trig = TRIGGERS.find((t) => t.id === form.trigger);
     const nf = {
@@ -561,6 +577,12 @@ export default function WhatsAppAutomationPage() {
       stats: { sent: 0, delivered: 0, replied: 0, converted: 0 },
       steps: [{ id: "s_end", type: "end", label: "End Flow" }],
     };
+    try {
+      const created = await whatsappAutomationApi.create({
+        name: nf.name, triggerType: nf.trigger, reenrollAfterDays: nf.reenrollAfterDays, steps: nf.steps,
+      });
+      if (created?.id) nf.id = String(created.id);
+    } catch {}
     setFlows((prev) => [nf, ...prev]);
     setSelected(nf);
     setForm({ name: "", trigger: "", reenroll: 0 });
@@ -626,7 +648,7 @@ export default function WhatsAppAutomationPage() {
           { label: "Active Flows", value: activeCount, sub: `of ${flows.length} total`, color: "text-emerald-600", dot: "bg-emerald-500" },
           { label: "Leads Processed", value: totalProcessed.toLocaleString(), sub: "all time", color: "text-blue-600", dot: "bg-blue-500" },
           { label: "Conversions", value: totalConverted.toLocaleString(), sub: "from automation", color: "text-violet-600", dot: "bg-violet-500" },
-          { label: "Templates", value: TEMPLATES.length, sub: `${TEMPLATES.length} approved`, color: "text-amber-600", dot: "bg-amber-500" },
+          { label: "Templates", value: apiTemplates.length, sub: apiTemplates.length > 0 ? `${apiTemplates.length} approved` : "none synced", color: "text-amber-600", dot: "bg-amber-500" },
         ].map((k, i) => (
           <div key={k.label} className={`px-5 py-3 flex items-center gap-3 ${i < 3 ? "border-r border-border" : ""}`}>
             <span className={`h-2 w-2 rounded-full shrink-0 ${k.dot}`} />
@@ -826,6 +848,7 @@ export default function WhatsAppAutomationPage() {
                         canMoveUp={step.type !== "end" && i > 0 && selected.steps[i - 1]?.type !== "end"}
                         canMoveDown={step.type !== "end" && i < selected.steps.length - 2}
                         onAddAfter={() => openAdd(i)}
+                        templates={ACTIVE_TEMPLATES}
                       />
                     ))}
 
@@ -915,7 +938,7 @@ export default function WhatsAppAutomationPage() {
       </Dialog>
 
       {/* ── Step Dialog ─────────────────────────────────────────────────────── */}
-      <StepDialog open={stepOpen} onOpenChange={setStepOpen} initial={stepInitial} onSave={saveStep} mode={stepMode} />
+      <StepDialog open={stepOpen} onOpenChange={setStepOpen} initial={stepInitial} onSave={saveStep} mode={stepMode} templates={ACTIVE_TEMPLATES} />
 
       {/* ── Test Flow Dialog ─────────────────────────────────────────────────── */}
       <Dialog open={testOpen} onOpenChange={setTestOpen}>
