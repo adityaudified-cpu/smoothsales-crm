@@ -1,21 +1,23 @@
-import { Manrope, IBM_Plex_Sans } from "next/font/google";
+import { Instrument_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
-const manrope = Manrope({
+const sans = Instrument_Sans({
   subsets: ["latin"],
-  weight: ["600", "700", "800"],
-  variable: "--font-manrope",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-sans",
+  display: "swap",
 });
 
-const plexSans = IBM_Plex_Sans({
+const mono = JetBrains_Mono({
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-plex",
+  weight: ["400", "500"],
+  variable: "--font-mono",
+  display: "swap",
 });
 
 export const metadata = {
-  title: "SmoothSales.ai — Multi-Tenant SaaS CRM",
-  description: "High-velocity sales CRM with automated lead distribution and channel commissions",
+  title: "SmoothSales CRM",
+  description: "Lead management, WhatsApp and integrations for sales teams",
   icons: {
     icon: "/images/smoothsales-logo.jpg",
   },
@@ -33,7 +35,7 @@ import { AuthProvider } from "@/lib/auth/auth-context";
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${manrope.variable} ${plexSans.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
       <body className="min-h-screen bg-background font-sans antialiased text-foreground" suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light" enableSystem={false} disableTransitionOnChange>
           <AuthProvider>

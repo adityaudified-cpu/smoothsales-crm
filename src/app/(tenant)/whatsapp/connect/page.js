@@ -331,30 +331,6 @@ export default function WhatsAppConnectPage() {
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [liveApprovedTemplates, setLiveApprovedTemplates] = useState([]);
 
-  // Generate dynamic real QR Code data URL whenever phone or session changes
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const rawNum = pairPhone.replace(/\D/g, "");
-    const cleanNum = rawNum ? (rawNum.startsWith("91") ? rawNum : `91${rawNum}`) : "918750073899";
-    const payload = `https://wa.me/${cleanNum}?text=${encodeURIComponent(`SmoothSales CRM Link Request [${Math.random().toString(36).substring(2, 8).toUpperCase()}]`)}`;
-    
-    import("qrcode")
-      .then((QRCodeModule) => {
-        const QRCode = QRCodeModule.default || QRCodeModule;
-        return QRCode.toDataURL(payload, {
-          width: 240,
-          margin: 1,
-          color: {
-            dark: "#0f172a",
-            light: "#ffffff",
-          },
-          errorCorrectionLevel: "M",
-        });
-      })
-      .then((url) => setQrDataUrl(url))
-      .catch(() => {});
-  }, [pairPhone, qrRefreshedAt]);
-
   // Pre-fill credentials modal from existing meta account when opened
   useEffect(() => {
     if (showCredentialsModal && metaAccount) {

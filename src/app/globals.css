@@ -1,1 +1,150 @@
-@import "@smoothsales/ui/globals.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * SmoothSales design tokens — "Operator console".
+ * Ledger-paper surfaces, register-ink teal as the only accent, stamp red / highlighter
+ * amber / read-tick blue for status. Values are HSL channels consumed as hsl(var(--x)).
+ */
+@layer base {
+  :root {
+    /* Surfaces: canvas is warm paper, panels sit one step lighter */
+    --background: 45 16% 96%;
+    --foreground: 200 25% 11%;
+    --card: 45 30% 99.5%;
+    --card-foreground: 200 25% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 200 25% 11%;
+
+    /* Ink teal — primary action and active state only */
+    --primary: 172 62% 24%;
+    --primary-foreground: 45 30% 98%;
+    --secondary: 45 12% 92%;
+    --secondary-foreground: 200 25% 14%;
+    --accent: 168 32% 92%;
+    --accent-foreground: 172 62% 19%;
+
+    --muted: 45 12% 92.5%;
+    --muted-foreground: 200 8% 36%;
+
+    /* Status */
+    --destructive: 4 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 145 55% 28%;
+    --success-foreground: 0 0% 100%;
+    --warning: 32 90% 35%;
+    --warning-foreground: 0 0% 100%;
+    --info: 208 75% 38%;
+    --info-foreground: 0 0% 100%;
+
+    /* Lines and controls */
+    --border: 40 10% 86%;
+    --input: 40 10% 80%;
+    --input-background: 45 14% 97.5%;
+    --ring: 172 62% 30%;
+
+    /* Charts: ink teal first, then status hues */
+    --chart-1: 172 62% 28%;
+    --chart-2: 208 70% 45%;
+    --chart-3: 32 85% 45%;
+    --chart-4: 145 45% 38%;
+    --chart-5: 4 60% 52%;
+
+    --radius: 0.5rem;
+    --shadow-color: 200 30% 10%;
+  }
+
+  .dark {
+    --background: 200 18% 8%;
+    --foreground: 45 15% 93%;
+    --card: 200 16% 10.5%;
+    --card-foreground: 45 15% 93%;
+    --popover: 200 15% 12.5%;
+    --popover-foreground: 45 15% 93%;
+
+    --primary: 168 52% 46%;
+    --primary-foreground: 200 30% 7%;
+    --secondary: 200 12% 15%;
+    --secondary-foreground: 45 15% 90%;
+    --accent: 172 30% 16%;
+    --accent-foreground: 168 50% 82%;
+
+    --muted: 200 12% 14%;
+    --muted-foreground: 200 8% 64%;
+
+    --destructive: 4 65% 56%;
+    --destructive-foreground: 200 30% 7%;
+    --success: 145 42% 50%;
+    --success-foreground: 200 30% 7%;
+    --warning: 38 82% 56%;
+    --warning-foreground: 200 30% 7%;
+    --info: 208 70% 64%;
+    --info-foreground: 200 30% 7%;
+
+    --border: 200 10% 19%;
+    --input: 200 10% 24%;
+    --input-background: 200 16% 9%;
+    --ring: 168 52% 52%;
+
+    --chart-1: 168 52% 48%;
+    --chart-2: 208 65% 62%;
+    --chart-3: 38 80% 58%;
+    --chart-4: 145 40% 52%;
+    --chart-5: 4 60% 60%;
+
+    --shadow-color: 0 0% 0%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+    letter-spacing: -0.015em;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.18);
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  .scrollbar-thin { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
+
+  /* Phone numbers, IDs, counters: never let digits shift layout */
+  .tabular { font-variant-numeric: tabular-nums; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
