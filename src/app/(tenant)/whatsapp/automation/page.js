@@ -425,13 +425,13 @@ export default function WhatsAppAutomationPage() {
         const stored = localStorage.getItem("wa_automation_flows_v2");
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
         }
       } catch { }
     }
-    return [];
+    return DEFAULT_AUTOMATION_BLUEPRINTS;
   });
-  const [selected, setSelected] = useState(() => flows[0] || null);
+  const [selected, setSelected] = useState(() => flows[0] || DEFAULT_AUTOMATION_BLUEPRINTS[0]);
 
   useEffect(() => {
     try {
@@ -944,51 +944,54 @@ export default function WhatsAppAutomationPage() {
           <DialogFooter>
             <Button variant="outline" size="sm" className="text-xs" onClick={() => setTestOpen(false)}>Cancel</Button>
             <Button size="sm" className="text-xs bg-blue-600 hover:bg-blue-700 text-white" onClick={() => {
+              if (!testPhone.trim()) return toast.error("Enter a phone number");
+              toast.success(`Test sent to ${testPhone}`);
               if (!testPhone.trim()) return toast.error("Enter a valid phone number (e.g. +91 98765 43210)");
               if (!metaAccounts.length && !personalAccounts.length) {
                 return toast.error("No active WhatsApp channel connected. Please connect WhatsApp under WhatsApp > Connect first.");
               }
               toast.info(`Dry-run validation succeeded for "${selected?.name || "Flow"}". Trigger conditions and payload format verified.`);
               setTestOpen(false); setTestPhone("");
+            }}>Send Test</Button>
             }}>Run Test</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
-      {/* ── Settings Dialog ──────────────────────────────────────────────────── */}
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-sm font-bold flex items-center gap-2">
-              <Settings2 className="h-4 w-4 text-muted-foreground" />Automation Settings
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            {[
-              { label: "Global Automation", desc: "Pause all flows at once", on: true },
-              { label: "Respect DND Hours", desc: "Don't send between 10PM–8AM", on: true },
-              { label: "Stop on Reply", desc: "Pause flow when lead replies", on: true },
-              { label: "Skip Weekends", desc: "Don't trigger flows on Sat/Sun", on: false },
-            ].map((s) => (
-              <div key={s.label} className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold text-foreground">{s.label}</p>
-                  <p className="text-[11px] text-muted-foreground">{s.desc}</p>
-                </div>
-                <Switch defaultChecked={s.on} />
-              </div>
-            ))}
-            <div className="space-y-1.5 pt-2 border-t border-border">
-              <Label className="text-xs font-semibold">Default Sender Name</Label>
-              <Input defaultValue="SmoothSales Team" className="h-9 text-xs" />
+      {/* ── Settings Dialog ──────────────────────────────────────────────────── */ }
+  <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+    <DialogContent className="max-w-sm">
+      <DialogHeader>
+        <DialogTitle className="text-sm font-bold flex items-center gap-2">
+          <Settings2 className="h-4 w-4 text-muted-foreground" />Automation Settings
+        </DialogTitle>
+      </DialogHeader>
+      <div className="space-y-4 py-2">
+        {[
+          { label: "Global Automation", desc: "Pause all flows at once", on: true },
+          { label: "Respect DND Hours", desc: "Don't send between 10PM–8AM", on: true },
+          { label: "Stop on Reply", desc: "Pause flow when lead replies", on: true },
+          { label: "Skip Weekends", desc: "Don't trigger flows on Sat/Sun", on: false },
+        ].map((s) => (
+          <div key={s.label} className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold text-foreground">{s.label}</p>
+              <p className="text-[11px] text-muted-foreground">{s.desc}</p>
             </div>
+            <Switch defaultChecked={s.on} />
           </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => setSettingsOpen(false)}>Cancel</Button>
-            <Button size="sm" className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setSettingsOpen(false); toast.success("Settings saved"); }}>Save Settings</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+        ))}
+        <div className="space-y-1.5 pt-2 border-t border-border">
+          <Label className="text-xs font-semibold">Default Sender Name</Label>
+          <Input defaultValue="SmoothSales Team" className="h-9 text-xs" />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button variant="outline" size="sm" className="text-xs" onClick={() => setSettingsOpen(false)}>Cancel</Button>
+        <Button size="sm" className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { setSettingsOpen(false); toast.success("Settings saved"); }}>Save Settings</Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+    </div >
   );
 }
