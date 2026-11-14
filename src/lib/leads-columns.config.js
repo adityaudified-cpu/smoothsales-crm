@@ -1,5 +1,4 @@
 // Master Column Configuration for Salesmax CRM Parity Leads Table
-import { getTenantCustomFields } from "./mock-data/tenant-custom-fields";
 
 // Default visible column IDs — Clean Salesmax Telecalling & Lead Execution Parity
 export const DEFAULT_VISIBLE_COLUMN_IDS = [

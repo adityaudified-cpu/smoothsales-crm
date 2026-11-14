@@ -39,17 +39,9 @@ Never:
 
 If asked if you are an AI: Say "I'm a digital assistant at {{company_name}}, happy to help you or connect you with our human team anytime! 😊"`;
 
-const INIT_FAQS = [
-  { id: "f1", q: "What are your business hours?", a: "Our team is available Monday to Saturday, 9:30 AM to 6:30 PM. Inbound messages are answered promptly during business hours!", cat: "General" },
-  { id: "f2", q: "How can I schedule a product demo or consultation?", a: "We would love to connect! Please share your preferred date and time, and our specialist will confirm a meeting invitation with you.", cat: "Process" },
-  { id: "f3", q: "Where can I view your pricing and plans?", a: "Our pricing is structured based on team size and feature requirements. We can share a tailored proposal right after understanding your needs.", cat: "Pricing" },
-  { id: "f4", q: "What solutions do you offer?", a: "We provide lead management, WhatsApp CRM automation, pipeline tracking, and sales analytics to help teams scale revenue.", cat: "General" },
-  { id: "f5", q: "How do I reach human support directly?", a: "You can ask for a callback here or call our support line, and our account executive will connect with you right away.", cat: "Process" },
-];
+const INIT_FAQS = [];
 
-const INIT_CHAT = [
-  { role: "agent", text: "Hello! I am your AI sales assistant. How can I help you today?", ts: "Just now" },
-];
+const INIT_CHAT = [];
 
 const VARS = [
   { id: "{{agent_name}}", label: "Agent Name" },
@@ -113,9 +105,9 @@ export default function WhatsAppAIAgentPage() {
   const { accounts } = useWaAccounts();
   const metaAccounts = accounts.filter((a) => a.type === "meta");
   // Identity
-  const [agentEnabled, setAgentEnabled] = useState(true);
-  const [agentName, setAgentName] = useState("Priya");
-  const [persona, setPersona] = useState("Sales & Solutions Specialist at SmoothSales CRM");
+  const [agentEnabled, setAgentEnabled] = useState(false);
+  const [agentName, setAgentName] = useState("Sales Assistant");
+  const [persona, setPersona] = useState("Sales & Solutions Specialist");
   const [tone, setTone] = useState("friendly");
   const [language, setLanguage] = useState("hinglish");
   const [model, setModel] = useState("gpt-4o-mini");

@@ -311,7 +311,7 @@ export default function LeadDetailPage() {
   const [visitOutcome, setVisitOutcome] = useState(VISIT_OUTCOMES[0]);
   const [visitAt, setVisitAt] = useState("");
   const [visitNotes, setVisitNotes] = useState("");
-  const [templateId, setTemplateId] = useState(WHATSAPP_TEMPLATES[0].id);
+  const [templateId, setTemplateId] = useState(WHATSAPP_TEMPLATES[0]?.id || "");
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDue, setTaskDue] = useState("");
   const [customFollowup, setCustomFollowup] = useState("");

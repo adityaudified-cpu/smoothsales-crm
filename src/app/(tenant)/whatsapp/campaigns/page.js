@@ -18,12 +18,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  MOCK_TEMPLATES, MOCK_SEGMENTS, STATUS_CFG, encodeId,
+  MOCK_TEMPLATES, STATUS_CFG, encodeId,
 } from "./data";
 // Note: MOCK_CAMPAIGNS removed — campaigns loaded from API
 import { useWaAccounts } from "../wa-accounts-context";
 import { whatsappCampaignsApi, whatsappTemplatesApi, subscribeCampaignProgress } from "@/lib/api/whatsapp";
-import { isApiMode } from "@/lib/api/client";
+import { isApiMode, apiRequest } from "@/lib/api/client";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 20];
 const BLANK_FORM = {
@@ -59,13 +59,13 @@ function TemplatePreview({ tmpl, varValues }) {
 
 // ─── Create Campaign Modal ────────────────────────────────────────────────────
 
-function CreateCampaignModal({ open, onClose, onSubmit, templates = [] }) {
+function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments = [] }) {
   const [form, setForm] = useState({ ...BLANK_FORM });
   const [step, setStep] = useState(1);
   const fileRef = useRef(null);
 
   const selectedTemplate = templates.find((t) => t.id === form.templateId);
-  const selectedSegment = MOCK_SEGMENTS.find((s) => s.id === form.segmentId);
+  const selectedSegment = segments.find((s) => s.id === form.segmentId);
 
   const setF = (patch) => setForm((p) => ({ ...p, ...patch }));
   const setVar = (key, val) => setForm((p) => ({ ...p, variableValues: { ...p.variableValues, [key]: val } }));
@@ -170,9 +170,9 @@ function CreateCampaignModal({ open, onClose, onSubmit, templates = [] }) {
                     <Select value={form.segmentId} onValueChange={(v) => setF({ segmentId: v })}>
                       <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select segment" /></SelectTrigger>
                       <SelectContent>
-                        {MOCK_SEGMENTS.map((s) => (
+                        {segments.map((s) => (
                           <SelectItem key={s.id} value={s.id} className="text-xs">
-                            {s.label} <span className="text-muted-foreground">({s.count.toLocaleString()} leads)</span>
+                            {s.name || s.label} <span className="text-muted-foreground">({(s.count || 0).toLocaleString()} leads)</span>
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -335,6 +335,17 @@ export default function WhatsAppCampaignsPage() {
     whatsappTemplatesApi.getApproved()
       .then((data) => { if (Array.isArray(data) && data.length > 0) setApiTemplates(data); })
       .catch(() => { });
+  }, []);
+
+  // Load real computed segments from API
+  const [segments, setSegments] = useState([]);
+  useEffect(() => {
+    apiRequest("/segments")
+      .then((data) => {
+        const list = Array.isArray(data) ? data : (data?.data || []);
+        if (Array.isArray(list)) setSegments(list);
+      })
+      .catch(() => setSegments([]));
   }, []);
 
   // WebSocket: live campaign progress
@@ -656,7 +667,7 @@ export default function WhatsAppCampaignsPage() {
         </div>
       </div>
 
-      <CreateCampaignModal open={createOpen} onClose={() => setCreateOpen(false)} onSubmit={handleCreate} templates={apiTemplates} />
+      <CreateCampaignModal open={createOpen} onClose={() => setCreateOpen(false)} onSubmit={handleCreate} templates={apiTemplates} segments={segments} />
 
       <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <DialogContent className="max-w-sm">

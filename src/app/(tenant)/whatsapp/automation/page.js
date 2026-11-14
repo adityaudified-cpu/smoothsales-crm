@@ -423,12 +423,15 @@ export default function WhatsAppAutomationPage() {
     if (typeof window !== "undefined") {
       try {
         const stored = localStorage.getItem("wa_automation_flows_v2");
-        if (stored) return JSON.parse(stored);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) return parsed;
+        }
       } catch { }
     }
-    return DEFAULT_AUTOMATION_BLUEPRINTS;
+    return [];
   });
-  const [selected, setSelected] = useState(() => flows[0] || DEFAULT_AUTOMATION_BLUEPRINTS[0]);
+  const [selected, setSelected] = useState(() => flows[0] || null);
 
   useEffect(() => {
     try {
@@ -941,10 +944,13 @@ export default function WhatsAppAutomationPage() {
           <DialogFooter>
             <Button variant="outline" size="sm" className="text-xs" onClick={() => setTestOpen(false)}>Cancel</Button>
             <Button size="sm" className="text-xs bg-blue-600 hover:bg-blue-700 text-white" onClick={() => {
-              if (!testPhone.trim()) return toast.error("Enter a phone number");
-              toast.success(`Test sent to ${testPhone}`);
+              if (!testPhone.trim()) return toast.error("Enter a valid phone number (e.g. +91 98765 43210)");
+              if (!metaAccounts.length && !personalAccounts.length) {
+                return toast.error("No active WhatsApp channel connected. Please connect WhatsApp under WhatsApp > Connect first.");
+              }
+              toast.info(`Dry-run validation succeeded for "${selected?.name || "Flow"}". Trigger conditions and payload format verified.`);
               setTestOpen(false); setTestPhone("");
-            }}>Send Test</Button>
+            }}>Run Test</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

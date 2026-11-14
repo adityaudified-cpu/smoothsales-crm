@@ -306,9 +306,9 @@ export function UniversalConfigModal({
             </div>
             <Input
               type={showSecrets.accessToken ? "text" : "password"}
-              value={credentials.accessToken !== undefined ? credentials.accessToken : secretHints.accessToken || ""}
+              value={credentials.accessToken || ""}
               onChange={(e) => handleCredentialChange("accessToken", e.target.value)}
-              placeholder={secretHints.accessToken || "EAAB..."}
+              placeholder={secretHints.accessToken ? `Configured (${secretHints.accessToken}) — enter new to replace` : "EAAB..."}
               className="h-9 text-xs font-mono bg-card mt-1"
             />
             <span className="text-[10px] text-muted-foreground mt-0.5 block">
@@ -322,7 +322,7 @@ export function UniversalConfigModal({
               <Input
                 value={credentials.businessId || ""}
                 onChange={(e) => handleCredentialChange("businessId", e.target.value)}
-                placeholder="e.g. 1197546510113741"
+                placeholder="Enter Business ID"
                 className="h-9 text-xs font-mono bg-card mt-1"
               />
               <span className="text-[10px] text-muted-foreground mt-0.5 block">
@@ -334,7 +334,7 @@ export function UniversalConfigModal({
               <Input
                 value={credentials.pageId || ""}
                 onChange={(e) => handleCredentialChange("pageId", e.target.value)}
-                placeholder="e.g. 4424288871221076"
+                placeholder="Enter Page ID"
                 className="h-9 text-xs font-mono bg-card mt-1"
               />
               <span className="text-[10px] text-muted-foreground mt-0.5 block">
@@ -365,9 +365,9 @@ export function UniversalConfigModal({
             </div>
             <Input
               type={showSecrets.glusrCrmKey ? "text" : "password"}
-              value={credentials.glusrCrmKey !== undefined ? credentials.glusrCrmKey : secretHints.glusrCrmKey || ""}
+              value={credentials.glusrCrmKey || ""}
               onChange={(e) => handleCredentialChange("glusrCrmKey", e.target.value)}
-              placeholder={secretHints.glusrCrmKey || "m_crm_key_..."}
+              placeholder={secretHints.glusrCrmKey ? `Configured (${secretHints.glusrCrmKey}) — enter new to replace` : "Enter GLUSR_CRM_KEY"}
               className="h-9 text-xs font-mono bg-card mt-1"
             />
             <span className="text-[10px] text-muted-foreground mt-0.5 block">
@@ -380,7 +380,7 @@ export function UniversalConfigModal({
             <Input
               value={credentials.sellerMobile || ""}
               onChange={(e) => handleCredentialChange("sellerMobile", e.target.value)}
-              placeholder="+91..."
+              placeholder="Enter 10-digit mobile number"
               className="h-9 text-xs font-mono bg-card mt-1"
             />
           </div>
@@ -407,9 +407,9 @@ export function UniversalConfigModal({
             </div>
             <Input
               type={showSecrets.apiKey ? "text" : "password"}
-              value={credentials.apiKey !== undefined ? credentials.apiKey : secretHints.apiKey || ""}
+              value={credentials.apiKey || ""}
               onChange={(e) => handleCredentialChange("apiKey", e.target.value)}
-              placeholder={secretHints.apiKey || "sk-proj-..."}
+              placeholder={secretHints.apiKey ? `Configured (${secretHints.apiKey}) — enter new to replace` : "sk-..."}
               className="h-9 text-xs font-mono bg-card mt-1"
             />
             <span className="text-[10px] text-muted-foreground mt-0.5 block">
@@ -445,7 +445,7 @@ export function UniversalConfigModal({
               <Input
                 value={credentials.accountSid || ""}
                 onChange={(e) => handleCredentialChange("accountSid", e.target.value)}
-                placeholder="e.g. exotel_sid_123"
+                placeholder="Enter Account SID"
                 className="h-9 text-xs font-mono bg-card mt-1"
               />
             </div>
@@ -454,7 +454,7 @@ export function UniversalConfigModal({
               <Input
                 value={credentials.callerId || ""}
                 onChange={(e) => handleCredentialChange("callerId", e.target.value)}
-                placeholder="+91..."
+                placeholder="Enter Caller ID (+91...)"
                 className="h-9 text-xs font-mono bg-card mt-1"
               />
             </div>
@@ -466,6 +466,7 @@ export function UniversalConfigModal({
               <Input
                 value={credentials.apiKey || ""}
                 onChange={(e) => handleCredentialChange("apiKey", e.target.value)}
+                placeholder="Enter API Key"
                 className="h-9 text-xs font-mono bg-card mt-1"
               />
             </div>
@@ -483,9 +484,9 @@ export function UniversalConfigModal({
               </div>
               <Input
                 type={showSecrets.apiToken ? "text" : "password"}
-                value={credentials.apiToken !== undefined ? credentials.apiToken : secretHints.apiToken || ""}
+                value={credentials.apiToken || ""}
                 onChange={(e) => handleCredentialChange("apiToken", e.target.value)}
-                placeholder={secretHints.apiToken || "••••••••"}
+                placeholder={secretHints.apiToken ? `Configured (${secretHints.apiToken}) — enter new to replace` : "Enter API token"}
                 className="h-9 text-xs font-mono bg-card mt-1"
               />
             </div>

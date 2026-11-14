@@ -2,13 +2,7 @@ import { CheckCircle2, Clock, AlertCircle, Pause, RefreshCw } from "lucide-react
 
 export const MOCK_TEMPLATES = [];
 
-export const DEFAULT_SEGMENTS = [
-  { id: "all_leads", label: "All Active Leads", count: 0 },
-  { id: "hot_leads", label: "Hot Leads", count: 0 },
-  { id: "scheduled", label: "Meeting / Visit Scheduled", count: 0 },
-  { id: "quote_sent", label: "Quotation Sent", count: 0 },
-  { id: "followup_due", label: "Follow-up Due", count: 0 },
-];
+export const DEFAULT_SEGMENTS = [];
 
 export const MOCK_SEGMENTS = DEFAULT_SEGMENTS;
 

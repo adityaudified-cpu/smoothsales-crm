@@ -179,10 +179,10 @@ const AUTOMATION_TRIGGERS = [
     title: "AI Sales Agent Auto-Pilot",
     trigger: "AI Qualification",
     category: "ai",
-    desc: "Let Priya (AI Sales Assistant) qualify budget, property requirements, and book site visits 24/7.",
+    desc: "Let your AI Sales Assistant qualify budget, product requirements, and book meetings 24/7.",
     template: "universal",
     timing: "Conversational Real-time",
-    snippet: "Priya qualifies lead requirements, budget range, and instantly proposes available demo slots.",
+    snippet: "AI Sales Assistant qualifies lead requirements, budget range, and instantly proposes available meeting slots.",
     default: true,
   },
 ];
@@ -434,29 +434,32 @@ export default function WhatsAppConnectPage() {
     const validation = validateWithZod(testMessageSchema, payload);
     if (!validation.success) {
       setTestErrors(validation.errors);
-      toast.error("Please correct the phone number format before sending.");
+      toast.error("Please enter a valid international phone number with country code (e.g. +91 9876543210).");
       return;
     }
     setTestErrors({});
+
+    if (!metaAccount || !metaAccount.token || !metaAccount.phoneId) {
+      toast.error("No WhatsApp Meta Cloud API credentials configured. Add credentials first under Configure Credentials.");
+      return;
+    }
+
     setTestSending(true);
 
     try {
-      if (isApiMode()) {
-        try {
-          const custRes = await customersApi.list({ size: 1 });
-          const customerId = custRes?.items?.[0]?.id || custRes?.[0]?.id;
-          if (customerId) {
-            await whatsappSendApi.sendSession({
-              customerId,
-              messageBody: payload.message,
-            });
-          }
-        } catch {}
+      const custRes = await customersApi.list({ size: 1 });
+      const customerId = custRes?.items?.[0]?.id || custRes?.[0]?.id;
+      if (!customerId) {
+        throw new Error("No customer record found in CRM to dispatch test session message. Please create a lead first.");
       }
+      await whatsappSendApi.sendSession({
+        customerId,
+        messageBody: payload.message,
+      });
       toast.success(`Test ping dispatched to ${payload.phone}! WhatsApp connection is active.`);
       setTestModalOpen(false);
     } catch (err) {
-      toast.error(err?.message || "Failed to dispatch test message. Verify Meta credentials.");
+      toast.error(err?.message || "Failed to dispatch test message. Verify Meta credentials and permissions.");
     } finally {
       setTestSending(false);
     }
@@ -767,7 +770,8 @@ export default function WhatsAppConnectPage() {
           <div className="max-w-6xl mx-auto space-y-6">
 
             {/* Enterprise Bento Card: Primary Connected Meta WABA Channel */}
-            {metaAccount && (
+            {/* Enterprise Bento Card: Primary Connected Meta WABA Channel */}
+            {metaAccount ? (
               <div className="rounded-2xl border border-border bg-card p-5 shadow-xs relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
 
@@ -780,24 +784,26 @@ export default function WhatsAppConnectPage() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <h2 className="text-sm font-bold text-foreground">
-                          {metaAccount.label || "SmoothSales Official WhatsApp"}
+                          {metaAccount.label || "WhatsApp Business Account"}
                         </h2>
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                          <CheckCircle2 className="h-3 w-3" /> Meta Verified Official WABA
+                          <CheckCircle2 className="h-3 w-3" /> Meta Cloud API
                         </span>
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          Live & Connected
+                          {metaAccount.status || "Active"}
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
                         <span className="font-semibold text-foreground font-mono">
-                          {metaAccount.number || "+91 87500 73899"}
+                          {metaAccount.number || metaAccount.phoneId || "Phone ID: " + metaAccount.phoneId}
                         </span>
-                        <span>·</span>
-                        <span>Official Cloud API Primary Channel</span>
-                        <span>·</span>
-                        <span>Connected on {metaAccount.connectedAt || "2026-11-03"}</span>
+                        {metaAccount.connectedAt && (
+                          <>
+                            <span>·</span>
+                            <span>Connected on {metaAccount.connectedAt}</span>
+                          </>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -836,10 +842,10 @@ export default function WhatsAppConnectPage() {
                     </p>
                     <div className="my-1.5">
                       <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
-                        HIGH (Tier 1 Status)
+                        Active
                       </p>
                     </div>
-                    <p className="text-[10px] text-muted-foreground">Green flag rating from Meta · 0 Spam Flags</p>
+                    <p className="text-[10px] text-muted-foreground">Connected to Meta Graph API</p>
                   </div>
 
                   <div className="p-3.5 rounded-xl bg-muted/40 border border-border/80 flex flex-col justify-between">
@@ -849,10 +855,10 @@ export default function WhatsAppConnectPage() {
                     </p>
                     <div className="my-1.5">
                       <p className="text-sm font-bold text-foreground">
-                        1,000 / 24 Hours
+                        Standard Cloud API Tier
                       </p>
                     </div>
-                    <p className="text-[10px] text-muted-foreground">Automatic tier upgrade to 10k on volume</p>
+                    <p className="text-[10px] text-muted-foreground">Scale tier managed via Meta Business Manager</p>
                   </div>
 
                   <div className="p-3.5 rounded-xl bg-muted/40 border border-border/80 flex flex-col justify-between">
@@ -861,7 +867,7 @@ export default function WhatsAppConnectPage() {
                       Templates Synced
                     </p>
                     <div className="my-1.5 flex items-center gap-1.5">
-                      <p className="text-sm font-bold text-foreground">10 Approved</p>
+                      <p className="text-sm font-bold text-foreground">{liveApprovedTemplates.length} Approved</p>
                       <Link
                         href="/whatsapp/templates"
                         className="text-[10px] text-primary hover:underline font-semibold flex items-center ml-1"
@@ -879,7 +885,7 @@ export default function WhatsAppConnectPage() {
                     </p>
                     <div className="my-1.5">
                       <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-                        <Check className="h-3.5 w-3.5" /> Active & Verified
+                        <Check className="h-3.5 w-3.5" /> {webhookResult?.status === "healthy" ? "Active & Verified" : "Listening"}
                       </p>
                     </div>
                     <p className="text-[10px] text-muted-foreground">HTTP 200 · Real-time Inbound Ready</p>
@@ -892,29 +898,33 @@ export default function WhatsAppConnectPage() {
                     <div className="flex items-center gap-1.5">
                       <span className="text-muted-foreground text-[11px] font-medium">Phone ID:</span>
                       <code className="bg-muted px-2 py-0.5 rounded font-mono text-[11px] text-foreground font-semibold">
-                        {metaAccount.phoneId || "1197546510113741"}
+                        {metaAccount.phoneId || "Not configured"}
                       </code>
-                      <button
-                        onClick={() => copyToClipboard(metaAccount.phoneId || "1197546510113741", "Phone ID")}
-                        className="text-muted-foreground hover:text-foreground p-0.5 transition-colors"
-                        title="Copy Phone ID"
-                      >
-                        <Copy className="h-3 w-3" />
-                      </button>
+                      {metaAccount.phoneId && (
+                        <button
+                          onClick={() => copyToClipboard(metaAccount.phoneId, "Phone ID")}
+                          className="text-muted-foreground hover:text-foreground p-0.5 transition-colors"
+                          title="Copy Phone ID"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1.5">
                       <span className="text-muted-foreground text-[11px] font-medium">WABA ID:</span>
                       <code className="bg-muted px-2 py-0.5 rounded font-mono text-[11px] text-foreground font-semibold">
-                        {metaAccount.wabaId || "4424288871221076"}
+                        {metaAccount.wabaId || "Not configured"}
                       </code>
-                      <button
-                        onClick={() => copyToClipboard(metaAccount.wabaId || "4424288871221076", "WABA ID")}
-                        className="text-muted-foreground hover:text-foreground p-0.5 transition-colors"
-                        title="Copy WABA ID"
-                      >
-                        <Copy className="h-3 w-3" />
-                      </button>
+                      {metaAccount.wabaId && (
+                        <button
+                          onClick={() => copyToClipboard(metaAccount.wabaId, "WABA ID")}
+                          className="text-muted-foreground hover:text-foreground p-0.5 transition-colors"
+                          title="Copy WABA ID"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1.5">
@@ -935,6 +945,21 @@ export default function WhatsAppConnectPage() {
                   </div>
                 </div>
               </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-border bg-card/60 p-8 text-center space-y-3">
+                <div className="h-12 w-12 rounded-2xl bg-muted border border-border mx-auto flex items-center justify-center text-muted-foreground">
+                  <Globe className="h-6 w-6" />
+                </div>
+                <div className="max-w-md mx-auto space-y-1">
+                  <h3 className="text-sm font-bold text-foreground">No WhatsApp Business Account Connected</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Connect your Meta WhatsApp Cloud API credentials to enable broadcast campaigns, live chat, and automated lead capture.
+                  </p>
+                </div>
+                <Button size="sm" className="text-xs gap-1.5 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => setShowCredentialsModal(true)}>
+                  <Plus className="h-3.5 w-3.5" /> Configure WhatsApp Credentials
+                </Button>
+              </div>
             )}
 
             {/* Enterprise Multi-Channel Management Section */}
@@ -952,7 +977,7 @@ export default function WhatsAppConnectPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Channel 1: Primary Meta Cloud API Channel Card */}
-                <div className="rounded-2xl border border-emerald-500/30 bg-card p-5 space-y-3.5 flex flex-col justify-between shadow-xs">
+                <div className="rounded-2xl border border-border bg-card p-5 space-y-3.5 flex flex-col justify-between shadow-xs">
                   <div>
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
@@ -961,14 +986,16 @@ export default function WhatsAppConnectPage() {
                         </div>
                         <div>
                           <div className="flex items-center gap-1.5">
-                            <p className="text-xs font-bold text-foreground">Meta Cloud API (Primary)</p>
-                            <Badge className="bg-emerald-600 text-white text-[9.5px] py-0 px-1.5">Default</Badge>
+                            <p className="text-xs font-bold text-foreground">Meta Cloud API (Official)</p>
+                            {metaAccount && <Badge className="bg-emerald-600 text-white text-[9.5px] py-0 px-1.5">Default</Badge>}
                           </div>
-                          <p className="text-[11px] text-muted-foreground font-mono">+91 87500 73899</p>
+                          <p className="text-[11px] text-muted-foreground font-mono">
+                            {metaAccount ? (metaAccount.number || metaAccount.phoneId || "Connected") : "Not configured"}
+                          </p>
                         </div>
                       </div>
-                      <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5">
-                        Tier 1 Active
+                      <Badge variant="outline" className={`text-[10px] ${metaAccount ? "border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5" : "text-muted-foreground border-border"}`}>
+                        {metaAccount ? "Active" : "Inactive"}
                       </Badge>
                     </div>
 
@@ -993,8 +1020,8 @@ export default function WhatsAppConnectPage() {
                   </div>
 
                   <div className="pt-3 border-t border-border flex items-center justify-between text-xs">
-                    <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> WABA Primary Router
+                    <span className="text-[11px] text-muted-foreground font-medium">
+                      {metaAccount ? "WABA Primary Router" : "No active credentials"}
                     </span>
                     <Button
                       size="sm"
@@ -1002,7 +1029,7 @@ export default function WhatsAppConnectPage() {
                       className="h-7 text-xs font-medium"
                       onClick={() => setShowCredentialsModal(true)}
                     >
-                      Edit Credentials
+                      {metaAccount ? "Edit Credentials" : "Connect WABA"}
                     </Button>
                   </div>
                 </div>
@@ -1024,7 +1051,7 @@ export default function WhatsAppConnectPage() {
                               <Badge className="bg-emerald-600 text-white text-[9.5px] py-0 px-1.5">Paired</Badge>
                             </div>
                             <p className="text-[11px] text-foreground font-mono font-bold mt-0.5">
-                              {personalAccount.number || "+91 98201 55432"}
+                              {personalAccount.number || "Connected"}
                             </p>
                           </div>
                         </div>
@@ -1037,18 +1064,20 @@ export default function WhatsAppConnectPage() {
                       <div className="space-y-2 text-[11px] text-muted-foreground pt-3 border-t border-border mt-3">
                         <div className="flex items-center justify-between">
                           <span className="text-muted-foreground">Paired Device:</span>
-                          <span className="font-semibold text-foreground">{personalAccount.device || "Samsung Galaxy S24"}</span>
+                          <span className="font-semibold text-foreground">{personalAccount.device || "Linked Device"}</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-muted-foreground">Assigned Sales Agent:</span>
-                          <span className="font-semibold text-foreground">{personalAccount.agentName || "Aditya (System Admin)"}</span>
+                          <span className="font-semibold text-foreground">{personalAccount.agentName || "Assigned Agent"}</span>
                         </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Device Battery:</span>
-                          <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                            <BatteryCharging className="h-3 w-3" /> {personalAccount.battery || "94%"}
-                          </span>
-                        </div>
+                        {personalAccount.battery && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Device Battery:</span>
+                            <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                              <BatteryCharging className="h-3 w-3" /> {personalAccount.battery}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between">
                           <span className="text-muted-foreground">CRM Timeline Sync:</span>
                           <span className="font-semibold text-foreground">Active (/api/whatsapp/personal-log)</span>
@@ -1902,51 +1931,28 @@ export default function WhatsAppConnectPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Personal WhatsApp Linking Modal (Pairing Code + QR + Architecture) ── */}
+      {/* ── Personal WhatsApp Registration Modal (Real CRM Timeline Logging) ── */}
       <Dialog open={qrModalOpen} onOpenChange={setQrModalOpen}>
-        <DialogContent className="max-w-lg p-0 overflow-hidden">
+        <DialogContent className="max-w-md p-0 overflow-hidden">
           <DialogHeader className="px-5 py-4 border-b border-border bg-muted/20">
             <DialogTitle className="text-sm font-bold flex items-center gap-2">
               <Smartphone className="h-4 w-4 text-emerald-600" />
-              Pair Personal WhatsApp Business (Sales Rep SIM)
+              Register Personal WhatsApp SIM (Rep Timeline Logging)
             </DialogTitle>
           </DialogHeader>
 
-          {/* Subtabs for Pairing Mode */}
-          <div className="px-5 pt-3 border-b border-border bg-card/60 flex items-center gap-2">
-            {[
-              { id: "pairing_code", label: "8-Digit Pairing Code", icon: KeyRound, note: "Recommended" },
-              { id: "qr_scan", label: "Scan QR Code", icon: QrCode, note: "Camera" },
-              { id: "api_guide", label: "API & Gateway Guide", icon: Terminal, note: "Docs" },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isSelected = pairingMethod === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setPairingMethod(tab.id)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 transition-all",
-                    isSelected
-                      ? "border-emerald-600 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {tab.label}
-                  {tab.note && (
-                    <span className="text-[9px] px-1 rounded bg-muted text-muted-foreground font-normal">
-                      {tab.note}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          <div className="p-5 space-y-4 text-xs">
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-300 space-y-1">
+              <p className="font-semibold text-xs flex items-center gap-1.5">
+                <Check className="h-3.5 w-3.5 text-emerald-600" />
+                SIM Call & Message Activity Logging
+              </p>
+              <p className="text-[11px] text-emerald-800 dark:text-emerald-400 leading-relaxed">
+                Connect your sales representative&apos;s WhatsApp mobile number. Outbound follow-ups and client conversations logged by this rep will sync directly to CRM lead timelines.
+              </p>
+            </div>
 
-          {/* Shared Rep Credentials Section (Required for all pairing methods) */}
-          <div className="px-5 pt-4 pb-2 bg-muted/20 border-b border-border space-y-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-3">
               <div className="space-y-1">
                 <Label className="text-xs font-semibold flex items-center gap-1">
                   Rep WhatsApp Phone Number <span className="text-destructive">*</span>
@@ -1957,7 +1963,7 @@ export default function WhatsAppConnectPage() {
                     setPairPhone(e.target.value);
                     if (pairingErrors.phone) setPairingErrors((p) => ({ ...p, phone: null }));
                   }}
-                  placeholder="+91 98201 55432"
+                  placeholder="+91 98765 43210"
                   className={cn("h-8 text-xs font-mono", pairingErrors.phone && "border-destructive")}
                 />
                 {pairingErrors.phone && (
@@ -1966,211 +1972,27 @@ export default function WhatsAppConnectPage() {
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs font-semibold">Sales Rep / Closer Name</Label>
+                <Label className="text-xs font-semibold">Sales Representative Name</Label>
                 <Input
                   value={pairAgent}
                   onChange={(e) => setPairAgent(e.target.value)}
-                  placeholder="e.g. Aditya (System Admin)"
+                  placeholder="e.g. Sales Specialist"
                   className="h-8 text-xs"
                 />
               </div>
             </div>
-          </div>
 
-          <div className="p-5 space-y-4 text-xs">
-            {/* METHOD 1: 8-DIGIT PAIRING CODE (Modern official WhatsApp Web standard) */}
-            {pairingMethod === "pairing_code" && (
-              <div className="space-y-4">
-                <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-900 dark:text-blue-300 space-y-1">
-                  <p className="font-semibold text-xs flex items-center gap-1.5">
-                    <CheckCircle className="h-3.5 w-3.5 text-blue-600" />
-                    Recommended Official Pairing Method
-                  </p>
-                  <p className="text-[11px] text-blue-700 dark:text-blue-400 leading-relaxed">
-                    Link your rep&apos;s WhatsApp directly without camera scanning glitches. Enter the phone number above, generate the 8-digit code, and enter it directly in WhatsApp on phone.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-muted/50 border border-border flex flex-col items-center justify-center space-y-2 text-center">
-                  {pairingCode ? (
-                    <>
-                      <span className="text-[10.5px] font-semibold text-muted-foreground uppercase tracking-wider">
-                        Enter this Code in WhatsApp on Phone:
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl font-mono font-extrabold tracking-widest text-emerald-700 dark:text-emerald-400 bg-background px-4 py-1.5 rounded-xl border border-emerald-500/30 select-all shadow-xs">
-                          {pairingCode}
-                        </span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-9 px-2.5 text-xs gap-1 font-semibold"
-                          onClick={() => copyToClipboard(pairingCode, "Pairing Code")}
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                      <div className="flex items-center gap-2 text-[10.5px] text-muted-foreground">
-                        <Clock className="h-3 w-3 text-amber-500" />
-                        <span>Expires in <strong className="font-mono text-foreground">{codeCountdown}s</strong></span>
-                        <span>·</span>
-                        <button
-                          onClick={handleGeneratePairingCode}
-                          className="text-primary hover:underline font-semibold"
-                        >
-                          Generate New Code
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-[10.5px] font-semibold text-muted-foreground uppercase tracking-wider">
-                        No Code Generated Yet
-                      </span>
-                      <p className="text-[11px] text-muted-foreground max-w-xs">
-                        Enter your WhatsApp phone number and agent name above, then click <strong>Generate Code</strong>.
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 text-xs gap-1.5 font-semibold border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
-                        onClick={handleGeneratePairingCode}
-                      >
-                        <KeyRound className="h-3.5 w-3.5" /> Generate Pairing Code
-                      </Button>
-                    </>
-                  )}
-                </div>
-
-                <div className="space-y-2 p-3 rounded-xl bg-card border border-border text-[11px] text-muted-foreground">
-                  <p className="font-bold text-foreground">How to enter code on phone:</p>
-                  <ol className="list-decimal pl-4 space-y-1 leading-relaxed">
-                    <li>Open WhatsApp on phone → Settings (or 3 dots) → <strong>Linked Devices</strong>.</li>
-                    <li>Tap <strong>Link a Device</strong>.</li>
-                    <li>At the bottom of the camera screen, tap <strong>&quot;Link with phone number instead&quot;</strong>.</li>
-                    {pairingCode && <li>Type the 8-digit code: <strong className="font-mono text-foreground">{pairingCode}</strong>.</li>}
-                    {!pairingCode && <li>Generate your code above, then type it here.</li>}
-                  </ol>
-                </div>
-              </div>
-            )}
-
-            {/* METHOD 2: CAMERA QR CODE SCAN (Authentic rendered QR Matrix) */}
-            {pairingMethod === "qr_scan" && (
-              <div className="flex flex-col items-center text-center space-y-3.5 py-1">
-                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-300 w-full text-left space-y-1">
-                  <p className="font-semibold text-xs flex items-center gap-1.5">
-                    <QrCode className="h-3.5 w-3.5 text-emerald-600" />
-                    Dynamic WhatsApp Connection QR
-                  </p>
-                  <p className="text-[10.5px] text-emerald-800 dark:text-emerald-400 leading-snug">
-                    Point your phone camera at this QR code to initiate WhatsApp handshake. If using the in-app WhatsApp scanner, use the <strong>8-Digit Code</strong> tab above.
-                  </p>
-                </div>
-
-                <div className="relative p-2 bg-white rounded-2xl shadow-md border border-border inline-block">
-                  {qrDataUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={qrDataUrl}
-                      alt="WhatsApp Pairing QR"
-                      className="w-[210px] h-[210px] rounded-xl block"
-                    />
-                  ) : (
-                    <AuthenticQrCodeMatrix size={210} scanning={true} />
-                  )}
-
-                  {/* Centered WhatsApp Emblem */}
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="h-9 w-9 bg-white rounded-xl shadow-md flex items-center justify-center p-1 border border-border/40">
-                      <div className="h-full w-full bg-emerald-500 rounded-lg flex items-center justify-center text-white font-bold text-xs">
-                        <MessageCircle className="h-4 w-4" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Laser Scanning Animation */}
-                  <div className="absolute inset-x-2 top-0 h-1 bg-gradient-to-r from-transparent via-emerald-500 to-transparent shadow-[0_0_8px_#10b981] animate-pulse" />
-                </div>
-
-                <div className="space-y-1 text-[11px] text-muted-foreground">
-                  <p className="font-semibold text-foreground">
-                    Target Rep: <span className="font-mono text-emerald-600">{pairPhone || "Enter phone number above"}</span>
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">
-                    QR code updates automatically with your target number and session handshake.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs gap-1.5"
-                    onClick={() => {
-                      setQrRefreshedAt(Date.now());
-                      toast.success("QR Matrix refreshed with new session token!");
-                    }}
-                  >
-                    <RefreshCw className="h-3 w-3" /> Refresh QR
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 text-xs text-primary gap-1"
-                    onClick={() => setPairingMethod("pairing_code")}
-                  >
-                    Switch to 8-Digit Code <ArrowRight className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* METHOD 3: API & GATEWAY ARCHITECTURE GUIDE */}
-            {pairingMethod === "api_guide" && (
-              <div className="space-y-3.5 text-xs">
-                <div className="p-3 rounded-xl bg-muted/50 border border-border space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-foreground flex items-center gap-1.5">
-                      <Terminal className="h-3.5 w-3.5 text-emerald-600" />
-                      Personal WhatsApp Backend Architecture
-                    </span>
-                    <Badge variant="outline" className="text-[10px] font-mono text-emerald-700 bg-emerald-500/10 border-emerald-500/20">
-                      LIVE IN BACKEND
-                    </Badge>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    SmoothSales uses a <strong>Hybrid WhatsApp Architecture</strong>. Official bulk messaging runs via Meta Cloud API, while personal 1-on-1 team rep SIM messages are logged via the dedicated endpoint.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold">Live Backend Endpoints:</Label>
-                  <div className="p-2.5 rounded-xl bg-background border border-border font-mono text-[11px] space-y-1">
-                    <div className="flex items-center justify-between text-muted-foreground">
-                      <span className="text-emerald-600 font-bold">POST</span>
-                      <span>/api/whatsapp/personal-log</span>
-                    </div>
-                    <div className="flex items-center justify-between text-muted-foreground border-t border-border/50 pt-1">
-                      <span className="text-blue-600 font-bold">GET</span>
-                      <span>/api/whatsapp/personal-log/customer/&#123;id&#125;</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold">Payload Specification:</Label>
-                  <pre className="p-2.5 rounded-xl bg-muted/60 border border-border text-[10px] font-mono text-foreground overflow-x-auto select-all">
-{`{
-  "customerId": "uuid-of-lead",
-  "direction": "SENT", // or "RECEIVED"
-  "messageBody": "Sample chat message logged from rep phone",
-  "messagedAt": "2026-11-09T14:30:00Z"
-}`}
-                  </pre>
-                </div>
-              </div>
-            )}
+            <div className="p-3 rounded-xl bg-muted/40 border border-border space-y-1.5 text-[11px] text-muted-foreground">
+              <p className="font-semibold text-foreground flex items-center gap-1.5">
+                <Terminal className="h-3 w-3 text-primary" /> Active Backend Logging Endpoint:
+              </p>
+              <code className="block bg-background px-2 py-1 rounded font-mono text-[10.5px] text-foreground">
+                POST /whatsapp/personal-log
+              </code>
+              <p className="text-[10px]">
+                Official bulk broadcasts and automated chatbots run via the Meta Cloud API channel.
+              </p>
+            </div>
           </div>
 
           <DialogFooter className="px-5 py-3 border-t border-border bg-card flex justify-between">
@@ -2189,7 +2011,7 @@ export default function WhatsAppConnectPage() {
               disabled={connecting}
             >
               {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-              I've Linked on Phone — Confirm Link
+              Save Rep Channel
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -23,7 +23,19 @@ import {
   CalendarIcon,
   CheckCircle2,
 } from "lucide-react";
-import { CALL_OUTCOMES } from "@/lib/mock-data/leads";
+const CALL_OUTCOMES = [
+  "Interested",
+  "Interested for Future",
+  "Call Later",
+  "Followed Up",
+  "Busy",
+  "RNR",
+  "Not Reachable",
+  "Switched Off",
+  "Cut the Call",
+  "Not Interested",
+  "Invalid",
+];
 import { cn } from "@/lib/utils";
 
 export function CallDispositionForm({ lead, onSave }) {

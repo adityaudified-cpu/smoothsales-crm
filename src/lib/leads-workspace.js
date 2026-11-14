@@ -8,21 +8,12 @@ export const ROUND_ROBIN_CURSOR_KEY = "smoothsales_round_robin_cursor_v1";
 export const REP_STATUSES = ["Available", "On Break", "Offline"];
 export const DEFAULT_DAILY_CAPACITY = 40;
 
-// Workspace reps who can own leads, even before any lead is assigned to them.
-export const DEFAULT_REPS = [
-  { name: "Aarav Sharma", initials: "AS", role: "Sr. Account Exec" },
-  { name: "Sneha Roy", initials: "SR", role: "Key Accounts" },
-  { name: "Rohan Varma", initials: "RV", role: "Inside Sales" },
-  { name: "Kavita Pillai", initials: "KP", role: "Field Sales" },
-];
+// Workspace reps who can own leads, loaded dynamically from API.
+export const DEFAULT_REPS = [];
 
 export const DOCUMENT_CATEGORIES = ["Quotation", "Floorplan", "KYC", "Receipt", "Agreement", "Voice Note", "Other"];
 
-export const WHATSAPP_TEMPLATES = [
-  { id: "studio_visit_invite", name: "Studio visit invite", body: "Hi {{lead_name}}, we would love to host you at our Experience Centre this week. Reply with a convenient day and time." },
-  { id: "followup_check_in", name: "Follow-up check-in", body: "Hi {{lead_name}}, just checking in on your enquiry. Is now a good time for a quick call?" },
-  { id: "festive_offer", name: "Festive offer", body: "Hi {{lead_name}}, our festive pricing is live until the end of the month. Shall I share the details for {{city}}?" },
-];
+export const WHATSAPP_TEMPLATES = [];
 
 function readJSON(key, fallback) {
   try {

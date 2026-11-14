@@ -100,20 +100,27 @@ export function RepWorkloadTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
-            {repStats.map((rep) => {
-              const statusCfg = AVAILABILITY_STATUSES.find((s) => s.value === rep.availability) || AVAILABILITY_STATUSES[0];
-              const isAtCap = rep.activeCount >= rep.maxLeads;
-              const isNearCap = rep.utilization >= 80;
-              const isFiltered = selectedRepFilter === rep.name;
+            {repStats.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="text-center py-8 text-xs text-muted-foreground">
+                  No sales representatives configured. Assign users in Team Management to enable auto-routing.
+                </td>
+              </tr>
+            ) : (
+              repStats.map((rep) => {
+                const statusCfg = AVAILABILITY_STATUSES.find((s) => s.value === rep.availability) || AVAILABILITY_STATUSES[0];
+                const isAtCap = rep.activeCount >= rep.maxLeads;
+                const isNearCap = rep.utilization >= 80;
+                const isFiltered = selectedRepFilter === rep.name;
 
-              return (
-                <tr
-                  key={rep.id}
-                  className={cn(
-                    "transition-colors hover:bg-muted/20",
-                    isFiltered && "bg-primary/5 dark:bg-primary/10"
-                  )}
-                >
+                return (
+                  <tr
+                    key={rep.id}
+                    className={cn(
+                      "transition-colors hover:bg-muted/20",
+                      isFiltered && "bg-primary/5 dark:bg-primary/10"
+                    )}
+                  >
                   {/* Identity */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
@@ -269,7 +276,8 @@ export function RepWorkloadTable({
                   </td>
                 </tr>
               );
-            })}
+            })
+          )}
           </tbody>
         </table>
       </div>

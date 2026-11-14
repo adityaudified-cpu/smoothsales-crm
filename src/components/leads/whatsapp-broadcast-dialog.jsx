@@ -9,8 +9,8 @@ import { cn } from "@/lib/utils";
 
 // Without a WhatsApp Business API, each message opens wa.me for the rep to send; sent rows are ticked off.
 export function WhatsAppBroadcastDialog({ open, onOpenChange, leads = [], title = "WhatsApp broadcast", onSent }) {
-  const [templateId, setTemplateId] = useState(WHATSAPP_TEMPLATES[0].id);
-  const [body, setBody] = useState(WHATSAPP_TEMPLATES[0].body);
+  const [templateId, setTemplateId] = useState(WHATSAPP_TEMPLATES[0]?.id || "");
+  const [body, setBody] = useState(WHATSAPP_TEMPLATES[0]?.body || "");
   const [sent, setSent] = useState(() => new Set());
   const reachable = useMemo(() => leads.filter((lead) => String(lead.mobile_number || lead.phone || "").replace(/\D/g, "").length >= 10), [leads]);
   const nextLead = reachable.find((lead) => !sent.has(lead.id));
