@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { SAMPLE_LEADS } from "../mock-data/sample-leads";
 import { isApiMode } from "../api/client";
 import { customersApi } from "../api/customers";
 import { customerToLead, leadToCustomerRequest, updatesToCustomerPatch } from "../api/mappers";
@@ -29,9 +28,7 @@ function writeJSON(key, value) {
 }
 
 function getSampleLeads() {
-  const overrides = readJSON(SAMPLE_OVERRIDES_STORAGE_KEY, {});
-  const deleted = new Set(readJSON(SAMPLE_DELETED_STORAGE_KEY, []));
-  return SAMPLE_LEADS.filter((lead) => !deleted.has(lead.id)).map((lead) => (overrides[lead.id] ? { ...lead, ...overrides[lead.id] } : lead));
+  return [];
 }
 
 function persistLeads(next, changedSampleIds = [], updates = null) {
@@ -86,21 +83,15 @@ export function useLeads() {
 
   useEffect(() => {
     if (api) { loadFromApi(); return; }
-    // Local mode: load from localStorage + sample leads
+    // Local mode: load from localStorage only
     try {
-      const showSampleStored = localStorage.getItem(SAMPLE_DATA_STORAGE_KEY);
-      const isSample = showSampleStored === null ? true : showSampleStored === "true";
       const importedLeads = JSON.parse(localStorage.getItem(IMPORTED_LEADS_STORAGE_KEY) || "[]");
       const safeImportedLeads = Array.isArray(importedLeads) ? importedLeads : [];
-      setIsSampleData(isSample);
-      if (!isSample) {
-        setData(safeImportedLeads);
-      } else {
-        setData([...getSampleLeads(), ...safeImportedLeads]);
-      }
+      setIsSampleData(false);
+      setData(safeImportedLeads);
     } catch {
-      setData(SAMPLE_LEADS);
-      setIsSampleData(true);
+      setData([]);
+      setIsSampleData(false);
     } finally {
       setIsLoading(false);
       setIsInitialized(true);
@@ -114,13 +105,8 @@ export function useLeads() {
   }, []);
 
   const restoreSampleData = useCallback(() => {
-    try { localStorage.setItem(SAMPLE_DATA_STORAGE_KEY, "true"); } catch {}
-    setIsSampleData(true);
-    writeJSON(SAMPLE_DELETED_STORAGE_KEY, []);
-    setData((prev) => {
-      const imported = prev.filter((lead) => !String(lead.id).startsWith("lead_"));
-      return [...getSampleLeads(), ...imported];
-    });
+    try { localStorage.setItem(SAMPLE_DATA_STORAGE_KEY, "false"); } catch {}
+    setIsSampleData(false);
   }, []);
 
   const refreshData = useCallback(() => {
@@ -129,16 +115,12 @@ export function useLeads() {
     setTimeout(() => {
       try {
         const importedLeads = JSON.parse(localStorage.getItem(IMPORTED_LEADS_STORAGE_KEY) || "[]");
-        const safeImportedLeads = Array.isArray(importedLeads) ? importedLeads : [];
-        setData((current) => {
-          const sample = current.some((lead) => String(lead.id).startsWith("lead_")) ? getSampleLeads() : [];
-          return [...sample, ...safeImportedLeads];
-        });
+        setData(Array.isArray(importedLeads) ? importedLeads : []);
       } catch {
-        setData((current) => current);
+        setData([]);
       }
       setIsLoading(false);
-    }, 400);
+    }, 300);
   }, [api, loadFromApi]);
 
   // options.updateExisting: merge rows whose phone already exists into that lead instead of skipping them.

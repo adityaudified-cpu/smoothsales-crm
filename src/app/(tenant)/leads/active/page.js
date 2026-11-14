@@ -5,7 +5,6 @@ import { useLeads } from "@/lib/hooks/use-leads";
 import { useAuth } from "@/lib/auth/auth-context";
 import { buildLeadsColumns, DEFAULT_VISIBLE_COLUMN_IDS } from "@/lib/leads-columns.config";
 import { getTenantCustomFields } from "@/lib/mock-data/tenant-custom-fields";
-import { SampleDataBanner } from "@/components/leads/sample-data-banner";
 import { LeadsToolbar } from "@/components/leads/leads-toolbar";
 import { LeadTable } from "@/components/leads/lead-table";
 import { LeadsFilterDrawer } from "@/components/leads/leads-filter-drawer";
@@ -41,9 +40,6 @@ export default function ActiveLeadsPage() {
   const {
     data: allLeads,
     isLoading,
-    isSampleData,
-    dismissSampleData,
-    restoreSampleData,
     refreshData,
     batchDeleteLeads,
     batchUpdateLeads,
@@ -321,11 +317,6 @@ export default function ActiveLeadsPage() {
           </PermissionGate>
         </div>
       </div>
-
-      <SampleDataBanner
-        isSampleData={isSampleData}
-        onExit={dismissSampleData}
-      />
 
       {/* Attention queues */}
       <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3 xl:grid-cols-6">

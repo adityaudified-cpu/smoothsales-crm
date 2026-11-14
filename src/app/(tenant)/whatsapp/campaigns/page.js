@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  STATUS_CFG, encodeId,
+  MOCK_TEMPLATES, MOCK_SEGMENTS, STATUS_CFG, encodeId,
 } from "./data";
 // Note: MOCK_CAMPAIGNS removed — campaigns loaded from API
 import { useWaAccounts } from "../wa-accounts-context";
@@ -59,13 +59,13 @@ function TemplatePreview({ tmpl, varValues }) {
 
 // ─── Create Campaign Modal ────────────────────────────────────────────────────
 
-function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments = [] }) {
+function CreateCampaignModal({ open, onClose, onSubmit, templates = [] }) {
   const [form, setForm] = useState({ ...BLANK_FORM });
   const [step, setStep] = useState(1);
   const fileRef = useRef(null);
 
   const selectedTemplate = templates.find((t) => t.id === form.templateId);
-  const selectedSegment  = segments.find((s) => s.id === form.segmentId);
+  const selectedSegment = MOCK_SEGMENTS.find((s) => s.id === form.segmentId);
 
   const setF = (patch) => setForm((p) => ({ ...p, ...patch }));
   const setVar = (key, val) => setForm((p) => ({ ...p, variableValues: { ...p.variableValues, [key]: val } }));
@@ -84,8 +84,8 @@ function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments
   const canStep2 = form.contactMode === "segment"
     ? !!form.segmentId
     : form.contactMode === "manual"
-    ? form.manualNumbers.trim().length > 0
-    : !!form.excelFile;
+      ? form.manualNumbers.trim().length > 0
+      : !!form.excelFile;
 
   const handleCreate = () => {
     if (!canStep1 || !canStep2) return toast.error("Please fill all required fields");
@@ -138,7 +138,7 @@ function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments
                     <div className="space-y-2">
                       {selectedTemplate.variables.map((v, i) => (
                         <div key={v} className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-1 rounded shrink-0 w-10 text-center">{`{{${i+1}}}`}</span>
+                          <span className="text-[10px] font-mono text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-1 rounded shrink-0 w-10 text-center">{`{{${i + 1}}}`}</span>
                           <Input value={form.variableValues[v] || ""} onChange={(e) => setVar(v, e.target.value)} placeholder={v.replace(/_/g, " ")} className="h-7 text-xs flex-1" />
                         </div>
                       ))}
@@ -153,9 +153,9 @@ function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments
                   <Label className="text-xs font-medium">Target Audience <span className="text-red-500">*</span></Label>
                   <div className="grid grid-cols-3 gap-1.5">
                     {[
-                      { val: "segment", label: "Segment",  Icon: Users },
-                      { val: "manual",  label: "Manual",   Icon: FileText },
-                      { val: "excel",   label: "Excel",    Icon: FileSpreadsheet },
+                      { val: "segment", label: "Segment", Icon: Users },
+                      { val: "manual", label: "Manual", Icon: FileText },
+                      { val: "excel", label: "Excel", Icon: FileSpreadsheet },
                     ].map(({ val, label, Icon }) => (
                       <button key={val} onClick={() => setF({ contactMode: val })}
                         className={`flex flex-col items-center gap-1 p-2.5 rounded-lg border text-[11px] font-medium transition-colors ${form.contactMode === val ? "border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-border text-muted-foreground hover:text-foreground"}`}>
@@ -170,7 +170,7 @@ function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments
                     <Select value={form.segmentId} onValueChange={(v) => setF({ segmentId: v })}>
                       <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select segment" /></SelectTrigger>
                       <SelectContent>
-                        {segments.map((s) => (
+                        {MOCK_SEGMENTS.map((s) => (
                           <SelectItem key={s.id} value={s.id} className="text-xs">
                             {s.label} <span className="text-muted-foreground">({s.count.toLocaleString()} leads)</span>
                           </SelectItem>
@@ -294,13 +294,12 @@ export default function WhatsAppCampaignsPage() {
 
   const [campaigns, setCampaigns] = useState([]);
   const [apiTemplates, setApiTemplates] = useState([]);
-  const [segments, setSegments] = useState([]);
   const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(false);
-  const [search, setSearch]       = useState("");
+  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [createOpen, setCreateOpen]     = useState(false);
-  const [deleteId, setDeleteId]         = useState(null);
-  const [page, setPage]       = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
+  const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
   // Load campaigns from API
@@ -326,7 +325,7 @@ export default function WhatsAppCampaignsPage() {
           createdAt: c.createdAt ? new Date(c.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "",
         })));
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setIsLoadingCampaigns(false));
   }, []);
 
@@ -335,27 +334,7 @@ export default function WhatsAppCampaignsPage() {
     if (!isApiMode()) return;
     whatsappTemplatesApi.getApproved()
       .then((data) => { if (Array.isArray(data) && data.length > 0) setApiTemplates(data); })
-      .catch(() => {});
-  }, []);
-
-  // Load segments from API
-  useEffect(() => {
-    if (!isApiMode()) return;
-    Promise.all([
-      whatsappCampaignsApi.previewAudience("all_leads"),
-      whatsappCampaignsApi.previewAudience("hot_leads"),
-      whatsappCampaignsApi.previewAudience("scheduled"),
-      whatsappCampaignsApi.previewAudience("quote_sent"),
-      whatsappCampaignsApi.previewAudience("followup_due"),
-    ]).then(([all, hot, sched, quote, followup]) => {
-      setSegments([
-        { id: "all_leads",    label: "All Active Leads",           count: all?.count ?? 0 },
-        { id: "hot_leads",    label: "Hot Leads",                  count: hot?.count ?? 0 },
-        { id: "scheduled",    label: "Meeting / Visit Scheduled",  count: sched?.count ?? 0 },
-        { id: "quote_sent",   label: "Quotation Sent",             count: quote?.count ?? 0 },
-        { id: "followup_due", label: "Follow-up Due",              count: followup?.count ?? 0 },
-      ]);
-    }).catch(() => {});
+      .catch(() => { });
   }, []);
 
   // WebSocket: live campaign progress
@@ -378,16 +357,16 @@ export default function WhatsAppCampaignsPage() {
   }), [campaigns, search, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const safePage   = Math.min(page, totalPages);
-  const pageItems  = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const safePage = Math.min(page, totalPages);
+  const pageItems = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
   React.useEffect(() => setPage(1), [search, statusFilter, pageSize]);
 
   const stats = useMemo(() => {
     const sent = campaigns.reduce((s, c) => s + c.sent, 0);
     const read = campaigns.reduce((s, c) => s + c.read, 0);
     return {
-      total:    campaigns.length,
-      running:  campaigns.filter((c) => c.status === "running").length,
+      total: campaigns.length,
+      running: campaigns.filter((c) => c.status === "running").length,
       sent,
       readRate: sent > 0 ? Math.round((read / sent) * 100) : 0,
     };
@@ -502,10 +481,10 @@ export default function WhatsAppCampaignsPage() {
       {/* KPI Strip */}
       <div className="shrink-0 grid grid-cols-4 border-b border-border bg-card/50">
         {[
-          { label: "Total",     value: stats.total,                  color: "text-foreground",  dot: "bg-muted-foreground/50" },
-          { label: "Running",   value: stats.running,                color: "text-blue-600",    dot: "bg-blue-500" },
-          { label: "Sent",      value: stats.sent.toLocaleString(),  color: "text-emerald-600", dot: "bg-emerald-500" },
-          { label: "Read Rate", value: `${stats.readRate}%`,         color: "text-violet-600",  dot: "bg-violet-500" },
+          { label: "Total", value: stats.total, color: "text-foreground", dot: "bg-muted-foreground/50" },
+          { label: "Running", value: stats.running, color: "text-blue-600", dot: "bg-blue-500" },
+          { label: "Sent", value: stats.sent.toLocaleString(), color: "text-emerald-600", dot: "bg-emerald-500" },
+          { label: "Read Rate", value: `${stats.readRate}%`, color: "text-violet-600", dot: "bg-violet-500" },
         ].map((k, i) => (
           <div key={k.label} className={`px-5 py-3 flex items-center gap-2.5 ${i < 3 ? "border-r border-border" : ""}`}>
             <span className={`h-2 w-2 rounded-full shrink-0 ${k.dot}`} />
@@ -550,10 +529,16 @@ export default function WhatsAppCampaignsPage() {
             {pageItems.length === 0 && (
               <tr>
                 <td colSpan={11} className="px-4 py-16 text-center">
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <Megaphone className="h-7 w-7 opacity-25" />
-                    <p className="text-sm font-medium">No campaigns found</p>
-                    <p className="text-xs opacity-60">Try adjusting your search or filters</p>
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground max-w-sm mx-auto">
+                    <Megaphone className="h-8 w-8 text-emerald-600/40" />
+                    <p className="text-sm font-bold text-foreground">
+                      {campaigns.length === 0 ? "No broadcast campaigns yet" : "No campaigns match your filter"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {campaigns.length === 0
+                        ? "Select an approved Meta template and audience to launch your first WhatsApp broadcast campaign."
+                        : "Try adjusting your search query or status filter."}
+                    </p>
                   </div>
                 </td>
               </tr>
@@ -562,7 +547,7 @@ export default function WhatsAppCampaignsPage() {
               const sc = STATUS_CFG[c.status] || STATUS_CFG.draft;
               const globalIdx = (safePage - 1) * pageSize + idx + 1;
               const delivRate = c.sent > 0 ? Math.round((c.delivered / c.sent) * 100) : null;
-              const readRate  = c.sent > 0 ? Math.round((c.read / c.sent) * 100) : null;
+              const readRate = c.sent > 0 ? Math.round((c.read / c.sent) * 100) : null;
               const replyRate = c.sent > 0 ? Math.round((c.replied / c.sent) * 100) : null;
               return (
                 <tr key={c.id} className="hover:bg-muted/20 transition-colors">
@@ -671,7 +656,7 @@ export default function WhatsAppCampaignsPage() {
         </div>
       </div>
 
-      <CreateCampaignModal open={createOpen} onClose={() => setCreateOpen(false)} onSubmit={handleCreate} templates={apiTemplates} segments={segments} />
+      <CreateCampaignModal open={createOpen} onClose={() => setCreateOpen(false)} onSubmit={handleCreate} templates={apiTemplates} />
 
       <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <DialogContent className="max-w-sm">

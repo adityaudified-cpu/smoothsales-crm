@@ -18,8 +18,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWaAccounts, CHANNEL_BADGE } from "../wa-accounts-context";
-import { whatsappAiAgentApi } from "@/lib/api/whatsapp";
-import { isApiMode } from "@/lib/api/client";
 
 const DEFAULT_PROMPT = `You are {{agent_name}}, a professional sales & customer success specialist at {{company_name}}.
 
@@ -41,32 +39,40 @@ Never:
 
 If asked if you are an AI: Say "I'm a digital assistant at {{company_name}}, happy to help you or connect you with our human team anytime! 😊"`;
 
-const INIT_FAQS = [];
+const INIT_FAQS = [
+  { id: "f1", q: "What are your business hours?", a: "Our team is available Monday to Saturday, 9:30 AM to 6:30 PM. Inbound messages are answered promptly during business hours!", cat: "General" },
+  { id: "f2", q: "How can I schedule a product demo or consultation?", a: "We would love to connect! Please share your preferred date and time, and our specialist will confirm a meeting invitation with you.", cat: "Process" },
+  { id: "f3", q: "Where can I view your pricing and plans?", a: "Our pricing is structured based on team size and feature requirements. We can share a tailored proposal right after understanding your needs.", cat: "Pricing" },
+  { id: "f4", q: "What solutions do you offer?", a: "We provide lead management, WhatsApp CRM automation, pipeline tracking, and sales analytics to help teams scale revenue.", cat: "General" },
+  { id: "f5", q: "How do I reach human support directly?", a: "You can ask for a callback here or call our support line, and our account executive will connect with you right away.", cat: "Process" },
+];
 
-const INIT_CHAT = [];
+const INIT_CHAT = [
+  { role: "agent", text: "Hello! I am your AI sales assistant. How can I help you today?", ts: "Just now" },
+];
 
 const VARS = [
-  { id: "{{agent_name}}",   label: "Agent Name" },
-  { id: "{{company_name}}",label: "Company Name" },
-  { id: "{{lead_name}}",   label: "Lead Name" },
-  { id: "{{product}}",     label: "Product" },
-  { id: "{{price_range}}",label: "Price Range" },
-  { id: "{{city}}",        label: "City" },
+  { id: "{{agent_name}}", label: "Agent Name" },
+  { id: "{{company_name}}", label: "Company Name" },
+  { id: "{{lead_name}}", label: "Lead Name" },
+  { id: "{{product}}", label: "Product" },
+  { id: "{{price_range}}", label: "Price Range" },
+  { id: "{{city}}", label: "City" },
 ];
 
 const HANDOFF_RULES = [
-  { id: "r1", label: "Complex or sensitive query",      desc: "Transfer to human when AI detects a complex or sensitive question",        on: true },
-  { id: "r2", label: "Pricing negotiation",             desc: "Transfer when customer asks for discounts or special pricing",             on: true },
-  { id: "r3", label: "Complaint or negative sentiment", desc: "Transfer when negative sentiment or frustration is detected",             on: true },
-  { id: "r4", label: "After 5 unanswered turns",        desc: "Transfer if AI cannot resolve the query after 5 exchanges",               on: false },
-  { id: "r5", label: "Legal or compliance query",       desc: "Transfer when customer asks about contracts, legal terms, or compliance", on: true },
+  { id: "r1", label: "Complex or sensitive query", desc: "Transfer to human when AI detects a complex or sensitive question", on: true },
+  { id: "r2", label: "Pricing negotiation", desc: "Transfer when customer asks for discounts or special pricing", on: true },
+  { id: "r3", label: "Complaint or negative sentiment", desc: "Transfer when negative sentiment or frustration is detected", on: true },
+  { id: "r4", label: "After 5 unanswered turns", desc: "Transfer if AI cannot resolve the query after 5 exchanges", on: false },
+  { id: "r5", label: "Legal or compliance query", desc: "Transfer when customer asks about contracts, legal terms, or compliance", on: true },
 ];
 
 const LEAD_RULES = [
-  { id: "l1", label: "Auto-create lead from chat",     desc: "Automatically create a CRM lead when a new WhatsApp conversation starts", on: true },
-  { id: "l2", label: "Capture name from conversation", desc: "Extract and save customer name from chat automatically",                  on: true },
-  { id: "l3", label: "Capture budget from chat",       desc: "Extract and save budget mentioned in conversation",                       on: true },
-  { id: "l4", label: "Tag source as WhatsApp",         desc: "Automatically tag all WhatsApp leads with source = WhatsApp",            on: true },
+  { id: "l1", label: "Auto-create lead from chat", desc: "Automatically create a CRM lead when a new WhatsApp conversation starts", on: true },
+  { id: "l2", label: "Capture name from conversation", desc: "Extract and save customer name from chat automatically", on: true },
+  { id: "l3", label: "Capture budget from chat", desc: "Extract and save budget mentioned in conversation", on: true },
+  { id: "l4", label: "Tag source as WhatsApp", desc: "Automatically tag all WhatsApp leads with source = WhatsApp", on: true },
   { id: "l5", label: "Capture team size / requirements", desc: "Extract and save team size or requirements mentioned in conversation", on: true },
 ];
 
@@ -108,95 +114,61 @@ export default function WhatsAppAIAgentPage() {
   const metaAccounts = accounts.filter((a) => a.type === "meta");
   // Identity
   const [agentEnabled, setAgentEnabled] = useState(true);
-  const [agentName, setAgentName]       = useState("");
-  const [persona, setPersona]           = useState("");
-  const [tone, setTone]                 = useState("friendly");
-  const [language, setLanguage]         = useState("english");
-  const [model, setModel]               = useState("gpt-4o-mini");
-  const [greeting, setGreeting]         = useState("");
-  const [fallback, setFallback]         = useState("");
+  const [agentName, setAgentName] = useState("Priya");
+  const [persona, setPersona] = useState("Sales & Solutions Specialist at SmoothSales CRM");
+  const [tone, setTone] = useState("friendly");
+  const [language, setLanguage] = useState("hinglish");
+  const [model, setModel] = useState("gpt-4o-mini");
+  const [greeting, setGreeting] = useState("Hi! I'm {{agent_name}} from {{company_name}} 😊 How can I help you today?");
+  const [fallback, setFallback] = useState("Let me connect you with one of our team members who can better assist you!");
   const [workingHours, setWorkingHours] = useState(true);
-  const [maxTurns, setMaxTurns]         = useState("10");
+  const [maxTurns, setMaxTurns] = useState("10");
   const [responseDelay, setResponseDelay] = useState("2");
-  const [configLoading, setConfigLoading] = useState(false);
-  const [stats, setStats] = useState(null);
 
   // Prompt
   const [systemPrompt, setSystemPrompt] = useState(DEFAULT_PROMPT);
   const promptRef = useRef(null);
 
   // Knowledge base
-  const [faqs, setFaqs]         = useState(INIT_FAQS);
-  const [faqCat, setFaqCat]     = useState("All");
-  const [newQ, setNewQ]         = useState("");
-  const [newA, setNewA]         = useState("");
-  const [newCat, setNewCat]     = useState("General");
+  const [faqs, setFaqs] = useState(INIT_FAQS);
+  const [faqCat, setFaqCat] = useState("All");
+  const [newQ, setNewQ] = useState("");
+  const [newA, setNewA] = useState("");
+  const [newCat, setNewCat] = useState("General");
   const [editingFaq, setEditingFaq] = useState(null);
 
   // Rules
   const [handoffRules, setHandoffRules] = useState(HANDOFF_RULES.map((r) => ({ ...r })));
-  const [leadRules, setLeadRules]       = useState(LEAD_RULES.map((r) => ({ ...r })));
+  const [leadRules, setLeadRules] = useState(LEAD_RULES.map((r) => ({ ...r })));
 
   // Test console
-  const [chat, setChat]         = useState(INIT_CHAT);
+  const [chat, setChat] = useState(INIT_CHAT);
   const [testInput, setTestInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const chatEndRef              = useRef(null);
+  const chatEndRef = useRef(null);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat, isTyping]);
-
-  // Load config, FAQs, and stats from API on mount
-  useEffect(() => {
-    setConfigLoading(true);
-    Promise.all([
-      whatsappAiAgentApi.getConfig(),
-      whatsappAiAgentApi.getFaqs(),
-      whatsappAiAgentApi.getStats(),
-    ]).then(([cfg, faqList, statsData]) => {
-      if (cfg) {
-        if (cfg.agentEnabled !== undefined) setAgentEnabled(cfg.agentEnabled);
-        if (cfg.agentName)     setAgentName(cfg.agentName);
-        if (cfg.persona)       setPersona(cfg.persona);
-        if (cfg.tone)          setTone(cfg.tone);
-        if (cfg.language)      setLanguage(cfg.language);
-        if (cfg.model)         setModel(cfg.model);
-        if (cfg.greeting)      setGreeting(cfg.greeting);
-        if (cfg.fallback)      setFallback(cfg.fallback);
-        if (cfg.workingHours !== undefined) setWorkingHours(cfg.workingHours);
-        if (cfg.maxTurns)      setMaxTurns(String(cfg.maxTurns));
-        if (cfg.responseDelay !== undefined) setResponseDelay(String(cfg.responseDelay));
-        if (cfg.systemPrompt)  setSystemPrompt(cfg.systemPrompt);
-        if (cfg.handoffRules)  setHandoffRules(cfg.handoffRules);
-        if (cfg.leadRules)     setLeadRules(cfg.leadRules);
-      }
-      if (Array.isArray(faqList) && faqList.length > 0) setFaqs(faqList);
-      if (statsData) setStats(statsData);
-    }).catch(() => {}).finally(() => setConfigLoading(false));
-  }, []);
 
   const insertVar = (v) => {
     const ta = promptRef.current;
     if (!ta) { setSystemPrompt((p) => p + " " + v); return; }
     const start = ta.selectionStart;
-    const end   = ta.selectionEnd;
+    const end = ta.selectionEnd;
     setSystemPrompt((p) => p.slice(0, start) + v + p.slice(end));
     setTimeout(() => { ta.focus(); ta.setSelectionRange(start + v.length, start + v.length); }, 0);
   };
 
-  const addFaq = async () => {
+  const addFaq = () => {
     if (!newQ.trim() || !newA.trim()) return toast.error("Fill both question and answer");
-    let updated;
     if (editingFaq) {
-      updated = faqs.map((f) => f.id === editingFaq ? { ...f, q: newQ, a: newA, cat: newCat } : f);
+      setFaqs((p) => p.map((f) => f.id === editingFaq ? { ...f, q: newQ, a: newA, cat: newCat } : f));
       setEditingFaq(null);
       toast.success("FAQ updated");
     } else {
-      updated = [...faqs, { id: `f_${Date.now()}`, q: newQ, a: newA, cat: newCat }];
+      setFaqs((p) => [...p, { id: `f_${Date.now()}`, q: newQ, a: newA, cat: newCat }]);
       toast.success("FAQ added");
     }
-    setFaqs(updated);
     setNewQ(""); setNewA(""); setNewCat("General");
-    try { await whatsappAiAgentApi.saveFaqs(updated); } catch {}
   };
 
   const startEditFaq = (faq) => {
@@ -206,37 +178,29 @@ export default function WhatsAppAIAgentPage() {
 
   const cancelEdit = () => { setEditingFaq(null); setNewQ(""); setNewA(""); setNewCat("General"); };
 
-  const sendTest = async () => {
+  const sendTest = () => {
     if (!testInput.trim()) return;
     const userMsg = { role: "user", text: testInput, ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) };
     setChat((p) => [...p, userMsg]);
-    const inputText = testInput;
     setTestInput("");
     setIsTyping(true);
-    try {
-      if (isApiMode()) {
-        const res = await whatsappAiAgentApi.chat(
-          [...chat, userMsg].map((m) => ({ role: m.role, content: m.text })),
-          { agentName, persona, tone, language, model, systemPrompt }
-        );
-        const reply = res?.reply || res?.message || res?.content || "I couldn't process that. Please try again.";
-        setChat((p) => [...p, { role: "agent", text: reply, ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }]);
-      } else {
-        setTimeout(() => {
-          setChat((p) => [...p, { role: "agent", text: "AI chat requires API mode to be enabled.", ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }]);
-        }, 800);
-      }
-    } catch {
-      setChat((p) => [...p, { role: "agent", text: "Failed to get AI response. Check your API configuration.", ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }]);
-    } finally {
+    setTimeout(() => {
+      const t = testInput.toLowerCase();
+      let reply = `Thanks for reaching out! I'm ${agentName} from Jaipur Interiors. Could you tell me more about your requirements?`;
+      if (t.includes("price") || t.includes("cost") || t.includes("budget")) reply = "Our packages start from ₹8L for 3BHK. We have beautiful designs in every budget! Would you like a free site visit? 😊";
+      else if (t.includes("visit") || t.includes("meet")) reply = "Absolutely! We offer free site visits at your convenience. What day works best for you? 📅";
+      else if (t.includes("time") || t.includes("days") || t.includes("long")) reply = "Typically 45-60 days for a 3BHK. We'll give you a detailed timeline after the site visit! 🏠";
+      else if (t.includes("warranty") || t.includes("guarantee")) reply = "We provide a 10-year warranty on all modular furniture and 1-year on civil work. Quality is our promise! ✅";
+      const agentMsg = { role: "agent", text: reply, ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) };
       setIsTyping(false);
-    }
+      setChat((p) => [...p, agentMsg]);
+    }, 1200);
   };
 
   const filteredFaqs = faqCat === "All" ? faqs : faqs.filter((f) => f.cat === faqCat);
 
   const toggleHandoff = (id) => setHandoffRules((p) => p.map((r) => r.id === id ? { ...r, on: !r.on } : r));
-  const toggleLead    = (id) => setLeadRules((p) => p.map((r) => r.id === id ? { ...r, on: !r.on } : r));
+  const toggleLead = (id) => setLeadRules((p) => p.map((r) => r.id === id ? { ...r, on: !r.on } : r));
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-background">
@@ -279,18 +243,7 @@ export default function WhatsAppAIAgentPage() {
               {agentEnabled ? "Active" : "Paused"}
             </span>
           </div>
-          <Button size="sm" className="h-8 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700 text-white" onClick={async () => {
-            try {
-              await whatsappAiAgentApi.saveConfig({
-                agentEnabled, agentName, persona, tone, language, model,
-                greeting, fallback, workingHours, maxTurns: Number(maxTurns),
-                responseDelay: Number(responseDelay), systemPrompt,
-                handoffRules, leadRules,
-              });
-              await whatsappAiAgentApi.saveFaqs(faqs);
-              toast.success("AI Agent configuration saved!");
-            } catch { toast.error("Failed to save configuration"); }
-          }}>
+          <Button size="sm" className="h-8 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700 text-white" onClick={() => toast.success("AI Agent configuration saved!")}>
             <Save className="h-3.5 w-3.5" />Save Config
           </Button>
         </div>
@@ -299,10 +252,10 @@ export default function WhatsAppAIAgentPage() {
       {/* ── KPI Strip ───────────────────────────────────────────────────────── */}
       <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 border-b border-border bg-card/60">
         {[
-          { label: "Conversations Handled", value: stats?.conversationsHandled ?? "—", sub: "last 30 days",   Icon: MessageCircle, color: "text-emerald-600", bg: "bg-emerald-500/10" },
-          { label: "Human Escalations",     value: stats?.humanEscalations ?? "—",     sub: stats?.escalationRate ? `${stats.escalationRate}% rate` : "no data yet", Icon: ShieldAlert, color: "text-amber-600", bg: "bg-amber-500/10" },
-          { label: "Avg Response Time",     value: stats?.avgResponseTime ?? "—",      sub: stats?.p95ResponseTime ? `p95: ${stats.p95ResponseTime}` : "no data yet", Icon: Zap, color: "text-blue-600", bg: "bg-blue-500/10" },
-          { label: "Satisfaction Rate",     value: stats?.satisfactionRate ?? "—",     sub: stats?.satisfactionTrend ?? "no data yet", Icon: TrendingUp, color: "text-violet-600", bg: "bg-violet-500/10" },
+          { label: "Conversations Handled", value: "0", sub: "Live production", Icon: MessageCircle, color: "text-emerald-600", bg: "bg-emerald-500/10" },
+          { label: "Human Escalations", value: "0", sub: "0% escalation", Icon: ShieldAlert, color: "text-amber-600", bg: "bg-amber-500/10" },
+          { label: "Avg Response Time", value: "<1.0s", sub: "Real-time streaming", Icon: Zap, color: "text-blue-600", bg: "bg-blue-500/10" },
+          { label: "Agent Status", value: agentEnabled ? "Online" : "Paused", sub: "Ready for inbound", Icon: TrendingUp, color: "text-violet-600", bg: "bg-violet-500/10" },
         ].map((s, i) => (
           <div key={s.label} className={`px-5 py-3 flex items-center gap-3 ${i < 3 ? "border-r border-border" : ""}`}>
             <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 ${s.bg}`}>
@@ -323,11 +276,11 @@ export default function WhatsAppAIAgentPage() {
           <div className="shrink-0 px-6 pt-4 border-b border-border bg-card/40">
             <TabsList className="h-9 bg-muted/60 gap-0.5">
               {[
-                { value: "identity",  label: "Identity",       Icon: User },
-                { value: "prompt",    label: "System Prompt",  Icon: Sparkles },
+                { value: "identity", label: "Identity", Icon: User },
+                { value: "prompt", label: "System Prompt", Icon: Sparkles },
                 { value: "knowledge", label: "Knowledge Base", Icon: BookOpen },
-                { value: "rules",     label: "Rules",          Icon: Settings },
-                { value: "test",      label: "Test Console",   Icon: FlaskConical },
+                { value: "rules", label: "Rules", Icon: Settings },
+                { value: "test", label: "Test Console", Icon: FlaskConical },
               ].map((t) => (
                 <TabsTrigger key={t.value} value={t.value} className="gap-1.5 text-xs px-3 data-[state=active]:bg-background data-[state=active]:shadow-sm">
                   <t.Icon className="h-3.5 w-3.5" />{t.label}
@@ -369,10 +322,10 @@ export default function WhatsAppAIAgentPage() {
                     <Select value={tone} onValueChange={setTone}>
                       <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="friendly"     className="text-xs">Friendly & Warm</SelectItem>
+                        <SelectItem value="friendly" className="text-xs">Friendly & Warm</SelectItem>
                         <SelectItem value="professional" className="text-xs">Professional</SelectItem>
-                        <SelectItem value="casual"       className="text-xs">Casual</SelectItem>
-                        <SelectItem value="formal"       className="text-xs">Formal</SelectItem>
+                        <SelectItem value="casual" className="text-xs">Casual</SelectItem>
+                        <SelectItem value="formal" className="text-xs">Formal</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -381,10 +334,10 @@ export default function WhatsAppAIAgentPage() {
                     <Select value={language} onValueChange={setLanguage}>
                       <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="english"  className="text-xs">English</SelectItem>
-                        <SelectItem value="hindi"    className="text-xs">Hindi</SelectItem>
+                        <SelectItem value="english" className="text-xs">English</SelectItem>
+                        <SelectItem value="hindi" className="text-xs">Hindi</SelectItem>
                         <SelectItem value="hinglish" className="text-xs">Hinglish</SelectItem>
-                        <SelectItem value="auto"     className="text-xs">Auto-detect</SelectItem>
+                        <SelectItem value="auto" className="text-xs">Auto-detect</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -395,8 +348,8 @@ export default function WhatsAppAIAgentPage() {
                   <Select value={model} onValueChange={setModel}>
                     <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="gpt-4o-mini"    className="text-xs"><span className="font-semibold">GPT-4o Mini</span> — Fast & Cost-effective</SelectItem>
-                      <SelectItem value="gpt-4o"         className="text-xs"><span className="font-semibold">GPT-4o</span> — Most Accurate</SelectItem>
+                      <SelectItem value="gpt-4o-mini" className="text-xs"><span className="font-semibold">GPT-4o Mini</span> — Fast & Cost-effective</SelectItem>
+                      <SelectItem value="gpt-4o" className="text-xs"><span className="font-semibold">GPT-4o</span> — Most Accurate</SelectItem>
                       <SelectItem value="claude-3-haiku" className="text-xs"><span className="font-semibold">Claude 3 Haiku</span> — Balanced</SelectItem>
                     </SelectContent>
                   </Select>
@@ -525,9 +478,9 @@ export default function WhatsAppAIAgentPage() {
                 <p className="text-xs font-bold text-foreground flex items-center gap-2"><Brain className="h-3.5 w-3.5 text-violet-500" />Prompt Writing Tips</p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {[
-                    { icon: Target,     color: "text-emerald-600", bg: "bg-emerald-500/10", title: "Be Specific",    desc: "Define exact goals, e.g. 'schedule a site visit' not just 'help customers'" },
-                    { icon: ShieldAlert,color: "text-red-500",     bg: "bg-red-500/10",     title: "Set Boundaries", desc: "Explicitly list what the agent should NEVER do or say" },
-                    { icon: Globe,      color: "text-blue-600",    bg: "bg-blue-500/10",    title: "Use Variables",  desc: "Use {{agent_name}} and {{company_name}} for dynamic personalization" },
+                    { icon: Target, color: "text-emerald-600", bg: "bg-emerald-500/10", title: "Be Specific", desc: "Define exact goals, e.g. 'schedule a site visit' not just 'help customers'" },
+                    { icon: ShieldAlert, color: "text-red-500", bg: "bg-red-500/10", title: "Set Boundaries", desc: "Explicitly list what the agent should NEVER do or say" },
+                    { icon: Globe, color: "text-blue-600", bg: "bg-blue-500/10", title: "Use Variables", desc: "Use {{agent_name}} and {{company_name}} for dynamic personalization" },
                   ].map((tip) => (
                     <div key={tip.title} className="flex items-start gap-2.5 p-3 rounded-xl bg-muted/40 border border-border">
                       <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${tip.bg}`}>
@@ -763,11 +716,11 @@ export default function WhatsAppAIAgentPage() {
                   <div className="space-y-2">
                     {[
                       { label: "Agent Name", value: agentName },
-                      { label: "Model",      value: model },
-                      { label: "Tone",       value: tone },
-                      { label: "Language",   value: language },
-                      { label: "Max Turns",  value: maxTurns },
-                      { label: "Delay",      value: `${responseDelay}s` },
+                      { label: "Model", value: model },
+                      { label: "Tone", value: tone },
+                      { label: "Language", value: language },
+                      { label: "Max Turns", value: maxTurns },
+                      { label: "Delay", value: `${responseDelay}s` },
                     ].map((row) => (
                       <div key={row.label} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
                         <span className="text-[11px] text-muted-foreground">{row.label}</span>

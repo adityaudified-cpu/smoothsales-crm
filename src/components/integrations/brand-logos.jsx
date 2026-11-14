@@ -265,3 +265,4 @@ export function getIntegrationLogo(key, className = "h-6 w-6") {
       return <WebhookFormLogo className={className} />;
   }
 }
+

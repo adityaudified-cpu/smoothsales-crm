@@ -43,18 +43,6 @@ import {
 import { customersApi } from "@/lib/api/customers";
 import { formatDistanceToNowStrict, parseISO, isValid } from "date-fns";
 
-// Fallback mock data — used only when backend is unreachable
-const MOCK_CUSTOMERS = [
-  { id: "cu1", fullName: "Aditya Narayan", businessName: "Apex Tech Logistics", designation: "Procurement Head", phone: "+91 98201 11234", email: "aditya@apextech.in", city: "Mumbai", status: "ACTIVE", tier: "Enterprise", totalRevenue: 1240000, totalDeals: 2, lastActivityAt: new Date(Date.now() - 2 * 86400000).toISOString(), assignedTo: { name: "Rahul Sharma" }, source: "Referral" },
-  { id: "cu2", fullName: "Kavita Nair", businessName: "Zenith Retail", designation: "CEO", phone: "+91 99102 55678", email: "kavita@zenithretail.com", city: "Pune", status: "ACTIVE", tier: "Mid-Market", totalRevenue: 480000, totalDeals: 1, lastActivityAt: new Date(Date.now() - 3600000).toISOString(), assignedTo: { name: "Priya Mehta" }, source: "Inbound" },
-  { id: "cu3", fullName: "Rajeshwar Iyer", businessName: "Trident Engineering", designation: "Operations Manager", phone: "+91 98334 77890", email: "r.iyer@trident.co.in", city: "Chennai", status: "ACTIVE", tier: "Enterprise", totalRevenue: 2850000, totalDeals: 3, lastActivityAt: new Date(Date.now() - 7 * 86400000).toISOString(), assignedTo: { name: "Rahul Sharma" }, source: "Cold Outreach" },
-  { id: "cu4", fullName: "Meera Kulkarni", businessName: "Sudarshan Healthtech", designation: "Director", phone: "+91 97123 44556", email: "meera.k@sudarshan.in", city: "Bangalore", status: "AT_RISK", tier: "Mid-Market", totalRevenue: 620000, totalDeals: 1, lastActivityAt: new Date(Date.now() - 21 * 86400000).toISOString(), assignedTo: { name: "Amit Joshi" }, source: "LinkedIn" },
-  { id: "cu5", fullName: "Vikram Singhania", businessName: "Singhania Estates", designation: "Director", phone: "+91 98201 55432", email: "vikram@singhania.in", city: "Mumbai", status: "ACTIVE", tier: "Enterprise", totalRevenue: 4500000, totalDeals: 4, lastActivityAt: new Date(Date.now() - 86400000).toISOString(), assignedTo: { name: "Priya Mehta" }, source: "Referral" },
-  { id: "cu6", fullName: "Dr. Ananya Roy", businessName: "Dental Care Clinic", designation: "Owner", phone: "+91 99102 77890", email: "ananya@dentalcare.in", city: "Mumbai", status: "CHURNED", tier: "SMB", totalRevenue: 180000, totalDeals: 1, lastActivityAt: new Date(Date.now() - 60 * 86400000).toISOString(), assignedTo: { name: "Amit Joshi" }, source: "Website" },
-  { id: "cu7", fullName: "Harish Patel", businessName: "Gujarat Solar", designation: "MD", phone: "+91 98450 99821", email: "harish@gujaratsolar.com", city: "Ahmedabad", status: "ACTIVE", tier: "Mid-Market", totalRevenue: 960000, totalDeals: 2, lastActivityAt: new Date(Date.now() - 3 * 86400000).toISOString(), assignedTo: { name: "Rahul Sharma" }, source: "Trade Show" },
-  { id: "cu8", fullName: "Sanjay Singhal", businessName: "Kisan Agro Export", designation: "Partner", phone: "+91 98765 43210", email: "sanjay@kisanagro.com", city: "Jaipur", status: "INACTIVE", tier: "SMB", totalRevenue: 240000, totalDeals: 1, lastActivityAt: new Date(Date.now() - 30 * 86400000).toISOString(), assignedTo: { name: "Priya Mehta" }, source: "Cold Outreach" },
-];
-
 const STATUS_CFG = {
   ACTIVE:   { label: "Active",   cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30", dot: "bg-emerald-500" },
   AT_RISK:  { label: "At Risk",  cls: "bg-amber-500/10 text-amber-600 border-amber-500/30",   dot: "bg-amber-500" },
@@ -94,7 +82,6 @@ export default function CustomersPage() {
   const router = useRouter();
   const [customers, setCustomers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isMockData, setIsMockData] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [tierFilter, setTierFilter] = useState("all");
@@ -125,10 +112,10 @@ export default function CustomersPage() {
         source: c.sourceDetail || c.source || "",
       }));
       setCustomers(normalized);
-      setIsMockData(false);
-    } catch {
-      setCustomers(MOCK_CUSTOMERS);
-      setIsMockData(true);
+    } catch (err) {
+      console.error("Failed to load customers:", err);
+      setCustomers([]);
+      toast.error("Failed to load customer records from server");
     } finally {
       setIsLoading(false);
     }
@@ -194,7 +181,6 @@ export default function CustomersPage() {
           <h1 className="text-base font-bold text-foreground tracking-tight">Customers</h1>
           <p className="text-[11px] text-muted-foreground">
             {isLoading ? "Loading..." : `${customers.length} total customers · converted from leads`}
-            {isMockData && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-amber-500/10 text-amber-600 border border-amber-500/20 font-semibold">Sample Data</span>}
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -312,7 +298,14 @@ export default function CustomersPage() {
               ) : paginated.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="py-14 text-center text-xs text-muted-foreground">
-                    No customers match your filters.
+                    <div className="flex flex-col items-center gap-1.5 max-w-sm mx-auto">
+                      <p className="font-semibold text-foreground text-sm">No customers found</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {customers.length === 0
+                          ? "Customers converted from leads will automatically appear here."
+                          : "No customers match your search and filter criteria."}
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (

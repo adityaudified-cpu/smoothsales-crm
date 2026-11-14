@@ -566,7 +566,7 @@ export default function IntegrationsPage() {
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-foreground tracking-tight">
-              Enterprise Integrations &amp; Webhook Hub
+              Enterprise Integrations & Webhook Hub
             </h1>
 
             <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
