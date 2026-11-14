@@ -136,9 +136,9 @@ const AUTOMATION_TRIGGERS = [
     trigger: "First Message",
     category: "onboarding",
     desc: "Greet leads automatically with an approved welcome message upon initial outreach.",
-    template: "lead_welcome_intro",
+    template: "universal",
     timing: "Immediate (0s delay)",
-    snippet: "Hi {{1}}! 👋 Welcome to SmoothSales CRM. Would you like to schedule a quick discovery demo?",
+    snippet: "Hi {{1}}! Welcome to SmoothSales CRM. Would you like to schedule a quick discovery demo?",
     default: true,
   },
   {
@@ -147,7 +147,7 @@ const AUTOMATION_TRIGGERS = [
     trigger: "Meeting Scheduled",
     category: "engagement",
     desc: "Send an automated confirmation and reminder 2 hours prior to scheduled meetings.",
-    template: "meeting_demo_reminder",
+    template: "starting",
     timing: "2 Hours Before Meeting",
     snippet: "Hi {{1}}, this is a friendly reminder for your session with our specialist on {{2}} at {{3}}.",
     default: true,
@@ -158,7 +158,7 @@ const AUTOMATION_TRIGGERS = [
     trigger: "No Reply 24h",
     category: "engagement",
     desc: "Send a polite follow-up nudge if a prospect does not reply within 24 hours.",
-    template: "product_followup",
+    template: "hello_world",
     timing: "24 Hours of Inactivity",
     snippet: "Hi {{1}}! Just following up on your enquiry. Reply YES or call us to connect with a specialist.",
     default: false,
@@ -169,9 +169,9 @@ const AUTOMATION_TRIGGERS = [
     trigger: "Quotation Sent",
     category: "onboarding",
     desc: "Notify customer immediately when a quote or pricing proposal is generated in CRM.",
-    template: "quotation_ready",
+    template: "jaspers_market_plain_text_v1",
     timing: "Immediate on Quote Generate",
-    snippet: "Hi {{1}}, your quotation is ready! Estimated value: {{2}}. Please review and let us know.",
+    snippet: "Hi {{1}}, your quotation is ready! Please review and let us know if you have any questions.",
     default: true,
   },
   {
@@ -180,7 +180,7 @@ const AUTOMATION_TRIGGERS = [
     trigger: "AI Qualification",
     category: "ai",
     desc: "Let Priya (AI Sales Assistant) qualify budget, property requirements, and book site visits 24/7.",
-    template: "ai_sales_persona",
+    template: "universal",
     timing: "Conversational Real-time",
     snippet: "Priya qualifies lead requirements, budget range, and instantly proposes available demo slots.",
     default: true,
@@ -305,19 +305,17 @@ export default function WhatsAppConnectPage() {
 
   // Test Message Modal State & Validation
   const [testModalOpen, setTestModalOpen] = useState(false);
-  const [testPhone, setTestPhone] = useState("+918750073899");
-  const [testMessage, setTestMessage] = useState(
-    "🔔 *SmoothSales CRM Test Ping*: WhatsApp Meta Cloud API connection is active and working properly!"
-  );
+  const [testPhone, setTestPhone] = useState("");
+  const [testMessage, setTestMessage] = useState("");
   const [testSending, setTestSending] = useState(false);
   const [testErrors, setTestErrors] = useState({});
 
-  // Credentials Modal State & Validation
+  // Credentials Modal State & Validation — pre-fill from connected metaAccount
   const [showCredentialsModal, setShowCredentialsModal] = useState(false);
-  const [phoneId, setPhoneId] = useState("1197546510113741");
-  const [wabaId, setWabaId] = useState("4424288871221076");
+  const [phoneId, setPhoneId] = useState("");
+  const [wabaId, setWabaId] = useState("");
   const [token, setToken] = useState("");
-  const [label, setLabel] = useState("SmoothSales Official WhatsApp");
+  const [label, setLabel] = useState("");
   const [showToken, setShowToken] = useState(false);
   const [credentialsErrors, setCredentialsErrors] = useState({});
 
@@ -326,11 +324,21 @@ export default function WhatsAppConnectPage() {
   const [pairingMethod, setPairingMethod] = useState("pairing_code"); // 'pairing_code' | 'qr_scan' | 'api_guide'
   const [pairPhone, setPairPhone] = useState("");
   const [pairAgent, setPairAgent] = useState("");
-  const [pairingCode, setPairingCode] = useState("7K9M-2W4X");
-  const [codeCountdown, setCodeCountdown] = useState(120);
+  const [pairingCode, setPairingCode] = useState(""); // blank until user generates one
+  const [codeCountdown, setCodeCountdown] = useState(0);
   const [pairingErrors, setPairingErrors] = useState({});
   const [qrRefreshedAt, setQrRefreshedAt] = useState(Date.now());
   const [liveApprovedTemplates, setLiveApprovedTemplates] = useState([]);
+
+  // Pre-fill credentials modal from existing meta account when opened
+  useEffect(() => {
+    if (showCredentialsModal && metaAccount) {
+      setPhoneId(metaAccount.phoneId || "");
+      setWabaId(metaAccount.wabaId || "");
+      setLabel(metaAccount.label || "");
+      setToken("");
+    }
+  }, [showCredentialsModal]);
 
   useEffect(() => {
     whatsappTemplatesApi.getApproved()
@@ -393,14 +401,14 @@ export default function WhatsAppConnectPage() {
   const metaAccount = accounts.find((a) => a.type === "meta") || accounts[0];
   const personalAccount = accounts.find((a) => a.type === "personal") || null;
 
-  // Countdown timer for pairing code
+  // Countdown timer for pairing code — only runs after code is generated
   useEffect(() => {
-    if (!qrModalOpen || pairingMethod !== "pairing_code") return;
+    if (!qrModalOpen || pairingMethod !== "pairing_code" || !pairingCode || codeCountdown <= 0) return;
     const interval = setInterval(() => {
-      setCodeCountdown((prev) => (prev > 0 ? prev - 1 : 120));
+      setCodeCountdown((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(interval);
-  }, [qrModalOpen, pairingMethod]);
+  }, [qrModalOpen, pairingMethod, pairingCode, codeCountdown]);
 
   // ── Template Sync Handler ──────────────────────────────────────────────────
   const handleSyncTemplates = async () => {
@@ -613,8 +621,7 @@ export default function WhatsAppConnectPage() {
     for (let i = 0; i < 4; i++) code1 += chars.charAt(Math.floor(Math.random() * chars.length));
     for (let i = 0; i < 4; i++) code2 += chars.charAt(Math.floor(Math.random() * chars.length));
     setPairingCode(`${code1}-${code2}`);
-    setCodeCountdown(120);
-    toast.success("New 8-digit pairing code generated! Valid for 2 minutes.");
+    setCodeCountdown(120);    toast.success("New 8-digit pairing code generated! Valid for 2 minutes.");
   };
 
   const handleConfirmPersonalLink = async () => {
@@ -1970,33 +1977,54 @@ export default function WhatsAppConnectPage() {
                 </div>
 
                 <div className="p-4 rounded-2xl bg-muted/50 border border-border flex flex-col items-center justify-center space-y-2 text-center">
-                  <span className="text-[10.5px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    Enter this Code in WhatsApp on Phone:
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl font-mono font-extrabold tracking-widest text-emerald-700 dark:text-emerald-400 bg-background px-4 py-1.5 rounded-xl border border-emerald-500/30 select-all shadow-xs">
-                      {pairingCode}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-9 px-2.5 text-xs gap-1 font-semibold"
-                      onClick={() => copyToClipboard(pairingCode, "Pairing Code")}
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                  <div className="flex items-center gap-2 text-[10.5px] text-muted-foreground">
-                    <Clock className="h-3 w-3 text-amber-500" />
-                    <span>Expires in <strong className="font-mono text-foreground">{codeCountdown}s</strong></span>
-                    <span>·</span>
-                    <button
-                      onClick={handleGeneratePairingCode}
-                      className="text-primary hover:underline font-semibold"
-                    >
-                      Generate New Code
-                    </button>
-                  </div>
+                  {pairingCode ? (
+                    <>
+                      <span className="text-[10.5px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        Enter this Code in WhatsApp on Phone:
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl font-mono font-extrabold tracking-widest text-emerald-700 dark:text-emerald-400 bg-background px-4 py-1.5 rounded-xl border border-emerald-500/30 select-all shadow-xs">
+                          {pairingCode}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-9 px-2.5 text-xs gap-1 font-semibold"
+                          onClick={() => copyToClipboard(pairingCode, "Pairing Code")}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                      <div className="flex items-center gap-2 text-[10.5px] text-muted-foreground">
+                        <Clock className="h-3 w-3 text-amber-500" />
+                        <span>Expires in <strong className="font-mono text-foreground">{codeCountdown}s</strong></span>
+                        <span>·</span>
+                        <button
+                          onClick={handleGeneratePairingCode}
+                          className="text-primary hover:underline font-semibold"
+                        >
+                          Generate New Code
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-[10.5px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        No Code Generated Yet
+                      </span>
+                      <p className="text-[11px] text-muted-foreground max-w-xs">
+                        Enter your WhatsApp phone number and agent name above, then click <strong>Generate Code</strong>.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs gap-1.5 font-semibold border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
+                        onClick={handleGeneratePairingCode}
+                      >
+                        <KeyRound className="h-3.5 w-3.5" /> Generate Pairing Code
+                      </Button>
+                    </>
+                  )}
                 </div>
 
                 <div className="space-y-2 p-3 rounded-xl bg-card border border-border text-[11px] text-muted-foreground">
@@ -2005,7 +2033,8 @@ export default function WhatsAppConnectPage() {
                     <li>Open WhatsApp on phone → Settings (or 3 dots) → <strong>Linked Devices</strong>.</li>
                     <li>Tap <strong>Link a Device</strong>.</li>
                     <li>At the bottom of the camera screen, tap <strong>"Link with phone number instead"</strong>.</li>
-                    <li>Type the 8-digit code: <strong className="font-mono text-foreground">{pairingCode}</strong>.</li>
+                    {pairingCode && <li>Type the 8-digit code: <strong className="font-mono text-foreground">{pairingCode}</strong>.</li>}
+                    {!pairingCode && <li>Generate your code above, then type it here.</li>}
                   </ol>
                 </div>
               </div>
@@ -2159,12 +2188,9 @@ export default function WhatsAppConnectPage() {
                       );
                     })
                   ) : (
-                    <>
-                      <SelectItem value="universal">universal (Approved)</SelectItem>
-                      <SelectItem value="starting">starting (Approved)</SelectItem>
-                      <SelectItem value="hello_world">hello_world (Approved)</SelectItem>
-                      <SelectItem value="jaspers_market_plain_text_v1">jaspers_market_plain_text_v1 (Approved)</SelectItem>
-                    </>
+                    <SelectItem value="" disabled>
+                      No approved templates — click &quot;Sync Templates&quot; first
+                    </SelectItem>
                   )}
                 </SelectContent>
               </Select>

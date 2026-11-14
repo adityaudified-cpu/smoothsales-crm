@@ -35,30 +35,30 @@ import { isApiMode } from "@/lib/api/client";
 import { encodeId } from "../campaigns/data";
 
 const LABEL_COLORS = {
-  "Hot Lead":  "bg-rose-500/10 text-rose-600 border-rose-200",
-  "Warm":      "bg-amber-500/10 text-amber-600 border-amber-200",
+  "Hot Lead": "bg-rose-500/10 text-rose-600 border-rose-200",
+  "Warm": "bg-amber-500/10 text-amber-600 border-amber-200",
   "Follow-up": "bg-blue-500/10 text-blue-600 border-blue-200",
   "Scheduled": "bg-emerald-500/10 text-emerald-600 border-emerald-200",
-  "New":       "bg-purple-500/10 text-purple-600 border-purple-200",
+  "New": "bg-purple-500/10 text-purple-600 border-purple-200",
 };
 
 const SOURCE_COLORS = {
-  "Meta Ads":  "bg-blue-500/10 text-blue-600",
-  "Website":   "bg-violet-500/10 text-violet-600",
-  "WhatsApp":  "bg-emerald-500/10 text-emerald-600",
-  "JustDial":  "bg-orange-500/10 text-orange-600",
+  "Meta Ads": "bg-blue-500/10 text-blue-600",
+  "Website": "bg-violet-500/10 text-violet-600",
+  "WhatsApp": "bg-emerald-500/10 text-emerald-600",
+  "JustDial": "bg-orange-500/10 text-orange-600",
   "IndiaMART": "bg-green-500/10 text-green-600",
 };
 
 const CHANNEL_CFG = {
-  meta:     { label: "Meta Cloud API", cls: "bg-blue-500/10 text-blue-600 border-blue-500/20",    dot: "bg-blue-500" },
-  personal: { label: "Personal WA",    cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20", dot: "bg-emerald-500" },
+  meta: { label: "Meta Cloud API", cls: "bg-blue-500/10 text-blue-600 border-blue-500/20", dot: "bg-blue-500" },
+  personal: { label: "Personal WA", cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20", dot: "bg-emerald-500" },
 };
 
 const FILTERS = [
-  { key: "all",      label: "All" },
-  { key: "open",     label: "Open" },
-  { key: "unread",   label: "Unread" },
+  { key: "all", label: "All" },
+  { key: "open", label: "Open" },
+  { key: "unread", label: "Unread" },
   { key: "resolved", label: "Resolved" },
 ];
 
@@ -203,7 +203,7 @@ function NewChatModal({ open, onClose, onChatCreated }) {
         const items = Array.isArray(data) ? data : (data?.items || data?.content || []);
         setLeads(items);
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoadingLeads(false));
 
     whatsappTemplatesApi.getApproved()
@@ -211,7 +211,7 @@ function NewChatModal({ open, onClose, onChatCreated }) {
         const list = Array.isArray(data) ? data : (data?.data || []);
         setTemplates(list);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [open]);
 
   const filteredLeads = useMemo(() => {
@@ -561,9 +561,9 @@ export default function WhatsAppChatPage() {
             date: (m.sentAt || m.createdAt) ? new Date(m.sentAt || m.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "Today",
           }));
           setConversations((p) => p.map((c) => c.id === activeId ? { ...c, messages: mapped } : c));
-          whatsappInboxApi.markAsRead(activeId).catch(() => {});
+          whatsappInboxApi.markAsRead(activeId).catch(() => { });
         })
-        .catch(() => {});
+        .catch(() => { });
       return prev;
     });
   }, [activeId]);
@@ -588,12 +588,12 @@ export default function WhatsAppChatPage() {
           return prev.map((c) =>
             c.id === convId
               ? {
-                  ...c,
-                  messages: [...c.messages, newMsg],
-                  lastMsg: msg.messageBody || msg.body || "",
-                  lastTime: "Just now",
-                  unread: c.id === activeId ? 0 : c.unread + 1,
-                }
+                ...c,
+                messages: [...c.messages, newMsg],
+                lastMsg: msg.messageBody || msg.body || "",
+                lastTime: "Just now",
+                unread: c.id === activeId ? 0 : c.unread + 1,
+              }
               : c
           );
         }
