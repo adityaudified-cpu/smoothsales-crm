@@ -186,11 +186,16 @@ export default function WhatsAppAIAgentPage() {
     setIsTyping(true);
     setTimeout(() => {
       const t = testInput.toLowerCase();
-      let reply = `Thanks for reaching out! I'm ${agentName} from Jaipur Interiors. Could you tell me more about your requirements?`;
-      if (t.includes("price") || t.includes("cost") || t.includes("budget")) reply = "Our packages start from ₹8L for 3BHK. We have beautiful designs in every budget! Would you like a free site visit? 😊";
-      else if (t.includes("visit") || t.includes("meet")) reply = "Absolutely! We offer free site visits at your convenience. What day works best for you? 📅";
-      else if (t.includes("time") || t.includes("days") || t.includes("long")) reply = "Typically 45-60 days for a 3BHK. We'll give you a detailed timeline after the site visit! 🏠";
-      else if (t.includes("warranty") || t.includes("guarantee")) reply = "We provide a 10-year warranty on all modular furniture and 1-year on civil work. Quality is our promise! ✅";
+      let reply = `Thanks for reaching out! I'm ${agentName}. Could you please share a bit more about your requirements?`;
+      if (t.includes("price") || t.includes("cost") || t.includes("budget") || t.includes("plan")) {
+        reply = "Our pricing is structured based on team size and requirements. We can share a tailored proposal right after understanding your needs! Would you like to schedule a quick consultation? 😊";
+      } else if (t.includes("demo") || t.includes("visit") || t.includes("meet") || t.includes("call")) {
+        reply = "We would love to connect! Please share your preferred date and time, and our specialist will confirm a meeting invitation with you. 📅";
+      } else if (t.includes("time") || t.includes("days") || t.includes("timeline")) {
+        reply = "Our onboarding is quick and straightforward—most teams are up and running within 24 to 48 hours! 🚀";
+      } else if (t.includes("support") || t.includes("human") || t.includes("agent")) {
+        reply = "You can ask for a callback here or share your phone number, and our account executive will connect with you right away! ✅";
+      }
       const agentMsg = { role: "agent", text: reply, ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) };
       setIsTyping(false);
       setChat((p) => [...p, agentMsg]);

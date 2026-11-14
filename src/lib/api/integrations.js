@@ -32,6 +32,12 @@ export async function testIntegration(key) {
   });
 }
 
+export async function rotateWebhookKey(key) {
+  return apiRequest(`/integrations/${key}/rotate-webhook-key`, {
+    method: "POST",
+  });
+}
+
 export async function simulateLead(source, payload) {
   return apiRequest("/integrations/simulate", {
     method: "POST",

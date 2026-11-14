@@ -13,9 +13,9 @@ function resolveBase() {
 
 export const API_BASE_URL = RAW_API_URL;
 
-// "api" switches the Leads module from browser storage to the backend.
-export const LEADS_DATA_SOURCE = process.env.NEXT_PUBLIC_LEADS_DATA_SOURCE === "api" ? "api" : "local";
-export const isApiMode = () => LEADS_DATA_SOURCE === "api";
+// In production SaaS, every module runs strictly on the Spring Boot backend API.
+export const LEADS_DATA_SOURCE = "api";
+export const isApiMode = () => true;
 
 const ACCESS_TOKEN_KEY = "smoothsales_access_token";
 const REFRESH_TOKEN_KEY = "smoothsales_refresh_token";

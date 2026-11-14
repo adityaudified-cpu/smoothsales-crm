@@ -8,14 +8,6 @@ import { ROLES, normalizeRole } from "@/lib/auth/permissions";
 const AUTH_SESSION_KEY = "smoothsales_auth_user";
 const PENDING_OTP_KEY = "smoothsales_pending_otp";
 
-// Demo accounts kept for offline/dev fallback — roles match backend seeded values
-export const DEMO_ACCOUNTS = [
-  { email: "admin@smoothsales.com", password: "admin123", name: "System Admin", initials: "SA", role: ROLES.ADMIN, title: "Tenant Administrator", avatarColor: "bg-purple-600 text-white" },
-  { email: "manager@smoothsales.com", password: "manager123", name: "Neha Kapoor", initials: "NK", role: ROLES.MANAGER, title: "Branch Head", avatarColor: "bg-emerald-600 text-white" },
-  { email: "arjun@smoothsales.com", password: "agent123", name: "Arjun Singh", initials: "AS", role: ROLES.SALES_USER, title: "Sales Agent", avatarColor: "bg-blue-600 text-white" },
-  { email: "priya@smoothsales.com", password: "agent123", name: "Priya Mehta", initials: "PM", role: ROLES.SALES_USER, title: "Sales Agent", avatarColor: "bg-amber-600 text-white" },
-];
-
 function mapAuthResponse(res) {
   if (!res) return null;
   const fullName = res.fullName || `${res.firstName || ""} ${res.lastName || ""}`.trim();
@@ -140,10 +132,7 @@ export function AuthProvider({ children }) {
     });
   }, []);
 
-  const switchDemoRole = (role) => {
-    const matched = DEMO_ACCOUNTS.find((a) => a.role === role) || { ...user, role };
-    persistUser(matched);
-  };
+  const switchDemoRole = () => {};
 
   return (
     <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, pendingOtpUser, login, verifyOtp, resendOtp, logout, updateUser, switchDemoRole }}>

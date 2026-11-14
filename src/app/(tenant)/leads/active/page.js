@@ -4,7 +4,6 @@ import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useLeads } from "@/lib/hooks/use-leads";
 import { useAuth } from "@/lib/auth/auth-context";
 import { buildLeadsColumns, DEFAULT_VISIBLE_COLUMN_IDS } from "@/lib/leads-columns.config";
-import { getTenantCustomFields } from "@/lib/mock-data/tenant-custom-fields";
 import { LeadsToolbar } from "@/components/leads/leads-toolbar";
 import { LeadTable } from "@/components/leads/lead-table";
 import { LeadsFilterDrawer } from "@/components/leads/leads-filter-drawer";
