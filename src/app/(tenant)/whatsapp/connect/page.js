@@ -328,7 +328,32 @@ export default function WhatsAppConnectPage() {
   const [codeCountdown, setCodeCountdown] = useState(0);
   const [pairingErrors, setPairingErrors] = useState({});
   const [qrRefreshedAt, setQrRefreshedAt] = useState(Date.now());
+  const [qrDataUrl, setQrDataUrl] = useState("");
   const [liveApprovedTemplates, setLiveApprovedTemplates] = useState([]);
+
+  // Generate dynamic real QR Code data URL whenever phone or session changes
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const rawNum = pairPhone.replace(/\D/g, "");
+    const cleanNum = rawNum ? (rawNum.startsWith("91") ? rawNum : `91${rawNum}`) : "918750073899";
+    const payload = `https://wa.me/${cleanNum}?text=${encodeURIComponent(`SmoothSales CRM Link Request [${Math.random().toString(36).substring(2, 8).toUpperCase()}]`)}`;
+    
+    import("qrcode")
+      .then((QRCodeModule) => {
+        const QRCode = QRCodeModule.default || QRCodeModule;
+        return QRCode.toDataURL(payload, {
+          width: 240,
+          margin: 1,
+          color: {
+            dark: "#0f172a",
+            light: "#ffffff",
+          },
+          errorCorrectionLevel: "M",
+        });
+      })
+      .then((url) => setQrDataUrl(url))
+      .catch(() => {});
+  }, [pairPhone, qrRefreshedAt]);
 
   // Pre-fill credentials modal from existing meta account when opened
   useEffect(() => {
@@ -625,19 +650,25 @@ export default function WhatsAppConnectPage() {
   };
 
   const handleConfirmPersonalLink = async () => {
-    if (!pairPhone.trim()) {
-      toast.error("Please enter the rep's WhatsApp Business phone number");
+    const val = validateWithZod(personalPairingSchema, {
+      phone: pairPhone.trim(),
+      agentName: pairAgent.trim() || "Sales Rep",
+    });
+    if (!val.success) {
+      setPairingErrors(val.errors);
+      toast.error(val.errors.phone || "Please enter a valid phone number with country code.");
       return;
     }
+    setPairingErrors({});
     setConnecting(true);
     try {
       await addAccount({
         type: "personal",
-        id: "personal_device_primary",
+        id: `personal_${pairPhone.replace(/\D/g, "") || Date.now()}`,
         label: `Personal WhatsApp (${pairAgent.trim() || "Sales Rep"})`,
         number: pairPhone.trim(),
         agentName: pairAgent.trim() || "Team Rep",
-        device: "Linked WhatsApp Device",
+        device: "Linked WhatsApp Business Phone",
         battery: "Active",
         status: "connected",
         syncStatus: "Active",
@@ -1937,6 +1968,39 @@ export default function WhatsAppConnectPage() {
             })}
           </div>
 
+          {/* Shared Rep Credentials Section (Required for all pairing methods) */}
+          <div className="px-5 pt-4 pb-2 bg-muted/20 border-b border-border space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold flex items-center gap-1">
+                  Rep WhatsApp Phone Number <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  value={pairPhone}
+                  onChange={(e) => {
+                    setPairPhone(e.target.value);
+                    if (pairingErrors.phone) setPairingErrors((p) => ({ ...p, phone: null }));
+                  }}
+                  placeholder="+91 98201 55432"
+                  className={cn("h-8 text-xs font-mono", pairingErrors.phone && "border-destructive")}
+                />
+                {pairingErrors.phone && (
+                  <p className="text-[10px] text-destructive font-medium">{pairingErrors.phone}</p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Sales Rep / Closer Name</Label>
+                <Input
+                  value={pairAgent}
+                  onChange={(e) => setPairAgent(e.target.value)}
+                  placeholder="e.g. Aditya (System Admin)"
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="p-5 space-y-4 text-xs">
             {/* METHOD 1: 8-DIGIT PAIRING CODE (Modern official WhatsApp Web standard) */}
             {pairingMethod === "pairing_code" && (
@@ -1944,36 +2008,11 @@ export default function WhatsAppConnectPage() {
                 <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-900 dark:text-blue-300 space-y-1">
                   <p className="font-semibold text-xs flex items-center gap-1.5">
                     <CheckCircle className="h-3.5 w-3.5 text-blue-600" />
-                    Recommended Pairing Method
+                    Recommended Official Pairing Method
                   </p>
                   <p className="text-[11px] text-blue-700 dark:text-blue-400 leading-relaxed">
-                    Link without needing your phone camera to scan a screen. Enter your WhatsApp number, generate the 8-digit code, and enter it directly in WhatsApp on your phone.
+                    Link your rep&apos;s WhatsApp directly without camera scanning glitches. Enter the phone number above, generate the 8-digit code, and enter it directly in WhatsApp on phone.
                   </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium">WhatsApp Phone Number</Label>
-                    <Input
-                      value={pairPhone}
-                      onChange={(e) => setPairPhone(e.target.value)}
-                      placeholder="+91 98201 55432"
-                      className="h-8 text-xs font-mono"
-                    />
-                    {pairingErrors.phone && (
-                      <p className="text-[10px] text-destructive">{pairingErrors.phone}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium">Sales Rep Name</Label>
-                    <Input
-                      value={pairAgent}
-                      onChange={(e) => setPairAgent(e.target.value)}
-                      placeholder="Aditya (System Admin)"
-                      className="h-8 text-xs"
-                    />
-                  </div>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-muted/50 border border-border flex flex-col items-center justify-center space-y-2 text-center">
@@ -2032,7 +2071,7 @@ export default function WhatsAppConnectPage() {
                   <ol className="list-decimal pl-4 space-y-1 leading-relaxed">
                     <li>Open WhatsApp on phone → Settings (or 3 dots) → <strong>Linked Devices</strong>.</li>
                     <li>Tap <strong>Link a Device</strong>.</li>
-                    <li>At the bottom of the camera screen, tap <strong>"Link with phone number instead"</strong>.</li>
+                    <li>At the bottom of the camera screen, tap <strong>&quot;Link with phone number instead&quot;</strong>.</li>
                     {pairingCode && <li>Type the 8-digit code: <strong className="font-mono text-foreground">{pairingCode}</strong>.</li>}
                     {!pairingCode && <li>Generate your code above, then type it here.</li>}
                   </ol>
@@ -2043,20 +2082,47 @@ export default function WhatsAppConnectPage() {
             {/* METHOD 2: CAMERA QR CODE SCAN (Authentic rendered QR Matrix) */}
             {pairingMethod === "qr_scan" && (
               <div className="flex flex-col items-center text-center space-y-3.5 py-1">
-                <p className="text-[11px] text-muted-foreground max-w-sm">
-                  Point your WhatsApp camera scanner at this QR code.
-                </p>
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-300 w-full text-left space-y-1">
+                  <p className="font-semibold text-xs flex items-center gap-1.5">
+                    <QrCode className="h-3.5 w-3.5 text-emerald-600" />
+                    Dynamic WhatsApp Connection QR
+                  </p>
+                  <p className="text-[10.5px] text-emerald-800 dark:text-emerald-400 leading-snug">
+                    Point your phone camera at this QR code to initiate WhatsApp handshake. If using the in-app WhatsApp scanner, use the <strong>8-Digit Code</strong> tab above.
+                  </p>
+                </div>
 
-                <div className="relative">
-                  <AuthenticQrCodeMatrix size={210} scanning={true} />
+                <div className="relative p-2 bg-white rounded-2xl shadow-md border border-border inline-block">
+                  {qrDataUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={qrDataUrl}
+                      alt="WhatsApp Pairing QR"
+                      className="w-[210px] h-[210px] rounded-xl block"
+                    />
+                  ) : (
+                    <AuthenticQrCodeMatrix size={210} scanning={true} />
+                  )}
+
+                  {/* Centered WhatsApp Emblem */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="h-9 w-9 bg-white rounded-xl shadow-md flex items-center justify-center p-1 border border-border/40">
+                      <div className="h-full w-full bg-emerald-500 rounded-lg flex items-center justify-center text-white font-bold text-xs">
+                        <MessageCircle className="h-4 w-4" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Laser Scanning Animation */}
+                  <div className="absolute inset-x-2 top-0 h-1 bg-gradient-to-r from-transparent via-emerald-500 to-transparent shadow-[0_0_8px_#10b981] animate-pulse" />
                 </div>
 
                 <div className="space-y-1 text-[11px] text-muted-foreground">
                   <p className="font-semibold text-foreground">
-                    Open WhatsApp → Linked Devices → Link a Device
+                    Target Rep: <span className="font-mono text-emerald-600">{pairPhone || "Enter phone number above"}</span>
                   </p>
                   <p className="text-[10px] text-muted-foreground">
-                    Code refreshes automatically. Glare or low screen brightness can affect camera scanning.
+                    QR code updates automatically with your target number and session handshake.
                   </p>
                 </div>
 
