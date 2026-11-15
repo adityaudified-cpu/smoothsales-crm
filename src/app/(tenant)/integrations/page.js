@@ -609,7 +609,7 @@ export default function IntegrationsPage() {
 
                 {/* Footer Action */}
                 <div className="pt-3 mt-3 border-t border-border/40 flex items-center justify-between gap-2">
-                  {!isComingSoon && item.available && (
+                  {!isComingSoon && item.available && (isConnected || item.configured) && (
                     <Button
                       variant="ghost"
                       size="sm"
