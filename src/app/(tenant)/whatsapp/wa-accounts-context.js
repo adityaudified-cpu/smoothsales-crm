@@ -1,6 +1,7 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { verifyMetaCredentials } from "@/lib/api/whatsapp";
+import { whatsappAccountsApi } from "@/lib/api/whatsapp";
+import { isApiMode } from "@/lib/api/client";
 
 const WA_ACCOUNTS_KEY = "wa_accounts_v2";
 const WA_SETTINGS_KEY = "wa_settings_v1";
@@ -10,6 +11,14 @@ function readLocal(key, fallback = null) {
 }
 function writeLocal(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
+function isMockAccount(acc) {
+  if (!acc) return true;
+  const num = (acc.number || acc.displayPhoneNumber || "").replace(/\s+/g, "");
+  if (num.includes("8750073899")) return true;
+  if (acc.phoneId === "1197546510113741" || acc.wabaId === "4424288871221076") return true;
+  return false;
 }
 
 const WaAccountsContext = createContext(null);
@@ -23,23 +32,58 @@ export function WaAccountsProvider({ children }) {
     automation:  { ar1: true, ar2: false, ar3: false, ar4: true, ar5: true },
   }));
 
-  // Load from storage or initialize empty for clean production workspace
-  useEffect(() => {
-    const saved = readLocal(WA_ACCOUNTS_KEY, null);
-    if (Array.isArray(saved) && saved.length > 0) {
-      setAccounts(saved);
-      setActiveAccountId(saved[0].id);
-    } else {
-      setAccounts([]);
-      setActiveAccountId(null);
-    }
-    setIsLoading(false);
-  }, []);
+  const mapAccount = useCallback((acc) => ({
+    id: acc.id,
+    type: "meta",
+    label: acc.label || acc.verifiedName || "WhatsApp Business",
+    phoneId: acc.phoneNumberId || acc.phoneId,
+    phoneNumberId: acc.phoneNumberId || acc.phoneId,
+    wabaId: acc.wabaId,
+    number: acc.displayPhoneNumber || acc.number || "",
+    displayPhoneNumber: acc.displayPhoneNumber || acc.number || "",
+    verifiedName: acc.verifiedName || "",
+    qualityRating: acc.qualityRating || "UNKNOWN",
+    messagingLimit: acc.messagingLimit || "1,000 / 24 Hours",
+    status: acc.status || "CONNECTED",
+    isDefault: !!acc.isDefault,
+    webhookSubscribed: !!acc.webhookSubscribed,
+    connectedAt: acc.createdAt ? new Date(acc.createdAt).toISOString().slice(0, 10) : "",
+    lastVerifiedAt: acc.lastVerifiedAt,
+  }), []);
 
-  // Persist accounts to localStorage whenever they change
+  const refreshAccounts = useCallback(async () => {
+    try {
+      if (isApiMode()) {
+        const backendAccounts = await whatsappAccountsApi.list();
+        if (Array.isArray(backendAccounts)) {
+          const mapped = backendAccounts.map(mapAccount);
+          setAccounts(mapped);
+          setActiveAccountId(mapped[0]?.id || null);
+          writeLocal(WA_ACCOUNTS_KEY, mapped);
+          return mapped;
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch WhatsApp accounts from backend:", err);
+    }
+
+    // Local fallback: discard any mock data
+    const saved = readLocal(WA_ACCOUNTS_KEY, []);
+    const clean = Array.isArray(saved) ? saved.filter((a) => !isMockAccount(a)) : [];
+    setAccounts(clean);
+    setActiveAccountId(clean[0]?.id || null);
+    writeLocal(WA_ACCOUNTS_KEY, clean);
+    return clean;
+  }, [mapAccount]);
+
+  // Load from backend on mount
   useEffect(() => {
-    if (!isLoading) writeLocal(WA_ACCOUNTS_KEY, accounts);
-  }, [accounts, isLoading]);
+    let mounted = true;
+    refreshAccounts().finally(() => {
+      if (mounted) setIsLoading(false);
+    });
+    return () => { mounted = false; };
+  }, [refreshAccounts]);
 
   // Persist settings
   const saveSettings = useCallback((patch) => {
@@ -51,33 +95,57 @@ export function WaAccountsProvider({ children }) {
   }, []);
 
   const addAccount = useCallback(async (acc) => {
-    // For Meta accounts — verify credentials with Meta Graph API
-    if (acc.type === "meta" && acc.token && acc.phoneId) {
-      const info = await verifyMetaCredentials({ token: acc.token, phoneId: acc.phoneId });
-      acc.number = info.display_phone_number || "";
-      acc.verifiedName = info.verified_name || acc.label;
-      acc.qualityRating = info.quality_rating || "UNKNOWN";
-      acc.metaStatus = info.status || "CONNECTED";
+    if (acc.type === "meta") {
+      // Connect on backend server (token encrypted, Meta Graph verified on backend)
+      const res = await whatsappAccountsApi.connect({
+        phoneNumberId: acc.phoneId,
+        wabaId: acc.wabaId,
+        accessToken: acc.token,
+        label: acc.label,
+      });
+
+      const newMapped = mapAccount(res);
+      setAccounts((prev) => {
+        const filtered = prev.filter((a) => a.id !== newMapped.id);
+        const updated = [newMapped, ...filtered];
+        writeLocal(WA_ACCOUNTS_KEY, updated);
+        return updated;
+      });
+      setActiveAccountId(newMapped.id);
+      return newMapped;
     }
 
+    // Personal WhatsApp device pairing
     const newAcc = {
       ...acc,
-      id: acc.type === "meta" ? "meta_primary" : `personal_${Date.now()}`,
+      id: `personal_${Date.now()}`,
       status: "connected",
       connectedAt: new Date().toISOString().slice(0, 10),
     };
 
     setAccounts((prev) => {
-      // Replace existing account of same id
       const filtered = prev.filter((a) => a.id !== newAcc.id);
-      return [newAcc, ...filtered];
+      const updated = [newAcc, ...filtered];
+      writeLocal(WA_ACCOUNTS_KEY, updated);
+      return updated;
     });
     setActiveAccountId(newAcc.id);
     return newAcc;
-  }, []);
+  }, [mapAccount]);
 
-  const removeAccount = useCallback((id) => {
-    setAccounts((prev) => prev.filter((a) => a.id !== id));
+  const removeAccount = useCallback(async (id) => {
+    try {
+      if (isApiMode()) {
+        await whatsappAccountsApi.disconnect(id);
+      }
+    } catch (err) {
+      console.warn("Failed to disconnect WhatsApp account on backend:", err);
+    }
+    setAccounts((prev) => {
+      const next = prev.filter((a) => a.id !== id);
+      writeLocal(WA_ACCOUNTS_KEY, next);
+      return next;
+    });
     setActiveAccountId((prev) => {
       if (prev !== id) return prev;
       const remaining = accounts.filter((a) => a.id !== id);
@@ -97,6 +165,7 @@ export function WaAccountsProvider({ children }) {
       setActiveAccountId,
       addAccount,
       removeAccount,
+      refreshAccounts,
       isLoading,
       isConnected,
       metaAccount,

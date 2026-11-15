@@ -47,6 +47,61 @@ export function getMetaCredentials() {
   return { token: meta.token, phoneId: meta.phoneId, wabaId: meta.wabaId, label: meta.label };
 }
 
+// ── WhatsApp Accounts API (Spring Boot Backend /api/whatsapp/accounts) ───────
+
+export const whatsappAccountsApi = {
+  list: async () => {
+    if (isApiMode()) {
+      try {
+        const res = await apiRequest("/whatsapp/accounts");
+        return Array.isArray(res) ? res : (res?.data || []);
+      } catch (err) {
+        console.warn("Failed to load WhatsApp accounts from backend:", err);
+      }
+    }
+    return [];
+  },
+
+  connect: async ({ phoneNumberId, phoneId, wabaId, accessToken, token, label }) => {
+    if (isApiMode()) {
+      const res = await apiRequest("/whatsapp/accounts", {
+        method: "POST",
+        body: {
+          phoneNumberId: phoneNumberId || phoneId,
+          wabaId,
+          accessToken: accessToken || token,
+          label,
+        },
+      });
+      return res?.data || res;
+    }
+    throw new Error("Backend API required to connect WhatsApp account");
+  },
+
+  verify: async (id) => {
+    if (isApiMode()) {
+      const res = await apiRequest(`/whatsapp/accounts/${id}/verify`, { method: "POST" });
+      return res?.data || res;
+    }
+    throw new Error("Backend API required to verify WhatsApp account");
+  },
+
+  makeDefault: async (id) => {
+    if (isApiMode()) {
+      const res = await apiRequest(`/whatsapp/accounts/${id}/default`, { method: "POST" });
+      return res?.data || res;
+    }
+    throw new Error("Backend API required to set default account");
+  },
+
+  disconnect: async (id) => {
+    if (isApiMode()) {
+      return await apiRequest(`/whatsapp/accounts/${id}`, { method: "DELETE" });
+    }
+    return { success: true };
+  },
+};
+
 // ── AI Agent API ─────────────────────────────────────────────────────────────
 
 export const whatsappAiAgentApi = {
