@@ -427,7 +427,7 @@ export default function WhatsAppConnectPage() {
   const [triggerErrors, setTriggerErrors] = useState({});
 
   // Accounts
-  const metaAccount = accounts.find((a) => a.type === "meta") || accounts[0];
+  const metaAccount = accounts.find((a) => a.type === "meta" && (a.phoneId || a.phoneNumberId)) || null;
   const personalAccount = accounts.find((a) => a.type === "personal") || null;
 
   // Countdown timer for pairing code — only runs after code is generated
@@ -679,15 +679,14 @@ export default function WhatsAppConnectPage() {
       await addAccount({
         type: "personal",
         id: `personal_${pairPhone.replace(/\D/g, "") || Date.now()}`,
-        label: `Personal WhatsApp (${pairAgent.trim() || "Sales Rep"})`,
+        label: `Rep SIM (${pairAgent.trim() || "Sales Rep"})`,
         number: pairPhone.trim(),
-        agentName: pairAgent.trim() || "Team Rep",
-        device: "Linked WhatsApp Business Phone",
-        battery: "Active",
-        status: "connected",
-        syncStatus: "Active",
+        agentName: pairAgent.trim() || "Sales Rep",
+        device: "Sales Rep SIM",
+        status: "registered",
+        syncStatus: "Timeline Logging Active",
       });
-      toast.success(`Personal WhatsApp Business (${pairPhone.trim()}) paired successfully!`);
+      toast.success(`Sales Rep SIM (${pairPhone.trim()}) registered for timeline logging!`);
       setQrModalOpen(false);
     } finally {
       setConnecting(false);
@@ -696,7 +695,7 @@ export default function WhatsAppConnectPage() {
 
   const handleDisconnectPersonalDevice = (id) => {
     removeAccount(id);
-    toast.success("Personal WhatsApp Business device unlinked from CRM.");
+    toast.success("Sales Rep SIM unlinked from workspace.");
   };
 
   const copyToClipboard = (text, itemLabel) => {
@@ -784,7 +783,7 @@ export default function WhatsAppConnectPage() {
       <div className="shrink-0 px-6 pt-2 pb-0 border-b border-border bg-card/60">
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
           {[
-            { id: "connect", label: "Channels & Health", icon: Globe, badge: `${accounts.length} Active` },
+            { id: "connect", label: "Channels & Health", icon: Globe, badge: `${accounts.filter((a) => a.type === "meta").length} Active` },
             { id: "settings", label: "Lead Capture", icon: Users, badge: "9 Rules" },
             { id: "automation", label: "Automation Triggers", icon: Zap, badge: "5 Workflows" },
             { id: "setup", label: "Setup Guide & Webhooks", icon: HelpCircle, badge: "Diagnostic" },
@@ -1174,11 +1173,11 @@ export default function WhatsAppConnectPage() {
 
                 {/* Channel 2: Rep Personal WhatsApp Business (Active or Unlinked) */}
                 {personalAccount ? (
-                  <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/5 p-5 space-y-3.5 flex flex-col justify-between shadow-xs">
+                  <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-5 space-y-3.5 flex flex-col justify-between shadow-xs">
                     <div>
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                          <div className="h-9 w-9 rounded-xl bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
                             <Smartphone className="h-4.5 w-4.5" />
                           </div>
                           <div>
@@ -1186,37 +1185,31 @@ export default function WhatsAppConnectPage() {
                               <p className="text-xs font-bold text-foreground">
                                 {personalAccount.label || "Personal WhatsApp Business"}
                               </p>
-                              <Badge className="bg-emerald-600 text-white text-[9.5px] py-0 px-1.5">Paired</Badge>
+                              <Badge className="bg-blue-600 text-white text-[9.5px] py-0 px-1.5">Rep SIM</Badge>
                             </div>
                             <p className="text-[11px] text-foreground font-mono font-bold mt-0.5">
-                              {personalAccount.number || "+91 98201 55432"}
+                              {personalAccount.number}
                             </p>
                           </div>
                         </div>
-                        <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          Connected
+                        <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30 flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                          Registered (Timeline Logger)
                         </Badge>
                       </div>
 
                       <div className="space-y-2 text-[11px] text-muted-foreground pt-3 border-t border-border mt-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Paired Device:</span>
-                          <span className="font-semibold text-foreground">{personalAccount.device || "Samsung Galaxy S24"}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
                           <span className="text-muted-foreground">Assigned Sales Agent:</span>
-                          <span className="font-semibold text-foreground">{personalAccount.agentName || "Aditya (System Admin)"}</span>
+                          <span className="font-semibold text-foreground">{personalAccount.agentName || "Sales Rep"}</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Device Battery:</span>
-                          <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                            <BatteryCharging className="h-3 w-3" /> {personalAccount.battery || "94%"}
-                          </span>
+                          <span className="text-muted-foreground">Channel Type:</span>
+                          <span className="font-semibold text-foreground">1-on-1 CRM Timeline Logger</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-muted-foreground">CRM Timeline Sync:</span>
-                          <span className="font-semibold text-foreground">Active (/api/whatsapp/personal-log)</span>
+                          <span className="font-semibold text-emerald-600 dark:text-emerald-400 font-mono">Active (/api/whatsapp/personal-log)</span>
                         </div>
                       </div>
                     </div>
@@ -1228,18 +1221,20 @@ export default function WhatsAppConnectPage() {
                         className="h-7 text-xs text-destructive hover:bg-destructive/10 gap-1 font-medium"
                         onClick={() => handleDisconnectPersonalDevice(personalAccount.id)}
                       >
-                        <Unlink className="h-3 w-3" /> Disconnect Device
+                        <Unlink className="h-3 w-3" /> Unlink SIM
                       </Button>
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-7 text-xs gap-1.5 font-medium border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
+                        className="h-7 text-xs gap-1.5 font-medium border-blue-500/30 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10"
                         onClick={() => {
+                          setPairPhone(personalAccount.number || "");
+                          setPairAgent(personalAccount.agentName || "");
                           setPairingMethod("sim_config");
                           setQrModalOpen(true);
                         }}
                       >
-                        <Settings className="h-3 w-3" /> Device Settings
+                        <Settings className="h-3 w-3" /> Edit SIM Config
                       </Button>
                     </div>
                   </div>
@@ -1259,7 +1254,7 @@ export default function WhatsAppConnectPage() {
                             <p className="text-[11px] text-muted-foreground">Direct 1-on-1 team rep device linking</p>
                           </div>
                         </div>
-                        <Badge variant="secondary" className="text-[10px]">Rep SIM Logger</Badge>
+                        <Badge variant="outline" className="text-[10px] border-border text-muted-foreground">Not Configured</Badge>
                       </div>
 
                       <div className="space-y-2 text-[11px] text-muted-foreground pt-3 border-t border-border mt-3">
@@ -1283,12 +1278,14 @@ export default function WhatsAppConnectPage() {
                     </div>
 
                     <div className="pt-3 border-t border-border flex items-center justify-between text-xs">
-                      <span className="text-[11px] text-muted-foreground">Multi-device link</span>
+                      <span className="text-[11px] text-muted-foreground">Timeline Logger</span>
                       <Button
                         size="sm"
                         variant="outline"
                         className="h-7 text-xs gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 font-medium"
                         onClick={() => {
+                          setPairPhone("");
+                          setPairAgent("");
                           setPairingMethod("sim_config");
                           setQrModalOpen(true);
                         }}

@@ -18,6 +18,10 @@ function isMockAccount(acc) {
   const num = (acc.number || acc.displayPhoneNumber || "").replace(/\s+/g, "");
   if (num.includes("8750073899")) return true;
   if (acc.phoneId === "1197546510113741" || acc.wabaId === "4424288871221076") return true;
+  if (acc.type === "meta" && (!acc.phoneId || !acc.wabaId)) return true;
+  if (acc.type === "personal" && (acc.battery || acc.device === "Linked WhatsApp Business Phone" || acc.device === "Samsung Galaxy S24" || acc.status === "connected")) {
+    return true;
+  }
   return false;
 }
 
@@ -52,28 +56,32 @@ export function WaAccountsProvider({ children }) {
   }), []);
 
   const refreshAccounts = useCallback(async () => {
+    let backendMapped = [];
     try {
       if (isApiMode()) {
         const backendAccounts = await whatsappAccountsApi.list();
         if (Array.isArray(backendAccounts)) {
-          const mapped = backendAccounts.map(mapAccount);
-          setAccounts(mapped);
-          setActiveAccountId(mapped[0]?.id || null);
-          writeLocal(WA_ACCOUNTS_KEY, mapped);
-          return mapped;
+          backendMapped = backendAccounts
+            .filter((a) => a && !isMockAccount(a))
+            .map(mapAccount);
         }
       }
     } catch (err) {
       console.warn("Failed to fetch WhatsApp accounts from backend:", err);
     }
 
-    // Local fallback: discard any mock data
+    // Preserve clean personal SIM accounts registered locally, discard any mock data
     const saved = readLocal(WA_ACCOUNTS_KEY, []);
-    const clean = Array.isArray(saved) ? saved.filter((a) => !isMockAccount(a)) : [];
-    setAccounts(clean);
-    setActiveAccountId(clean[0]?.id || null);
-    writeLocal(WA_ACCOUNTS_KEY, clean);
-    return clean;
+    const cleanPersonal = Array.isArray(saved)
+      ? saved.filter((a) => a && a.type === "personal" && !isMockAccount(a))
+      : [];
+
+    const combined = [...backendMapped, ...cleanPersonal];
+    setAccounts(combined);
+    const defaultMeta = combined.find((a) => a.type === "meta");
+    setActiveAccountId(defaultMeta?.id || combined[0]?.id || null);
+    writeLocal(WA_ACCOUNTS_KEY, combined);
+    return combined;
   }, [mapAccount]);
 
   // Load from backend on mount
@@ -115,21 +123,25 @@ export function WaAccountsProvider({ children }) {
       return newMapped;
     }
 
-    // Personal WhatsApp device pairing
+    // Personal WhatsApp SIM registration for CRM Timeline Logging
     const newAcc = {
-      ...acc,
-      id: `personal_${Date.now()}`,
-      status: "connected",
+      type: "personal",
+      id: acc.id || `personal_${Date.now()}`,
+      label: acc.label || `Rep SIM (${acc.agentName || "Sales Rep"})`,
+      number: acc.number || "",
+      agentName: acc.agentName || "Sales Rep",
+      device: "Sales Rep SIM",
+      status: "registered",
+      syncStatus: "Timeline Logging Active",
       connectedAt: new Date().toISOString().slice(0, 10),
     };
 
     setAccounts((prev) => {
-      const filtered = prev.filter((a) => a.id !== newAcc.id);
-      const updated = [newAcc, ...filtered];
+      const filtered = prev.filter((a) => a.id !== newAcc.id && a.type !== "personal");
+      const updated = [...filtered, newAcc];
       writeLocal(WA_ACCOUNTS_KEY, updated);
       return updated;
     });
-    setActiveAccountId(newAcc.id);
     return newAcc;
   }, [mapAccount]);
 
@@ -154,8 +166,8 @@ export function WaAccountsProvider({ children }) {
   }, [accounts]);
 
   const activeAccount = accounts.find((a) => a.id === activeAccountId) || null;
-  const isConnected = accounts.length > 0;
-  const metaAccount = accounts.find((a) => a.type === "meta") || null;
+  const metaAccount = accounts.find((a) => a.type === "meta" && (a.phoneId || a.phoneNumberId)) || null;
+  const isConnected = !!metaAccount;
 
   return (
     <WaAccountsContext.Provider value={{
