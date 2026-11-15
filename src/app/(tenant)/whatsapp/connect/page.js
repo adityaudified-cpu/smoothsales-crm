@@ -125,7 +125,7 @@ function validateWithZod(schema, data) {
 // ── Webhook Info Config ───────────────────────────────────────────────────────
 const WEBHOOK_CALLBACK_URL = typeof window !== "undefined"
   ? `${window.location.origin}/api/webhooks/whatsapp`
-  : "http://103.180.110.190/api/webhooks/whatsapp";
+  : "https://api.smoothsales.com/api/webhooks/whatsapp";
 const WEBHOOK_VERIFY_TOKEN = "smoothsales-webhook-verify";
 
 // ── Automation Triggers Config ────────────────────────────────────────────────
@@ -1727,33 +1727,38 @@ export default function WhatsAppConnectPage() {
 
         {/* ════════════════════ TAB 4: SETUP GUIDE & WEBHOOKS ════════════════════ */}
         {activeTab === "setup" && (
-          <div className="max-w-5xl mx-auto space-y-6">
+          <div className="max-w-6xl mx-auto space-y-6">
 
             {/* Interactive Live Webhook Diagnostic Hero */}
-            <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-5 space-y-4 shadow-xs">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+            <div className="rounded-2xl border border-border bg-card p-6 space-y-5 shadow-xs relative overflow-hidden">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
+                <div className="flex items-start gap-3.5">
+                  <div className="h-11 w-11 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20 shadow-xs">
                     <ShieldCheck className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="text-xs font-bold text-blue-900 dark:text-blue-300">
-                      Live Webhook Endpoint Health Check
-                    </h2>
-                    <p className="text-[11px] text-blue-700 dark:text-blue-400 mt-0.5">
-                      Meta Cloud API sends incoming user messages and delivery receipts directly to this endpoint.
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm font-bold text-foreground">
+                        Live Webhook Endpoint & Health Check
+                      </h2>
+                      <Badge variant="outline" className="text-[10px] font-mono text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20">
+                        HTTP 200 Ready
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Meta Cloud API sends incoming user messages, delivery receipts, and template approval updates to this endpoint.
                     </p>
                   </div>
                 </div>
 
                 <Button
                   size="sm"
-                  className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shrink-0 shadow-xs font-medium"
+                  className="h-9 px-4 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shrink-0 shadow-xs font-semibold rounded-xl"
                   onClick={runWebhookHealthCheck}
                   disabled={webhookChecking}
                 >
                   <Activity className={cn("h-3.5 w-3.5", webhookChecking && "animate-spin")} />
-                  {webhookChecking ? "Pinging Webhook..." : "Run Webhook Health Check"}
+                  {webhookChecking ? "Verifying Webhook..." : "Run Webhook Health Check"}
                 </Button>
               </div>
 
@@ -1761,108 +1766,142 @@ export default function WhatsAppConnectPage() {
               {webhookResult && (
                 <div
                   className={cn(
-                    "p-3.5 rounded-xl border text-xs space-y-1.5 animate-in fade-in duration-200",
+                    "p-4 rounded-xl border text-xs space-y-2 animate-in fade-in duration-200",
                     webhookResult.status === "success"
-                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-300"
-                      : "bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-300"
+                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-950 dark:text-emerald-200"
+                      : "bg-amber-500/10 border-amber-500/30 text-amber-950 dark:text-amber-200"
                   )}
                 >
-                  <div className="flex items-center justify-between font-bold">
-                    <span className="flex items-center gap-1.5">
-                      <CheckCircle className="h-4 w-4 text-emerald-600" />
-                      Status: HTTP {webhookResult.statusCode} OK — Webhook Verified
+                  <div className="flex items-center justify-between font-bold flex-wrap gap-2">
+                    <span className="flex items-center gap-2 text-xs">
+                      <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      Status: HTTP {webhookResult.statusCode} OK — Webhook Verified Successfully
                     </span>
-                    <Badge variant="outline" className="text-[10px] font-mono">
+                    <Badge variant="outline" className="text-[10px] font-mono bg-background/80">
                       Latency: {webhookResult.latency}
                     </Badge>
                   </div>
-                  <p className="text-[11px] opacity-90">{webhookResult.message}</p>
-                  <p className="text-[10px] opacity-75">Verified at {webhookResult.timestamp}</p>
+                  <p className="text-xs opacity-90 pl-6">{webhookResult.message}</p>
+                  <p className="text-[10px] opacity-75 pl-6 font-mono">Last verified at {webhookResult.timestamp}</p>
                 </div>
               )}
 
               {/* Webhook Credentials Copy Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                <div className="p-3.5 rounded-xl bg-background border border-blue-500/20 space-y-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Callback URL (Meta Configuration)
-                  </p>
-                  <div className="flex items-center justify-between gap-2">
-                    <code className="text-xs font-mono text-foreground truncate select-all">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <Link2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      Callback URL (Meta Configuration)
+                    </p>
+                    <span className="text-[10px] text-muted-foreground">Endpoint</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 bg-background p-2.5 rounded-lg border border-border">
+                    <code className="text-xs font-mono text-foreground font-semibold truncate select-all">
                       {WEBHOOK_CALLBACK_URL}
                     </code>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-6 px-2 text-xs text-primary font-medium"
+                      className="h-7 px-2.5 text-xs text-primary font-medium hover:bg-primary/10 shrink-0 gap-1"
                       onClick={() => copyToClipboard(WEBHOOK_CALLBACK_URL, "Callback URL")}
                     >
-                      <Copy className="h-3 w-3 mr-1" /> Copy
+                      <Copy className="h-3 w-3" /> Copy
                     </Button>
                   </div>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-background border border-blue-500/20 space-y-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Verify Token (Meta Subscription Token)
-                  </p>
-                  <div className="flex items-center justify-between gap-2">
-                    <code className="text-xs font-mono text-foreground font-bold select-all">
+                <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <KeyRound className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      Verify Token (Meta Handshake Security)
+                    </p>
+                    <span className="text-[10px] text-muted-foreground">Secret Token</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 bg-background p-2.5 rounded-lg border border-border">
+                    <code className="text-xs font-mono text-foreground font-bold select-all truncate">
                       {WEBHOOK_VERIFY_TOKEN}
                     </code>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-6 px-2 text-xs text-primary font-medium"
+                      className="h-7 px-2.5 text-xs text-primary font-medium hover:bg-primary/10 shrink-0 gap-1"
                       onClick={() => copyToClipboard(WEBHOOK_VERIFY_TOKEN, "Verify Token")}
                     >
-                      <Copy className="h-3 w-3 mr-1" /> Copy
+                      <Copy className="h-3 w-3" /> Copy
                     </Button>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 text-[11px] text-blue-700 dark:text-blue-400 pt-1">
-                <Check className="h-3.5 w-3.5 shrink-0" />
-                <span>
-                  Required Webhook Fields to Subscribe in Meta: <strong>messages</strong>,{" "}
-                  <strong>message_template_status_update</strong>, <strong>message_echoes</strong>
+              {/* Required Meta Webhook Fields Subscriptions */}
+              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground flex items-center gap-1">
+                  <Check className="h-3.5 w-3.5 text-emerald-600" /> Required Meta Subscriptions:
+                </span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-medium bg-muted text-foreground border border-border">
+                  messages
+                </span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-medium bg-muted text-foreground border border-border">
+                  message_template_status_update
+                </span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-medium bg-muted text-foreground border border-border">
+                  message_echoes
                 </span>
               </div>
             </div>
 
             {/* 4-Step Interactive Onboarding Stepper */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Step-by-Step Meta Integration Walkthrough
-              </h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between pb-1">
+                <div>
+                  <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                    <BookOpen className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    Step-by-Step Meta Integration Walkthrough
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Follow these 4 official steps in Meta Developer Console to configure your production WABA connection
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-[11px] font-semibold border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5">
+                  4 Steps Walkthrough
+                </Badge>
+              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {SETUP_STEPS.map((s) => (
                   <div
                     key={s.step}
-                    className="p-4.5 rounded-2xl border border-border bg-card space-y-2.5 flex flex-col justify-between shadow-xs"
+                    className="p-5 rounded-2xl border border-border bg-card flex flex-col justify-between shadow-xs hover:border-emerald-500/40 hover:shadow-md transition-all duration-200 group relative"
                   >
-                    <div>
-                      <div className="flex items-center gap-2.5 mb-1.5">
-                        <span className="h-6 w-6 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 text-xs font-bold flex items-center justify-center shrink-0">
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-3">
+                        <span className="h-8 w-8 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 text-xs font-bold flex items-center justify-center shrink-0 shadow-xs group-hover:bg-emerald-600 group-hover:text-white transition-colors">
                           {s.step}
                         </span>
-                        <h4 className="text-xs font-bold text-foreground">{s.title}</h4>
+                        <h4 className="text-xs font-bold text-foreground group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
+                          {s.title}
+                        </h4>
                       </div>
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">{s.desc}</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed pl-11">
+                        {s.desc}
+                      </p>
                     </div>
 
                     {s.href && (
-                      <div className="pt-2">
+                      <div className="pt-4 border-t border-border/70 mt-3 flex items-center justify-between pl-11">
                         <a
                           href={s.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-semibold text-xs transition-colors"
                         >
                           {s.action} <ExternalLink className="h-3 w-3" />
                         </a>
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          Step {s.step} of 4
+                        </span>
                       </div>
                     )}
                   </div>
