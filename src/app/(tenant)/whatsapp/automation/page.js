@@ -943,17 +943,14 @@ export default function WhatsAppAutomationPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" className="text-xs" onClick={() => setTestOpen(false)}>Cancel</Button>
-            <Button size="sm" className="text-xs bg-blue-600 hover:bg-blue-700 text-white" onClick={() => {
-              if (!testPhone.trim()) return toast.error("Enter a phone number");
-              toast.success(`Test sent to ${testPhone}`);
+            <Button size="sm" className="text-xs" onClick={() => {
               if (!testPhone.trim()) return toast.error("Enter a valid phone number (e.g. +91 98765 43210)");
               if (!metaAccounts.length && !personalAccounts.length) {
-                return toast.error("No active WhatsApp channel connected. Please connect WhatsApp under WhatsApp > Connect first.");
+                return toast.error("No active WhatsApp channel connected. Connect WhatsApp under WhatsApp > Connect first.");
               }
-              toast.info(`Dry-run validation succeeded for "${selected?.name || "Flow"}". Trigger conditions and payload format verified.`);
-              setTestOpen(false); setTestPhone("");
+              // No automation engine runs flows yet, so nothing can be sent. Say so instead of faking it.
+              toast.info("Test runs are not available yet. Nothing was sent.");
             }}>Send Test</Button>
-            }}>Run Test</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

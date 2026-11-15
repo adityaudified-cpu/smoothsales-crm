@@ -18,7 +18,10 @@ export const customersApi = {
   remove: (id) => apiRequest(`/customers/${id}`, { method: "DELETE" }),
   assign: (id, staffId) => apiRequest(`/customers/${id}/assign/${staffId}`, { method: "PATCH" }),
   bulkAssignSelected: (customerIds, staffId) => apiRequest("/customers/bulk-assign-selected", { method: "POST", body: { customerIds, staffId } }),
-  bulkReassign: (fromStaffId, toStaffId) => apiRequest("/customers/bulk-assign", { method: "POST", body: { fromStaffId, toStaffId } }),
+  // → { succeeded, failed: [{ id, reason }] }. At most 1000 ids per call.
+  bulkDelete: (customerIds) => apiRequest("/customers/bulk-delete", { method: "POST", body: { customerIds } }),
+  bulkUpdate: (customerIds, patch) => apiRequest("/customers/bulk-update", { method: "POST", body: { customerIds, patch } }),
+  bulkReassign:(fromStaffId, toStaffId) => apiRequest("/customers/bulk-assign", { method: "POST", body: { fromStaffId, toStaffId } }),
   shuffleToLead: (body) => apiRequest("/customers/shuffle-to-lead", { method: "POST", body }),
   // POST /customers/import (multipart) → BulkImportResult { totalRows, imported, skipped, failed, errors }
   importFile: (file, { userId, status } = {}) => {
