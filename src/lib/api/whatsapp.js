@@ -548,11 +548,20 @@ export const whatsappSendApi = {
   /**
    * Send a template message to a single customer via backend.
    */
-  sendTemplate: async ({ customerId, templateId, variables = [] }) => {
+  sendTemplate: async ({ customerId, phone, recipientPhone, name, templateId, variables = [] }) => {
+    const targetPhone = phone || recipientPhone;
+    const validCustId = (customerId && !String(customerId).startsWith("custom_")) ? String(customerId) : null;
     if (isApiMode()) {
       return await apiRequest("/whatsapp/send", {
         method: "POST",
-        body: { customerId, templateId, variables },
+        body: {
+          customerId: validCustId,
+          phone: targetPhone,
+          recipientPhone: targetPhone,
+          name,
+          templateId,
+          variables,
+        },
       });
     }
     throw new Error("API mode required to send WhatsApp templates");
@@ -561,12 +570,22 @@ export const whatsappSendApi = {
   /**
    * Send a free-text session message via backend.
    */
-  sendSession: async ({ customerId, messageBody, body }) => {
+  sendSession: async ({ customerId, phone, recipientPhone, name, messageBody, body }) => {
     const text = messageBody || body || "";
+    const targetPhone = phone || recipientPhone;
+    const validCustId = (customerId && !String(customerId).startsWith("custom_")) ? String(customerId) : null;
     if (isApiMode()) {
       return await apiRequest("/whatsapp/send-message", {
         method: "POST",
-        body: { customerId, body: text, messageBody: text, messageType: "text" },
+        body: {
+          customerId: validCustId,
+          phone: targetPhone,
+          recipientPhone: targetPhone,
+          name,
+          body: text,
+          messageBody: text,
+          messageType: "text",
+        },
       });
     }
     throw new Error("API mode required to send WhatsApp messages");

@@ -231,7 +231,7 @@ function NewChatModal({ open, onClose, onChatCreated }) {
   const handleStartChat = async () => {
     const targetName = mode === "select" ? (selectedLead?.fullName || selectedLead?.name) : manualName.trim();
     const targetPhone = mode === "select" ? selectedLead?.phone : manualPhone.trim();
-    const customerId = mode === "select" ? selectedLead?.id : null;
+    let customerId = mode === "select" ? selectedLead?.id : null;
 
     if (!targetPhone) {
       toast.error("Please select a lead or provide a valid phone number");
@@ -240,23 +240,45 @@ function NewChatModal({ open, onClose, onChatCreated }) {
 
     setSubmitting(true);
     try {
+      if (!customerId && targetPhone) {
+        try {
+          const created = await customersApi.create({
+            firstName: targetName || "WhatsApp Contact",
+            phone: targetPhone,
+            stage: "NEW",
+            source: "WHATSAPP_CAMPAIGN",
+            whatsappConsent: true,
+          });
+          const custObj = created?.data || created;
+          if (custObj?.id) {
+            customerId = String(custObj.id);
+          }
+        } catch (e) {
+          console.warn("Auto-create customer returned:", e);
+        }
+      }
+
       if (sendType === "template" && selectedTmpl) {
         const varList = (selectedTmpl.variables || []).map((v, i) => templateVars[v] || templateVars[String(i + 1)] || targetName || "");
-        if (customerId) {
-          await whatsappSendApi.sendTemplate({
-            customerId,
-            templateId: selectedTmpl.id,
-            variables: varList,
-          });
-        }
+        const res = await whatsappSendApi.sendTemplate({
+          customerId,
+          phone: targetPhone,
+          name: targetName,
+          templateId: selectedTmpl.id,
+          variables: varList,
+        });
+        const returnedId = res?.data?.customerId || res?.customerId;
+        if (returnedId) customerId = String(returnedId);
         toast.success(`Template "${selectedTmpl.displayName || selectedTmpl.templateName}" sent!`);
       } else if (initialMessage.trim()) {
-        if (customerId) {
-          await whatsappSendApi.sendSession({
-            customerId,
-            messageBody: initialMessage.trim(),
-          });
-        }
+        const res = await whatsappSendApi.sendSession({
+          customerId,
+          phone: targetPhone,
+          name: targetName,
+          messageBody: initialMessage.trim(),
+        });
+        const returnedId = res?.data?.customerId || res?.customerId;
+        if (returnedId) customerId = String(returnedId);
         toast.success("Message sent successfully!");
       }
 
@@ -678,15 +700,26 @@ export default function WhatsAppChatPage() {
     setShowQuickReplies(false);
 
     try {
-      if (active.customerId || activeId) {
-        await whatsappSendApi.sendSession({
-          customerId: active.customerId || activeId,
-          messageBody: msgText,
-        });
-      }
+      const res = await whatsappSendApi.sendSession({
+        customerId: active.customerId || (activeId && !String(activeId).startsWith("custom_") ? activeId : null),
+        phone: active.phone,
+        recipientPhone: active.phone,
+        name: active.name,
+        messageBody: msgText,
+      });
+
+      const returnedCustomerId = res?.data?.customerId || res?.customerId;
       setConversations((prev) => prev.map((c) => c.id === activeId
-        ? { ...c, messages: c.messages.map((m) => m.id === tempId ? { ...m, status: "delivered" } : m) }
+        ? {
+            ...c,
+            id: returnedCustomerId ? String(returnedCustomerId) : c.id,
+            customerId: returnedCustomerId ? String(returnedCustomerId) : c.customerId,
+            messages: c.messages.map((m) => m.id === tempId ? { ...m, status: "delivered" } : m)
+          }
         : c));
+      if (returnedCustomerId && activeId !== String(returnedCustomerId)) {
+        setActiveId(String(returnedCustomerId));
+      }
     } catch (err) {
       toast.error(err?.message || "Failed to send message via WhatsApp");
       setConversations((prev) => prev.map((c) => c.id === activeId
