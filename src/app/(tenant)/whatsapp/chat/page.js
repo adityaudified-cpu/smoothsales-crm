@@ -654,7 +654,7 @@ export default function WhatsAppChatPage() {
 
         if (existing) {
           // De-duplicate: skip if we already have this ws message id
-          if (msg.id && existing.messages.some((m) => m.id === `ws_${msg.id}`)) return prev;
+          if (msg.id && existing.messages && existing.messages.some((m) => m.id === `ws_${msg.id}`)) return prev;
           return prev.map((c) =>
             c.id === existing.id
               ? {
@@ -745,7 +745,7 @@ export default function WhatsAppChatPage() {
 
     setConversations((prev) =>
       prev.map((c) => c.id === activeId
-        ? { ...c, messages: [...c.messages, newMsg], lastMsg: msgText, lastTime: "Just now" }
+        ? { ...c, messages: [...(c.messages || []), newMsg], lastMsg: msgText, lastTime: "Just now" }
         : c)
     );
     setMessage("");
@@ -759,7 +759,7 @@ export default function WhatsAppChatPage() {
         if (res?.success) {
           toast.success("Message sent via Personal WhatsApp!");
           setConversations((prev) => prev.map((c) => c.id === activeId
-            ? { ...c, messages: c.messages.map((m) => m.id === tempId ? { ...m, status: "delivered" } : m) }
+            ? { ...c, messages: (c.messages || []).map((m) => m.id === tempId ? { ...m, status: "delivered" } : m) }
             : c));
         } else {
           throw new Error(res?.message || "Failed to send via Personal WhatsApp");
@@ -781,7 +781,7 @@ export default function WhatsAppChatPage() {
               ...c,
               id: returnedCustomerId ? String(returnedCustomerId) : c.id,
               customerId: returnedCustomerId ? String(returnedCustomerId) : c.customerId,
-              messages: c.messages.map((m) => m.id === tempId ? { ...m, status: "delivered" } : m)
+              messages: (c.messages || []).map((m) => m.id === tempId ? { ...m, status: "delivered" } : m)
             }
           : c));
         if (returnedCustomerId && activeId !== String(returnedCustomerId)) {
@@ -821,7 +821,7 @@ export default function WhatsAppChatPage() {
 
     setConversations((prev) =>
       prev.map((c) => c.id === activeId
-        ? { ...c, messages: [...c.messages, newMsg], lastMsg: `📎 ${file.name}`, lastTime: "Just now" }
+        ? { ...c, messages: [...(c.messages || []), newMsg], lastMsg: `📎 ${file.name}`, lastTime: "Just now" }
         : c)
     );
     // Clear file selection

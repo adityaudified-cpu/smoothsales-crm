@@ -223,17 +223,24 @@ function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments
                   <Input value={form.name} onChange={(e) => setF({ name: e.target.value })} placeholder="e.g. Q1 Festival Price Drop Broadcast" className="h-8 text-xs" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">Message Template <span className="text-red-500">*</span></Label>
-                  <Select value={form.templateId} onValueChange={(v) => setF({ templateId: v, variableValues: {} })}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select template" /></SelectTrigger>
-                    <SelectContent>
-                      {activeTemplates.map((t) => (
-                        <SelectItem key={t.id || t.templateName} value={t.id || t.templateName} className="text-xs">
-                          {t.displayName || t.templateName} <span className="text-muted-foreground text-[10px]">· {t.category}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                    <span>Message Template <span className="text-rose-500">*</span></span>
+                    {activeTemplates.length > 0 && (
+                      <span className="text-[10px] text-emerald-500 font-normal">{activeTemplates.length} templates available</span>
+                    )}
+                  </Label>
+                  <select
+                    value={form.templateId || ""}
+                    onChange={(e) => setF({ templateId: e.target.value, variableValues: {} })}
+                    className="w-full h-9 px-3 text-xs rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium cursor-pointer shadow-sm"
+                  >
+                    <option value="" disabled>-- Select a WhatsApp Template --</option>
+                    {activeTemplates.map((t) => (
+                      <option key={t.id || t.templateName} value={t.id || t.templateName}>
+                        {t.displayName || t.templateName} ({t.category || "MARKETING"})
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 {selectedTemplate?.variables?.length > 0 && (
                   <div className="space-y-2">
