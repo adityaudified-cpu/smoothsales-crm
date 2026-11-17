@@ -102,105 +102,6 @@ export const whatsappAccountsApi = {
   },
 };
 
-// ── AI Agent API ─────────────────────────────────────────────────────────────
-
-export const whatsappAiAgentApi = {
-  getConfig: async () => {
-    if (isApiMode()) {
-      try { return await apiRequest("/whatsapp/ai-agent/config"); } catch {}
-    }
-    try { return JSON.parse(localStorage.getItem("wa_ai_agent_config_v1") ?? "null"); } catch { return null; }
-  },
-  saveConfig: async (config) => {
-    if (isApiMode()) {
-      try { return await apiRequest("/whatsapp/ai-agent/config", { method: "PUT", body: config }); } catch {}
-    }
-    try { localStorage.setItem("wa_ai_agent_config_v1", JSON.stringify(config)); } catch {}
-    return config;
-  },
-  getStats: async () => {
-    if (isApiMode()) {
-      try { return await apiRequest("/whatsapp/ai-agent/stats"); } catch {}
-    }
-    return null;
-  },
-  getFaqs: async () => {
-    if (isApiMode()) {
-      try {
-        const res = await apiRequest("/whatsapp/ai-agent/faqs");
-        return Array.isArray(res) ? res : (res?.data || []);
-      } catch {}
-    }
-    try { return JSON.parse(localStorage.getItem("wa_ai_agent_faqs_v1") ?? "null") ?? []; } catch { return []; }
-  },
-  saveFaqs: async (faqs) => {
-    if (isApiMode()) {
-      try { return await apiRequest("/whatsapp/ai-agent/faqs", { method: "PUT", body: faqs }); } catch {}
-    }
-    try { localStorage.setItem("wa_ai_agent_faqs_v1", JSON.stringify(faqs)); } catch {}
-    return faqs;
-  },
-  chat: async (messages, config) => {
-    if (isApiMode()) {
-      return await apiRequest("/whatsapp/ai-agent/test-chat", { method: "POST", body: { messages, config } });
-    }
-    throw new Error("API mode required for AI chat");
-  },
-};
-
-// ── Automation Flows API ──────────────────────────────────────────────────────
-
-export const whatsappAutomationApi = {
-  getAll: async () => {
-    if (isApiMode()) {
-      try {
-        const res = await apiRequest("/whatsapp/automation/flows");
-        return Array.isArray(res) ? res : (res?.data || []);
-      } catch {}
-    }
-    try { return JSON.parse(localStorage.getItem("wa_automation_flows_v1") ?? "null") ?? []; } catch { return []; }
-  },
-  create: async (flow) => {
-    if (isApiMode()) {
-      try { return await apiRequest("/whatsapp/automation/flows", { method: "POST", body: flow }); } catch {}
-    }
-    return { ...flow, id: `f_${Date.now()}` };
-  },
-  update: async (id, flow) => {
-    if (isApiMode()) {
-      try { return await apiRequest(`/whatsapp/automation/flows/${id}`, { method: "PUT", body: flow }); } catch {}
-    }
-    return flow;
-  },
-  delete: async (id) => {
-    if (isApiMode()) {
-      try { await apiRequest(`/whatsapp/automation/flows/${id}`, { method: "DELETE" }); } catch {}
-    }
-    return { success: true };
-  },
-  activate: async (id) => {
-    if (isApiMode()) {
-      try { return await apiRequest(`/whatsapp/automation/flows/${id}/activate`, { method: "POST" }); } catch {}
-    }
-    return { success: true };
-  },
-  pause: async (id) => {
-    if (isApiMode()) {
-      try { return await apiRequest(`/whatsapp/automation/flows/${id}/pause`, { method: "POST" }); } catch {}
-    }
-    return { success: true };
-  },
-  getTemplates: async () => {
-    if (isApiMode()) {
-      try {
-        const res = await apiRequest("/whatsapp/templates/approved");
-        return Array.isArray(res) ? res : (res?.data || []);
-      } catch {}
-    }
-    return [];
-  },
-};
-
 // ── Templates API ─────────────────────────────────────────────────────────────
 
 export const whatsappTemplatesApi = {
@@ -316,11 +217,6 @@ export const whatsappTemplatesApi = {
     return { success: true, status: "PENDING" };
   },
 
-  /** Alias for submit — used by templates page */
-  submitDraft: async (id) => {
-    return whatsappTemplatesApi.submit(id);
-  },
-
   /** Trigger live sync with Meta Graph API */
   syncMeta: async () => {
     if (isApiMode()) {
@@ -383,6 +279,7 @@ export const whatsappCampaignsApi = {
           segmentId: req.segmentId || null,
           filterCriteriaJson: req.filterCriteriaJson || null,
           customerIds: req.customerIds || null,
+          phoneNumbers: req.phoneNumbers || null,
         },
       });
     }
@@ -619,10 +516,260 @@ export async function verifyMetaCredentials({ token, phoneId }) {
 
 // ── WebSocket / real-time ─────────────────────────────────────────────────────
 
-export function subscribeCampaignProgress(_onMessage) {
-  return () => {};
+const ACCESS_TOKEN_KEY_WS = "smoothsales_access_token";
+
+/** Decode a JWT payload without verifying the signature. */
+function decodeJwtPayload(token) {
+  try {
+    const base64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = atob(base64);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
 }
 
-export function subscribeInboundMessages(_onMessage) {
-  return () => {};
+/** Get current JWT from localStorage (same key as apiRequest). */
+function getJwt() {
+  try { return localStorage.getItem(ACCESS_TOKEN_KEY_WS); } catch { return null; }
 }
+
+/** Extract tenantId from JWT claim or localStorage fallback. */
+function getTenantId() {
+  const token = getJwt();
+  if (token) {
+    const payload = decodeJwtPayload(token);
+    if (payload?.tenantId) return String(payload.tenantId);
+    if (payload?.tenant_id) return String(payload.tenant_id);
+    if (payload?.sub) return null; // sub is userId, not tenantId
+  }
+  try { return localStorage.getItem("smoothsales_tenant_id") || null; } catch { return null; }
+}
+
+/**
+ * Creates a shared STOMP client connected to the backend /ws endpoint.
+ * Returns a promise that resolves with { client, tenantId }.
+ */
+function createStompClient() {
+  return new Promise((resolve, reject) => {
+    // Dynamic import so SSR doesn't blow up (window/localStorage not available server-side)
+    Promise.all([
+      import("@stomp/stompjs"),
+      import("sockjs-client"),
+    ]).then(([{ Client }, { default: SockJS }]) => {
+      const token = getJwt();
+      const tenantId = getTenantId();
+
+      const client = new Client({
+        webSocketFactory: () => new SockJS("/api/ws"),
+        connectHeaders: token ? { Authorization: `Bearer ${token}` } : {},
+        reconnectDelay: 5000,
+        onConnect: () => resolve({ client, tenantId }),
+        onStompError: (frame) => {
+          console.error("[WS] STOMP error:", frame);
+          reject(new Error(frame.headers?.message || "STOMP connection error"));
+        },
+        onDisconnect: () => console.debug("[WS] STOMP disconnected"),
+        debug: () => {}, // silence verbose logs in production
+      });
+
+      client.activate();
+    }).catch(reject);
+  });
+}
+
+/**
+ * Subscribe to real-time inbound WhatsApp messages.
+ * Connects to:
+ *   /topic/t/{tenantId}/whatsapp.inbound.*   (tenant-scoped inbound — all customers)
+ *   /topic/whatsapp/personal-inbound          (personal WA bridge inbound)
+ *
+ * @param {(msg: object) => void} onMessage — called with the parsed message payload
+ * @returns {() => void} unsubscribe function
+ */
+export function subscribeInboundMessages(onMessage) {
+  if (typeof window === "undefined") return () => {};
+
+  let stompClient = null;
+  let subscriptions = [];
+  let active = true;
+
+  createStompClient()
+    .then(({ client, tenantId }) => {
+      if (!active) { client.deactivate(); return; }
+      stompClient = client;
+
+      const handler = (stompMsg) => {
+        try {
+          const payload = JSON.parse(stompMsg.body);
+          onMessage(payload);
+        } catch (e) {
+          console.warn("[WS] Failed to parse inbound message:", e);
+        }
+      };
+
+      // Subscribe to tenant-scoped inbound topic (wildcard via multiple patterns)
+      if (tenantId) {
+        // Global conversations topic receives all inbound/outbound events
+        subscriptions.push(
+          client.subscribe(`/topic/t/${tenantId}/whatsapp.conversations`, handler)
+        );
+      } else {
+        // Fallback: subscribe without tenant prefix (single-tenant mode)
+        subscriptions.push(
+          client.subscribe("/topic/whatsapp/inbound", handler)
+        );
+      }
+
+      // Always subscribe to personal-inbound (Baileys bridge)
+      subscriptions.push(
+        client.subscribe("/topic/whatsapp/personal-inbound", handler)
+      );
+    })
+    .catch((err) => console.warn("[WS] subscribeInboundMessages failed to connect:", err));
+
+  return () => {
+    active = false;
+    subscriptions.forEach((sub) => { try { sub.unsubscribe(); } catch {} });
+    subscriptions = [];
+    if (stompClient?.active) stompClient.deactivate().catch(() => {});
+  };
+}
+
+/**
+ * Subscribe to WhatsApp campaign delivery progress events.
+ *
+ * @param {string|number} campaignId
+ * @param {(progress: object) => void} onProgress
+ * @returns {() => void} unsubscribe function
+ */
+export function subscribeCampaignProgress(campaignId, onProgress) {
+  if (typeof window === "undefined" || !campaignId) return () => {};
+
+  let stompClient = null;
+  let subscriptions = [];
+  let active = true;
+
+  createStompClient()
+    .then(({ client, tenantId }) => {
+      if (!active) { client.deactivate(); return; }
+      stompClient = client;
+
+      const destination = tenantId
+        ? `/topic/t/${tenantId}/campaigns/whatsapp/${campaignId}/progress`
+        : `/topic/campaigns/whatsapp/${campaignId}/progress`;
+
+      subscriptions.push(
+        client.subscribe(destination, (stompMsg) => {
+          try {
+            onProgress(JSON.parse(stompMsg.body));
+          } catch (e) {
+            console.warn("[WS] Failed to parse campaign progress:", e);
+          }
+        })
+      );
+    })
+    .catch((err) => console.warn("[WS] subscribeCampaignProgress failed to connect:", err));
+
+  return () => {
+    active = false;
+    subscriptions.forEach((sub) => { try { sub.unsubscribe(); } catch {} });
+    subscriptions = [];
+    if (stompClient?.active) stompClient.deactivate().catch(() => {});
+  };
+}
+
+/**
+ * Subscribe to live Meta template approval/rejection webhook status updates.
+ */
+export function subscribeTemplateStatus(onStatusUpdate) {
+  if (typeof window === "undefined") return () => {};
+
+  let stompClient = null;
+  let subscriptions = [];
+  let active = true;
+
+  createStompClient()
+    .then(({ client, tenantId }) => {
+      if (!active) { client.deactivate(); return; }
+      stompClient = client;
+
+      const destination = tenantId
+        ? `/topic/t/${tenantId}/whatsapp/templates`
+        : `/topic/whatsapp/templates`;
+
+      subscriptions.push(
+        client.subscribe(destination, (stompMsg) => {
+          try {
+            onStatusUpdate(JSON.parse(stompMsg.body));
+          } catch (e) {
+            console.warn("[WS] Failed to parse template status:", e);
+          }
+        })
+      );
+    })
+    .catch((err) => console.warn("[WS] subscribeTemplateStatus failed:", err));
+
+  return () => {
+    active = false;
+    subscriptions.forEach((sub) => { try { sub.unsubscribe(); } catch {} });
+    subscriptions = [];
+    if (stompClient?.active) stompClient.deactivate().catch(() => {});
+  };
+}
+
+// ── Personal WhatsApp Web Bridge API (Baileys Daemon on VPS) ──────────────────
+
+export const waBridgeApi = {
+  getStatus: async () => {
+    try {
+      const res = await fetch("/api/wa-bridge/status");
+      return await res.json();
+    } catch (e) {
+      return { success: false, data: { connected: false, state: "close" } };
+    }
+  },
+  getQr: async () => {
+    try {
+      const res = await fetch("/api/wa-bridge/qr");
+      return await res.json();
+    } catch (e) {
+      return { success: false, data: { qr: null } };
+    }
+  },
+  requestPairingCode: async (phone) => {
+    try {
+      const res = await fetch("/api/wa-bridge/pair", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: e.message || "Network error" };
+    }
+  },
+  sendMessage: async (phone, message) => {
+    try {
+      const res = await fetch("/api/wa-bridge/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, message }),
+      });
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: e.message || "Failed to send message via personal WhatsApp" };
+    }
+  },
+  logout: async () => {
+    try {
+      const res = await fetch("/api/wa-bridge/logout", {
+        method: "POST",
+      });
+      return await res.json();
+    } catch (e) {
+      return { success: false, message: e.message || "Logout failed" };
+    }
+  },
+};
+

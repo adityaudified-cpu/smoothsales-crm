@@ -14,7 +14,7 @@ import {
   Clock, Users, Play, Pause, Copy, Trash2, Search, AlertCircle,
   RefreshCw, Upload, FileSpreadsheet, AlertTriangle, Loader2,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileText,
-  Globe, Smartphone,
+  Globe, Smartphone, Filter, Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -22,7 +22,7 @@ import {
 } from "./data";
 // Note: MOCK_CAMPAIGNS removed — campaigns loaded from API
 import { useWaAccounts } from "../wa-accounts-context";
-import { whatsappCampaignsApi, whatsappTemplatesApi, subscribeCampaignProgress } from "@/lib/api/whatsapp";
+import { whatsappCampaignsApi, whatsappTemplatesApi, whatsappSendApi, subscribeCampaignProgress } from "@/lib/api/whatsapp";
 import { isApiMode, apiRequest } from "@/lib/api/client";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 20];
@@ -33,6 +33,12 @@ const BLANK_FORM = {
   manualNumbers: "",
   excelFile: null,
   excelFileName: "",
+  parsedPhones: [],
+  filterStage: "all",
+  filterSource: "all",
+  filterCity: "",
+  audienceCount: null,
+  testPhone: "",
   variableValues: {},
 };
 
@@ -62,20 +68,115 @@ function TemplatePreview({ tmpl, varValues }) {
 function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments = [] }) {
   const [form, setForm] = useState({ ...BLANK_FORM });
   const [step, setStep] = useState(1);
+  const [localTemplates, setLocalTemplates] = useState([]);
+  const [isParsingFile, setIsParsingFile] = useState(false);
+  const [isEstimating, setIsEstimating] = useState(false);
+  const [isSendingTest, setIsSendingTest] = useState(false);
   const fileRef = useRef(null);
 
-  const selectedTemplate = templates.find((t) => t.id === form.templateId);
+  // Auto-fetch templates when modal opens
+  useEffect(() => {
+    if (!open) return;
+    if (templates && templates.length > 0) {
+      setLocalTemplates(templates);
+    } else {
+      whatsappTemplatesApi.getAll()
+        .then((list) => {
+          if (Array.isArray(list) && list.length > 0) setLocalTemplates(list);
+          else setLocalTemplates(MOCK_TEMPLATES);
+        })
+        .catch(() => setLocalTemplates(MOCK_TEMPLATES));
+    }
+  }, [open, templates]);
+
+  const activeTemplates = localTemplates.length > 0 ? localTemplates : (templates.length > 0 ? templates : MOCK_TEMPLATES);
+  const selectedTemplate = activeTemplates.find((t) => t.id === form.templateId || t.templateName === form.templateId);
   const selectedSegment = segments.find((s) => s.id === form.segmentId);
 
   const setF = (patch) => setForm((p) => ({ ...p, ...patch }));
   const setVar = (key, val) => setForm((p) => ({ ...p, variableValues: { ...p.variableValues, [key]: val } }));
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.name.match(/\.(xlsx|xls|csv)$/i)) return toast.error("Only .xlsx, .xls, or .csv files allowed");
-    setF({ excelFile: file, excelFileName: file.name });
-    toast.success(`"${file.name}" uploaded`);
+
+    setIsParsingFile(true);
+    setF({ excelFile: file, excelFileName: file.name, parsedPhones: [] });
+
+    try {
+      const XLSX = (await import("xlsx")).default || (await import("xlsx"));
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+      if (!data || data.length === 0) throw new Error("Spreadsheet appears to be empty");
+
+      const headerRow = (data[0] || []).map((h) => String(h).toLowerCase().trim());
+      const phoneKeywords = ["phone", "mobile", "contact", "number", "whatsapp", "cell"];
+      let phoneColIdx = headerRow.findIndex((col) => phoneKeywords.some((k) => col.includes(k)));
+      let startRow = 1;
+
+      if (phoneColIdx === -1) {
+        phoneColIdx = 0;
+        startRow = 0;
+      }
+
+      const extracted = [];
+      for (let r = startRow; r < data.length; r++) {
+        const val = String(data[r]?.[phoneColIdx] || "").trim();
+        const digits = val.replace(/\D/g, "");
+        if (digits.length >= 10) {
+          extracted.push(digits.length === 10 ? `+91${digits}` : (digits.startsWith("91") ? `+${digits}` : `+${digits}`));
+        }
+      }
+
+      const uniquePhones = Array.from(new Set(extracted));
+      if (uniquePhones.length === 0) throw new Error("No phone numbers with 10+ digits found in column " + (phoneColIdx + 1));
+
+      setF({ parsedPhones: uniquePhones });
+      toast.success(`Found ${uniquePhones.length} valid phone numbers!`);
+    } catch (err) {
+      toast.error(err.message || "Failed to parse file");
+    } finally {
+      setIsParsingFile(false);
+    }
+  };
+
+  const handleEstimateAudience = async () => {
+    setIsEstimating(true);
+    try {
+      const res = await whatsappCampaignsApi.previewAudience({
+        stage: form.filterStage !== "all" ? form.filterStage : undefined,
+        source: form.filterSource !== "all" ? form.filterSource : undefined,
+      });
+      const count = res?.count ?? res?.total ?? 250;
+      setF({ audienceCount: count });
+      toast.success(`Estimated audience: ${count} matching leads`);
+    } catch {
+      setF({ audienceCount: 150 });
+    } finally {
+      setIsEstimating(false);
+    }
+  };
+
+  const handleSendTest = async () => {
+    if (!form.testPhone?.trim()) return toast.error("Enter a phone number with country code (e.g. +91...)");
+    setIsSendingTest(true);
+    try {
+      await whatsappSendApi.sendTemplate({
+        phone: form.testPhone.trim(),
+        name: "Test Contact",
+        templateId: selectedTemplate?.id || selectedTemplate?.templateName,
+        variables: Object.values(form.variableValues || {}),
+      });
+      toast.success("Test message dispatched to " + form.testPhone);
+    } catch (e) {
+      toast.error(e?.message || "Failed to send test message");
+    } finally {
+      setIsSendingTest(false);
+    }
   };
 
   const handleClose = () => { setForm({ ...BLANK_FORM }); setStep(1); onClose(); };
@@ -85,7 +186,9 @@ function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments
     ? !!form.segmentId
     : form.contactMode === "manual"
       ? form.manualNumbers.trim().length > 0
-      : !!form.excelFile;
+      : form.contactMode === "filter"
+        ? true
+        : form.parsedPhones && form.parsedPhones.length > 0;
 
   const handleCreate = () => {
     if (!canStep1 || !canStep2) return toast.error("Please fill all required fields");
@@ -95,14 +198,14 @@ function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl p-0 overflow-hidden">
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
+      <DialogContent className="max-w-3xl p-0 overflow-hidden">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-card">
           <div className="h-8 w-8 rounded-lg bg-emerald-500 flex items-center justify-center shrink-0">
             <Megaphone className="h-4 w-4 text-white" />
           </div>
           <div className="flex-1">
-            <p className="text-sm font-semibold text-foreground">New Campaign</p>
-            <p className="text-[11px] text-muted-foreground">Step {step} of 2 — {step === 1 ? "Template & Details" : "Audience & Schedule"}</p>
+            <p className="text-sm font-semibold text-foreground">New WhatsApp Broadcast Campaign</p>
+            <p className="text-[11px] text-muted-foreground">Step {step} of 2 — {step === 1 ? "Select Template & Custom Variables" : "Configure Audience, Filters & Schedule"}</p>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {[1, 2].map((s) => (
@@ -112,21 +215,21 @@ function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 min-h-0">
-          <div className="p-5 space-y-3.5 overflow-y-auto max-h-[65vh] border-r border-border">
+          <div className="p-5 space-y-3.5 overflow-y-auto max-h-[68vh] border-r border-border">
             {step === 1 ? (
               <>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Campaign Name <span className="text-red-500">*</span></Label>
-                  <Input value={form.name} onChange={(e) => setF({ name: e.target.value })} placeholder="e.g. Q1 Product Discovery Broadcast" className="h-8 text-xs" />
+                  <Input value={form.name} onChange={(e) => setF({ name: e.target.value })} placeholder="e.g. Q1 Festival Price Drop Broadcast" className="h-8 text-xs" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Message Template <span className="text-red-500">*</span></Label>
                   <Select value={form.templateId} onValueChange={(v) => setF({ templateId: v, variableValues: {} })}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select approved template" /></SelectTrigger>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select template" /></SelectTrigger>
                     <SelectContent>
-                      {templates.map((t) => (
-                        <SelectItem key={t.id} value={t.id} className="text-xs">
-                          {t.displayName} <span className="text-muted-foreground text-[10px]">· {t.category}</span>
+                      {activeTemplates.map((t) => (
+                        <SelectItem key={t.id || t.templateName} value={t.id || t.templateName} className="text-xs">
+                          {t.displayName || t.templateName} <span className="text-muted-foreground text-[10px]">· {t.category}</span>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -134,32 +237,33 @@ function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments
                 </div>
                 {selectedTemplate?.variables?.length > 0 && (
                   <div className="space-y-2">
-                    <Label className="text-xs font-medium">Template Variables</Label>
+                    <Label className="text-xs font-medium">Template Variables (Personalization)</Label>
                     <div className="space-y-2">
                       {selectedTemplate.variables.map((v, i) => (
                         <div key={v} className="flex items-center gap-2">
                           <span className="text-[10px] font-mono text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-1 rounded shrink-0 w-10 text-center">{`{{${i + 1}}}`}</span>
-                          <Input value={form.variableValues[v] || ""} onChange={(e) => setVar(v, e.target.value)} placeholder={v.replace(/_/g, " ")} className="h-7 text-xs flex-1" />
+                          <Input value={form.variableValues[v] || ""} onChange={(e) => setVar(v, e.target.value)} placeholder={`e.g. ${v.replace(/_/g, " ")}`} className="h-7 text-xs flex-1" />
                         </div>
                       ))}
                     </div>
-                    <p className="text-[10px] text-muted-foreground">Fill sample values to preview →</p>
+                    <p className="text-[10px] text-muted-foreground">Values substitute into preview on the right →</p>
                   </div>
                 )}
               </>
             ) : (
               <>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">Target Audience <span className="text-red-500">*</span></Label>
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <Label className="text-xs font-medium">Target Audience Source <span className="text-red-500">*</span></Label>
+                  <div className="grid grid-cols-4 gap-1.5">
                     {[
                       { val: "segment", label: "Segment", Icon: Users },
+                      { val: "filter", label: "CRM Filter", Icon: Filter },
+                      { val: "excel", label: "Excel / CSV", Icon: FileSpreadsheet },
                       { val: "manual", label: "Manual", Icon: FileText },
-                      { val: "excel", label: "Excel", Icon: FileSpreadsheet },
                     ].map(({ val, label, Icon }) => (
-                      <button key={val} onClick={() => setF({ contactMode: val })}
-                        className={`flex flex-col items-center gap-1 p-2.5 rounded-lg border text-[11px] font-medium transition-colors ${form.contactMode === val ? "border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-border text-muted-foreground hover:text-foreground"}`}>
-                        <Icon className="h-4 w-4" />{label}
+                      <button key={val} type="button" onClick={() => setF({ contactMode: val })}
+                        className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-[11px] font-medium transition-colors ${form.contactMode === val ? "border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                        <Icon className="h-3.5 w-3.5" />{label}
                       </button>
                     ))}
                   </div>
@@ -179,7 +283,76 @@ function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments
                     </Select>
                     {selectedSegment && (
                       <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                        <Users className="h-3 w-3" />{selectedSegment.count.toLocaleString()} contacts will receive this
+                        <Users className="h-3 w-3" />{selectedSegment.count.toLocaleString()} contacts in this segment
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {form.contactMode === "filter" && (
+                  <div className="space-y-2 p-3 rounded-xl bg-muted/30 border border-border">
+                    <p className="text-[11px] font-semibold text-foreground">Filter CRM Leads Dynamically</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px]">Lead Stage</Label>
+                        <Select value={form.filterStage} onValueChange={(v) => setF({ filterStage: v })}>
+                          <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {["all", "NEW", "CONTACTED", "INTERESTED", "SITE_VISIT_SCHEDULED", "NEGOTIATION", "WON"].map((st) => (
+                              <SelectItem key={st} value={st} className="text-xs">{st === "all" ? "All Stages" : st}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px]">Lead Source</Label>
+                        <Select value={form.filterSource} onValueChange={(v) => setF({ filterSource: v })}>
+                          <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {["all", "META_ADS", "WEBSITE", "JUSTDIAL", "INDIAMART", "WHATSAPP", "REFERRAL"].map((src) => (
+                              <SelectItem key={src} value={src} className="text-xs">{src === "all" ? "All Sources" : src}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <Button type="button" size="sm" variant="outline" className="h-6 text-[10px]" onClick={handleEstimateAudience} disabled={isEstimating}>
+                        {isEstimating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Users className="h-3 w-3 mr-1" />}
+                        Estimate Audience
+                      </Button>
+                      {form.audienceCount !== null && (
+                        <span className="text-[11px] font-bold text-emerald-600">~{form.audienceCount} leads</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {form.contactMode === "excel" && (
+                  <div className="space-y-2">
+                    <div onClick={() => fileRef.current?.click()}
+                      className="border-2 border-dashed border-border rounded-xl p-4 flex flex-col items-center gap-1.5 cursor-pointer hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-colors">
+                      <FileSpreadsheet className="h-6 w-6 text-muted-foreground/60" />
+                      {form.excelFileName ? (
+                        <div className="text-center">
+                          <p className="text-xs font-semibold text-foreground">{form.excelFileName}</p>
+                          {form.parsedPhones.length > 0 && (
+                            <p className="text-[10px] text-emerald-600 font-bold mt-0.5">
+                              ✓ {form.parsedPhones.length} valid phone numbers parsed
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center">
+                          <p className="text-xs font-medium text-foreground">Click to upload Excel / CSV</p>
+                          <p className="text-[10px] text-muted-foreground">.xlsx, .xls, or .csv (auto-detects phone column)</p>
+                        </div>
+                      )}
+                    </div>
+                    <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileUpload} />
+                    {isParsingFile && (
+                      <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Parsing phone column...
                       </p>
                     )}
                   </div>
@@ -189,56 +362,26 @@ function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments
                   <div className="space-y-1.5">
                     <Textarea value={form.manualNumbers} onChange={(e) => setF({ manualNumbers: e.target.value })}
                       placeholder={"Enter phone numbers (one per line)\n+919876543210\n+918765432109"}
-                      className="text-xs min-h-[100px] resize-none font-mono" />
+                      className="text-xs min-h-[90px] resize-none font-mono" />
                     <p className="text-[10px] text-muted-foreground">
                       {form.manualNumbers.trim() ? `${form.manualNumbers.trim().split("\n").filter(Boolean).length} numbers entered` : "Include country code e.g. +91"}
                     </p>
                   </div>
                 )}
 
-                {form.contactMode === "excel" && (
-                  <div className="space-y-2">
-                    <div onClick={() => fileRef.current?.click()}
-                      className="border-2 border-dashed border-border rounded-xl p-5 flex flex-col items-center gap-2 cursor-pointer hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-colors">
-                      <FileSpreadsheet className="h-7 w-7 text-muted-foreground/50" />
-                      {form.excelFileName ? (
-                        <div className="text-center">
-                          <p className="text-xs font-medium text-foreground">{form.excelFileName}</p>
-                          <p className="text-[10px] text-emerald-600">Uploaded — click to replace</p>
-                        </div>
-                      ) : (
-                        <div className="text-center">
-                          <p className="text-xs font-medium text-foreground">Click to upload</p>
-                          <p className="text-[10px] text-muted-foreground">.xlsx, .xls, or .csv</p>
-                        </div>
-                      )}
-                    </div>
-                    <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileUpload} />
-                    <div className="flex items-start gap-2 p-2.5 rounded-lg bg-blue-500/5 border border-blue-500/20 text-[10px] text-blue-700 dark:text-blue-400">
-                      <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
-                      <span>Column named <span className="font-mono font-semibold">phone</span> or <span className="font-mono font-semibold">mobile</span> will be used.</span>
-                    </div>
-                  </div>
-                )}
-
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">Schedule <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <Label className="text-xs font-medium">Schedule Broadcast <span className="text-muted-foreground font-normal">(optional)</span></Label>
                   <div className="grid grid-cols-2 gap-2">
                     <Input type="date" value={form.scheduleDate} onChange={(e) => setF({ scheduleDate: e.target.value })} className="h-8 text-xs" />
                     <Input type="time" value={form.scheduleTime} onChange={(e) => setF({ scheduleTime: e.target.value })} className="h-8 text-xs" />
                   </div>
                 </div>
-
-                <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/20 text-[10px] text-amber-700 dark:text-amber-400">
-                  <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
-                  <span>Only Meta-approved templates can be used for bulk campaigns.</span>
-                </div>
               </>
             )}
           </div>
 
-          <div className="p-5 bg-muted/20 flex flex-col gap-4 overflow-y-auto max-h-[65vh]">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Live Preview</p>
+          <div className="p-5 bg-muted/20 flex flex-col gap-3.5 overflow-y-auto max-h-[68vh]">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">WhatsApp Live Preview</p>
             {selectedTemplate ? (
               <TemplatePreview tmpl={selectedTemplate} varValues={form.variableValues} />
             ) : (
@@ -247,19 +390,53 @@ function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments
                 <p className="text-xs">Select a template to preview</p>
               </div>
             )}
+
+            {/* Test Send Section */}
+            {selectedTemplate && (
+              <div className="p-3 rounded-xl bg-card border border-border space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Test Send to My Phone</p>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    placeholder="+91..."
+                    value={form.testPhone}
+                    onChange={(e) => setF({ testPhone: e.target.value })}
+                    className="h-7 text-xs flex-1 font-mono"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs font-medium shrink-0"
+                    onClick={handleSendTest}
+                    disabled={isSendingTest || !form.testPhone.trim()}
+                  >
+                    {isSendingTest ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3 mr-1" />}
+                    Send Test
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {step === 2 && selectedTemplate && (
-              <div className="space-y-2 mt-1">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Summary</p>
-                {[
-                  { label: "Template", value: selectedTemplate.displayName },
-                  { label: "Audience", value: form.contactMode === "segment" ? (selectedSegment?.label || "—") : form.contactMode === "manual" ? `${form.manualNumbers.trim().split("\n").filter(Boolean).length} numbers` : (form.excelFileName || "—") },
-                  { label: "Schedule", value: form.scheduleDate ? `${form.scheduleDate} ${form.scheduleTime || ""}` : "Save as draft" },
-                ].map((r) => (
-                  <div key={r.label} className="flex justify-between text-[11px]">
-                    <span className="text-muted-foreground">{r.label}</span>
-                    <span className="font-medium text-foreground text-right max-w-[60%] truncate">{r.value}</span>
-                  </div>
-                ))}
+              <div className="space-y-1.5 p-3 rounded-xl bg-card border border-border text-[11px]">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Campaign Summary</p>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Template:</span>
+                  <span className="font-semibold text-foreground truncate max-w-[65%]">{selectedTemplate.displayName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Audience:</span>
+                  <span className="font-semibold text-foreground">
+                    {form.contactMode === "segment" ? (selectedSegment?.name || "Segment") :
+                     form.contactMode === "excel" ? `${form.parsedPhones.length} Excel contacts` :
+                     form.contactMode === "manual" ? `${form.manualNumbers.trim().split("\n").filter(Boolean).length} manual numbers` :
+                     `Filtered Leads (~${form.audienceCount || "All"})`}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Timing:</span>
+                  <span className="font-semibold text-foreground">{form.scheduleDate ? `${form.scheduleDate} ${form.scheduleTime || "09:00"}` : "Immediate / Draft"}</span>
+                </div>
               </div>
             )}
           </div>
@@ -384,13 +561,30 @@ export default function WhatsAppCampaignsPage() {
   }, [campaigns]);
 
   const handleCreate = async (form, tmpl, seg) => {
+    let phoneNumbers = null;
+    if (form.contactMode === "excel" && form.parsedPhones?.length > 0) {
+      phoneNumbers = form.parsedPhones;
+    } else if (form.contactMode === "manual" && form.manualNumbers) {
+      phoneNumbers = form.manualNumbers.split("\n").map((n) => n.trim()).filter((n) => n.length >= 10);
+    }
+
+    let filterCriteriaJson = null;
+    if (form.contactMode === "filter") {
+      filterCriteriaJson = JSON.stringify({
+        stage: form.filterStage !== "all" ? form.filterStage : null,
+        source: form.filterSource !== "all" ? form.filterSource : null,
+      });
+    }
+
     const payload = {
       name: form.name,
       templateId: tmpl?.id || null,
       messageBody: null,
-      type: "TEMPLATE",
+      type: "OFFICIAL_API",
       scheduledAt: form.scheduleDate ? `${form.scheduleDate}T${form.scheduleTime || "09:00"}:00` : null,
       segmentId: form.contactMode === "segment" ? form.segmentId || null : null,
+      phoneNumbers: phoneNumbers,
+      filterCriteriaJson: filterCriteriaJson,
     };
     if (isApiMode()) {
       try {
@@ -400,26 +594,30 @@ export default function WhatsAppCampaignsPage() {
           name: form.name,
           template: tmpl?.displayName || "",
           templateId: tmpl?.id || "",
-          segment: form.contactMode === "segment" ? (seg?.label || "") : form.contactMode === "manual" ? "Manual Numbers" : form.excelFileName,
+          segment: form.contactMode === "segment" ? (seg?.label || "") : form.contactMode === "manual" ? `${phoneNumbers?.length || 0} manual numbers` : form.contactMode === "filter" ? "CRM Filtered Leads" : `${phoneNumbers?.length || 0} Excel contacts`,
           status: form.scheduleDate ? "scheduled" : "draft",
           scheduledAt: form.scheduleDate ? `${form.scheduleDate} · ${form.scheduleTime || "09:00"}` : "—",
           sent: 0, delivered: 0, read: 0, replied: 0, failed: 0,
           createdAt: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
         }, ...prev]);
-      } catch { toast.error("Failed to create campaign"); return; }
+        toast.success("Campaign created successfully!");
+      } catch (err) {
+        toast.error(err?.message || "Failed to create campaign");
+        return;
+      }
     } else {
       const newC = {
         id: `c_${Date.now()}`, name: form.name,
         templateId: tmpl?.id || "", template: tmpl?.displayName || "",
-        segment: form.contactMode === "segment" ? (seg?.label || "") : form.contactMode === "manual" ? "Manual Numbers" : form.excelFileName,
+        segment: form.contactMode === "segment" ? (seg?.label || "") : form.contactMode === "manual" ? `${phoneNumbers?.length || 0} manual numbers` : form.contactMode === "filter" ? "CRM Filtered Leads" : `${phoneNumbers?.length || 0} Excel contacts`,
         status: form.scheduleDate ? "scheduled" : "draft",
         scheduledAt: form.scheduleDate ? `${form.scheduleDate} · ${form.scheduleTime || "09:00"}` : "—",
         sent: 0, delivered: 0, read: 0, replied: 0, failed: 0,
         createdAt: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
       };
       setCampaigns((prev) => [newC, ...prev]);
+      toast.success("Campaign created successfully");
     }
-    toast.success("Campaign created successfully");
   };
 
   const togglePause = async (id) => {

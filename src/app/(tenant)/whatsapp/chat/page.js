@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,14 +23,15 @@ import {
   Search, Send, Paperclip, Phone, MoreVertical, Check, CheckCheck,
   Bot, FileText, X, Wifi, WifiOff, MessageCircle, UserPlus,
   Zap, Plus, Star, Archive, Loader2, ArrowUpRight, AlertCircle,
-  ExternalLink, User,
+  ExternalLink, User, Smartphone, Image as ImageIcon, Music, Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   whatsappInboxApi, whatsappSendApi, whatsappTemplatesApi,
-  subscribeInboundMessages,
+  subscribeInboundMessages, waBridgeApi,
 } from "@/lib/api/whatsapp";
+import { useWaAccounts } from "../wa-accounts-context";
 import { customersApi } from "@/lib/api/customers";
 import { isApiMode } from "@/lib/api/client";
 import { encodeId } from "../campaigns/data";
@@ -512,9 +514,30 @@ export default function WhatsAppChatPage() {
   const [noteText, setNoteText] = useState("");
   const [editingNote, setEditingNote] = useState(false);
   const [newChatOpen, setNewChatOpen] = useState(false);
+  const waAccountsCtx = useWaAccounts();
+  const accounts = waAccountsCtx?.accounts || [];
+  const [outboundChannel, setOutboundChannel] = useState("meta");
+  const [bridgeStatus, setBridgeStatus] = useState({ connected: false, phone: null, pushname: null });
+
+  useEffect(() => {
+    waBridgeApi.getStatus()
+      .then((res) => {
+        if (res?.success && res?.data) {
+          setBridgeStatus(res.data);
+          if (res.data.connected) {
+            setOutboundChannel("personal");
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [mediaPreview, setMediaPreview] = useState(null); // object URL for image preview
+  const [isSendingMedia, setIsSendingMedia] = useState(false);
 
   // Load conversations from API
   const loadConversations = useCallback(() => {
@@ -593,40 +616,66 @@ export default function WhatsAppChatPage() {
   const active = useMemo(() => conversations.find((c) => c.id === activeId), [conversations, activeId]);
 
   // Real-time WebSocket Inbound Listener
+  // subscribes on mount, unsubscribes on unmount via returned cleanup fn
   useEffect(() => {
     const unsub = subscribeInboundMessages((msg) => {
-      const convId = String(msg.customerId || msg.phone);
+      // Direction: backend sends INBOUND and OUTBOUND; only show inbound here
+      // (outbound is already appended optimistically in sendMessage)
+      if (msg.direction && msg.direction.toUpperCase() === "OUTBOUND") return;
+
+      const rawMsgPhone = (msg.phone || msg.customerPhone || "").replace(/\D/g, "");
+      const msg10 = rawMsgPhone.length >= 10 ? rawMsgPhone.slice(-10) : rawMsgPhone;
+      const msgCustId = msg.customerId ? String(msg.customerId) : null;
+      const convId = msgCustId || (msg10 ? `phone_${msg10}` : `inbound_${Date.now()}`);
+
+      // Map backend payload to chat message shape
+      const channel = msg.channel || (msg.agentName || msg.direction === "RECEIVED" ? "personal" : "meta");
       const newMsg = {
-        id: `ws_${Date.now()}`,
+        id: msg.id ? `ws_${msg.id}` : `ws_${Date.now()}`,
         from: "them",
         text: msg.messageBody || msg.body || "",
+        mediaUrl: msg.mediaUrl || null,
+        mediaType: msg.mediaType || null,
         time: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
-        status: "delivered",
+        status: (msg.status || "delivered").toLowerCase(),
         date: "Today",
+        channel: channel,
       };
+
       setConversations((prev) => {
-        const existing = prev.find((c) => c.id === convId);
+        const existing = prev.find((c) => {
+          if (msgCustId && (c.id === msgCustId || c.customerId === msgCustId)) return true;
+          if (msg10) {
+            const cPhone = (c.phone || "").replace(/\D/g, "");
+            if (cPhone.length >= 10 && cPhone.slice(-10) === msg10) return true;
+          }
+          return false;
+        });
+
         if (existing) {
+          // De-duplicate: skip if we already have this ws message id
+          if (msg.id && existing.messages.some((m) => m.id === `ws_${msg.id}`)) return prev;
           return prev.map((c) =>
-            c.id === convId
+            c.id === existing.id
               ? {
                 ...c,
-                messages: [...c.messages, newMsg],
-                lastMsg: msg.messageBody || msg.body || "",
+                messages: [...(c.messages || []), newMsg],
+                lastMsg: msg.messageBody || msg.body || (msg.mediaType ? `[${msg.mediaType}]` : "New message"),
                 lastTime: "Just now",
-                unread: c.id === activeId ? 0 : c.unread + 1,
+                unread: c.id === activeId ? 0 : (c.unread || 0) + 1,
               }
               : c
           );
         }
+        // New conversation from inbound — create a stub entry
         return [
           {
             id: convId,
-            customerId: msg.customerId ? String(msg.customerId) : null,
-            name: msg.customerName || msg.phone || "Inbound Lead",
-            phone: msg.phone || "",
+            customerId: msgCustId,
+            name: msg.customerName || (msg.phone ? msg.phone : "Inbound Lead"),
+            phone: msg.phone || msg.customerPhone || "",
             initials: (msg.customerName || "WA").split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase(),
-            lastMsg: msg.messageBody || msg.body || "",
+            lastMsg: msg.messageBody || msg.body || (msg.mediaType ? `[${msg.mediaType}]` : "New message"),
             lastTime: "Just now",
             unread: 1,
             status: "open",
@@ -634,7 +683,7 @@ export default function WhatsAppChatPage() {
             source: "WhatsApp",
             online: true,
             starred: false,
-            channel: "meta",
+            channel: channel,
             messages: [newMsg],
             notes: "",
             tags: ["New Inbound"],
@@ -644,8 +693,11 @@ export default function WhatsAppChatPage() {
       });
       setWsConnected(true);
     });
+
+    // Return the unsubscribe function directly — called by React on cleanup
     return unsub;
-  }, [activeId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // mount-only: subscribeInboundMessages creates its own STOMP connection
 
   const filtered = useMemo(() => {
     return conversations.filter((c) => {
@@ -700,25 +752,41 @@ export default function WhatsAppChatPage() {
     setShowQuickReplies(false);
 
     try {
-      const res = await whatsappSendApi.sendSession({
-        customerId: active.customerId || (activeId && !String(activeId).startsWith("custom_") ? activeId : null),
-        phone: active.phone,
-        recipientPhone: active.phone,
-        name: active.name,
-        messageBody: msgText,
-      });
+      if (outboundChannel === "personal" && bridgeStatus.connected) {
+        // Send via Personal WhatsApp (Baileys Multi-Device Bridge)
+        const targetPhone = active.phone || active.phoneNumber;
+        const res = await waBridgeApi.sendMessage(targetPhone, msgText);
+        if (res?.success) {
+          toast.success("Message sent via Personal WhatsApp!");
+          setConversations((prev) => prev.map((c) => c.id === activeId
+            ? { ...c, messages: c.messages.map((m) => m.id === tempId ? { ...m, status: "delivered" } : m) }
+            : c));
+        } else {
+          throw new Error(res?.message || "Failed to send via Personal WhatsApp");
+        }
+      } else {
+        // Send via Meta Cloud API
+        const targetPhone = active.phone || active.phoneNumber;
+        const res = await whatsappSendApi.sendSession({
+          customerId: active.customerId || (activeId && !String(activeId).startsWith("custom_") ? activeId : null),
+          phone: targetPhone,
+          recipientPhone: targetPhone,
+          name: active.name,
+          messageBody: msgText,
+        });
 
-      const returnedCustomerId = res?.data?.customerId || res?.customerId;
-      setConversations((prev) => prev.map((c) => c.id === activeId
-        ? {
-            ...c,
-            id: returnedCustomerId ? String(returnedCustomerId) : c.id,
-            customerId: returnedCustomerId ? String(returnedCustomerId) : c.customerId,
-            messages: c.messages.map((m) => m.id === tempId ? { ...m, status: "delivered" } : m)
-          }
-        : c));
-      if (returnedCustomerId && activeId !== String(returnedCustomerId)) {
-        setActiveId(String(returnedCustomerId));
+        const returnedCustomerId = res?.data?.customerId || res?.customerId;
+        setConversations((prev) => prev.map((c) => c.id === activeId
+          ? {
+              ...c,
+              id: returnedCustomerId ? String(returnedCustomerId) : c.id,
+              customerId: returnedCustomerId ? String(returnedCustomerId) : c.customerId,
+              messages: c.messages.map((m) => m.id === tempId ? { ...m, status: "delivered" } : m)
+            }
+          : c));
+        if (returnedCustomerId && activeId !== String(returnedCustomerId)) {
+          setActiveId(String(returnedCustomerId));
+        }
       }
     } catch (err) {
       toast.error(err?.message || "Failed to send message via WhatsApp");
@@ -726,10 +794,74 @@ export default function WhatsAppChatPage() {
         ? { ...c, messages: c.messages.map((m) => m.id === tempId ? { ...m, status: "failed" } : m) }
         : c));
     }
-  }, [message, active, activeId]);
+  }, [message, active, activeId, outboundChannel, bridgeStatus]);
 
-  const markResolved = useCallback((id) => {
-    setConversations((prev) => prev.map((c) => c.id === id ? { ...c, status: "resolved", unread: 0 } : c));
+  const sendMediaMessage = useCallback(async (file) => {
+    if (!file || !active) return;
+    setIsSendingMedia(true);
+
+    // Determine mediaType from MIME
+    let mediaType = "document";
+    if (file.type.startsWith("image/")) mediaType = "image";
+    else if (file.type.startsWith("video/")) mediaType = "video";
+    else if (file.type.startsWith("audio/")) mediaType = "audio";
+
+    const tempId = `media_${Date.now()}`;
+    const tempUrl = mediaPreview || URL.createObjectURL(file);
+    const newMsg = {
+      id: tempId,
+      from: "us",
+      text: file.name,
+      mediaType: mediaType.toUpperCase(),
+      mediaUrl: tempUrl,
+      time: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
+      status: "sent",
+      date: "Today",
+    };
+
+    setConversations((prev) =>
+      prev.map((c) => c.id === activeId
+        ? { ...c, messages: [...c.messages, newMsg], lastMsg: `📎 ${file.name}`, lastTime: "Just now" }
+        : c)
+    );
+    // Clear file selection
+    setSelectedFile(null);
+    setMediaPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("phone", active.phone || "");
+      if (active.customerId && !String(active.customerId).startsWith("custom_")) {
+        formData.append("customerId", active.customerId);
+      }
+      formData.append("messageType", mediaType);
+
+      const res = await import("@/lib/api/client").then(({ apiRequest }) =>
+        apiRequest("/whatsapp/send-media", { method: "POST", body: formData })
+      );
+
+      const finalUrl = res?.mediaUrl || res?.url || tempUrl;
+      setConversations((prev) =>
+        prev.map((c) => c.id === activeId
+          ? { ...c, messages: c.messages.map((m) => m.id === tempId ? { ...m, mediaUrl: finalUrl, status: "delivered" } : m) }
+          : c)
+      );
+      toast.success("Media sent!");
+    } catch (err) {
+      toast.error(err?.message || "Failed to send media");
+      setConversations((prev) =>
+        prev.map((c) => c.id === activeId
+          ? { ...c, messages: c.messages.map((m) => m.id === tempId ? { ...m, status: "failed" } : m) }
+          : c)
+      );
+    } finally {
+      setIsSendingMedia(false);
+    }
+  }, [active, activeId, mediaPreview]);
+
+  const markResolved = useCallback((id) => {    setConversations((prev) => prev.map((c) => c.id === id ? { ...c, status: "resolved", unread: 0 } : c));
     toast.success("Conversation marked as resolved");
   }, []);
 
@@ -982,6 +1114,7 @@ export default function WhatsAppChatPage() {
                   <div className="space-y-2">
                     {msgs.map((msg) => {
                       const isUs = msg.from === "us";
+                      const mt = (msg.mediaType || "").toUpperCase();
                       return (
                         <div key={msg.id} className={cn("flex", isUs ? "justify-end" : "justify-start")}>
                           <div className={cn(
@@ -990,7 +1123,39 @@ export default function WhatsAppChatPage() {
                               ? "bg-emerald-600 text-white rounded-br-sm"
                               : "bg-card text-foreground rounded-bl-sm border border-border"
                           )}>
-                            <p className="whitespace-pre-wrap">{msg.text}</p>
+                            {/* Media rendering */}
+                            {mt === "IMAGE" && msg.mediaUrl && (
+                              <img
+                                src={msg.mediaUrl}
+                                alt={msg.text || "Image"}
+                                className="rounded-lg max-w-[200px] mb-1 cursor-pointer object-cover"
+                                onClick={() => window.open(msg.mediaUrl, "_blank")}
+                              />
+                            )}
+                            {mt === "VIDEO" && msg.mediaUrl && (
+                              <video controls src={msg.mediaUrl} className="rounded-lg max-w-[240px] mb-1" />
+                            )}
+                            {mt === "AUDIO" && msg.mediaUrl && (
+                              <audio controls src={msg.mediaUrl} className="mb-1 max-w-full" />
+                            )}
+                            {mt === "DOCUMENT" && msg.mediaUrl && (
+                              <a
+                                href={msg.mediaUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={cn("flex items-center gap-1.5 mb-1 underline", isUs ? "text-white/90" : "text-primary")}
+                              >
+                                <FileText className="h-4 w-4 shrink-0" />
+                                <span className="text-xs truncate max-w-[160px]">{msg.text || "Document"}</span>
+                              </a>
+                            )}
+                            {/* Show text only if no media OR if text differs from filename for non-doc */}
+                            {(!mt || mt === "TEXT") && (
+                              <p className="whitespace-pre-wrap">{msg.text}</p>
+                            )}
+                            {mt && mt !== "TEXT" && mt !== "IMAGE" && mt !== "VIDEO" && mt !== "AUDIO" && mt !== "DOCUMENT" && (
+                              <p className="whitespace-pre-wrap">{msg.text}</p>
+                            )}
                             <div className={cn("flex items-center gap-1 mt-1", isUs ? "justify-end" : "justify-start")}>
                               <span className={cn("text-[9.5px]", isUs ? "text-white/75" : "text-muted-foreground")}>
                                 {msg.time}
@@ -1026,13 +1191,117 @@ export default function WhatsAppChatPage() {
           )}
 
           {/* Input Bar */}
-          <div className="px-3 py-2.5 bg-card border-t border-border">
+          <div className="px-3 py-2 bg-card border-t border-border space-y-2">
+            {/* Outbound Channel Selector */}
+            <div className="flex items-center justify-between px-1 text-[11px]">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-muted-foreground text-[10px] font-medium">Send via:</span>
+                <button
+                  type="button"
+                  onClick={() => setOutboundChannel("meta")}
+                  className={cn(
+                    "px-2 py-0.5 rounded-md font-semibold text-[10px] flex items-center gap-1 transition-all",
+                    outboundChannel === "meta"
+                      ? "bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30 shadow-xs"
+                      : "text-muted-foreground hover:text-foreground border border-transparent"
+                  )}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                  Meta Cloud API (+91 96805 52526)
+                </button>
+                {bridgeStatus.connected ? (
+                  <button
+                    type="button"
+                    onClick={() => setOutboundChannel("personal")}
+                    className={cn(
+                      "px-2 py-0.5 rounded-md font-semibold text-[10px] flex items-center gap-1 transition-all",
+                      outboundChannel === "personal"
+                        ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shadow-xs"
+                        : "text-muted-foreground hover:text-foreground border border-transparent"
+                    )}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Personal WhatsApp (+{bridgeStatus.phone || "Linked"})
+                  </button>
+                ) : (
+                  <Link
+                    href="/whatsapp/connect"
+                    className="text-[10px] text-muted-foreground hover:text-emerald-600 flex items-center gap-1 ml-1"
+                  >
+                    <Smartphone className="h-3 w-3" /> Connect Personal Phone
+                  </Link>
+                )}
+
+                {/* Additional Registered Rep Accounts */}
+                {accounts.filter(a => a.type === "personal" && a.number && (!bridgeStatus.phone || !a.number.includes(bridgeStatus.phone))).map(acc => (
+                  <button
+                    key={acc.id}
+                    type="button"
+                    onClick={() => setOutboundChannel("personal")}
+                    className={cn(
+                      "px-2 py-0.5 rounded-md font-semibold text-[10px] flex items-center gap-1 transition-all",
+                      outboundChannel === "personal"
+                        ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shadow-xs"
+                        : "text-muted-foreground hover:text-foreground border border-transparent"
+                    )}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    {acc.label || acc.agentName} ({acc.number})
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {isAiMode && (
-              <div className="flex items-center gap-1.5 mb-2 px-1">
+              <div className="flex items-center gap-1.5 mb-1 px-1">
                 <Bot className="h-3 w-3 text-violet-500" />
                 <span className="text-[10px] text-violet-600 font-semibold">AI Assistant is active for auto-replies</span>
               </div>
             )}
+
+            {/* File preview above input */}
+            {selectedFile && (
+              <div className="flex items-center gap-2 px-1 py-1.5 rounded-lg bg-muted/60 border border-border">
+                {selectedFile.type.startsWith("image/") && mediaPreview ? (
+                  <img src={mediaPreview} alt="preview" className="h-10 w-10 rounded object-cover shrink-0 border border-border" />
+                ) : selectedFile.type.startsWith("video/") ? (
+                  <Video className="h-5 w-5 text-muted-foreground shrink-0" />
+                ) : selectedFile.type.startsWith("audio/") ? (
+                  <Music className="h-5 w-5 text-muted-foreground shrink-0" />
+                ) : (
+                  <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                )}
+                <span className="text-xs text-foreground truncate flex-1">{selectedFile.name}</span>
+                <span className="text-[10px] text-muted-foreground shrink-0">
+                  {(selectedFile.size / 1024).toFixed(0)} KB
+                </span>
+                <button
+                  onClick={() => { setSelectedFile(null); setMediaPreview(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                  className="p-0.5 rounded text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xlsx,.xls"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setSelectedFile(file);
+                if (file.type.startsWith("image/")) {
+                  setMediaPreview(URL.createObjectURL(file));
+                } else {
+                  setMediaPreview(null);
+                }
+              }}
+            />
+
             <div className="flex items-end gap-2">
               <div className="flex items-center gap-0.5">
                 <button
@@ -1043,9 +1312,9 @@ export default function WhatsAppChatPage() {
                   <Zap className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={() => toast.info("Document & Image attachments will be sent via Meta Media API")}
-                  title="Attach file"
-                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Attach file (image, video, audio, document)"
+                  className={cn("p-1.5 rounded-lg transition-colors", selectedFile ? "text-emerald-600 bg-emerald-500/10" : "text-muted-foreground hover:text-foreground hover:bg-muted")}
                 >
                   <Paperclip className="h-4 w-4" />
                 </button>
@@ -1055,19 +1324,23 @@ export default function WhatsAppChatPage() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (selectedFile) sendMediaMessage(selectedFile);
+                    else sendMessage();
+                  }
                 }}
                 placeholder="Type a WhatsApp message... (Enter to send, Shift+Enter for newline)"
                 rows={1}
                 className="flex-1 resize-none bg-muted/50 border-border text-foreground placeholder:text-muted-foreground text-[12.5px] rounded-xl px-3 py-2 focus-visible:ring-1 focus-visible:ring-emerald-500/50 min-h-[36px] max-h-[120px]"
               />
               <Button
-                onClick={sendMessage}
-                disabled={!message.trim()}
+                onClick={() => { if (selectedFile) sendMediaMessage(selectedFile); else sendMessage(); }}
+                disabled={isSendingMedia || (!message.trim() && !selectedFile)}
                 size="icon"
                 className="h-9 w-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 disabled:opacity-40"
               >
-                <Send className="h-4 w-4" />
+                {isSendingMedia ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
           </div>

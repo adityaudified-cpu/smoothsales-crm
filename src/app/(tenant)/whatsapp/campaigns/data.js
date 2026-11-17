@@ -1,6 +1,55 @@
 import { CheckCircle2, Clock, AlertCircle, Pause, RefreshCw } from "lucide-react";
 
-export const MOCK_TEMPLATES = [];
+export const MOCK_TEMPLATES = [
+  {
+    id: "tmpl_prop_intro",
+    templateName: "property_discovery_intro",
+    displayName: "Property Discovery & Intro",
+    category: "MARKETING",
+    language: "en",
+    status: "APPROVED",
+    header: "Exclusive Property Update",
+    body: "Hi {{1}}, thank you for your interest in our premium properties. We have shortlisted top projects matching your requirements in {{2}}. Would you like to review the brochure?",
+    footer: "SmoothSales Real Estate",
+    variables: ["name", "location"],
+  },
+  {
+    id: "tmpl_visit_invite",
+    templateName: "site_visit_invitation",
+    displayName: "Site Visit Invitation",
+    category: "UTILITY",
+    language: "en",
+    status: "APPROVED",
+    header: "Site Visit Confirmation",
+    body: "Hello {{1}}, your site visit for {{2}} has been arranged. Our property advisor will assist you on site. Please confirm your availability.",
+    footer: "SmoothSales Support",
+    variables: ["name", "project_name"],
+  },
+  {
+    id: "tmpl_offer_alert",
+    templateName: "exclusive_festival_offer",
+    displayName: "Festival Special Price Drop",
+    category: "MARKETING",
+    language: "en",
+    status: "APPROVED",
+    header: "Limited Period Offer",
+    body: "Hi {{1}}, special festival pricing is now live for {{2}}. Avail exclusive discounts up to 10% on bookings this week. Reply YES to schedule a call.",
+    footer: "Terms & Conditions apply",
+    variables: ["name", "unit_type"],
+  },
+  {
+    id: "tmpl_followup",
+    templateName: "client_followup_reminder",
+    displayName: "Client Follow-up Check-in",
+    category: "UTILITY",
+    language: "en",
+    status: "APPROVED",
+    header: "Follow-up from SmoothSales",
+    body: "Hi {{1}}, following up on our recent discussion regarding your property search. Do you have any questions or would you like to review updated availability for {{2}}?",
+    footer: "SmoothSales CRM",
+    variables: ["name", "property"],
+  }
+];
 
 export const DEFAULT_SEGMENTS = [];
 

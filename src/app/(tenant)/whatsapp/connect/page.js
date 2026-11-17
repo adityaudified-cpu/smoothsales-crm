@@ -28,7 +28,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useWaAccounts } from "../wa-accounts-context";
-import { whatsappTemplatesApi, whatsappSendApi } from "@/lib/api/whatsapp";
+import { whatsappTemplatesApi, whatsappSendApi, waBridgeApi } from "@/lib/api/whatsapp";
 import { customersApi } from "@/lib/api/customers";
 import { isApiMode } from "@/lib/api/client";
 
@@ -321,43 +321,70 @@ export default function WhatsAppConnectPage() {
 
   // Personal WhatsApp Linking Modal (QR + 8-Digit Pairing Code + Architecture Guide)
   const [qrModalOpen, setQrModalOpen] = useState(false);
-  const [pairingMethod, setPairingMethod] = useState("pairing_code"); // 'pairing_code' | 'qr_scan' | 'api_guide'
+  const [pairingMethod, setPairingMethod] = useState("qr_scan"); // 'qr_scan' | 'pairing_code' | 'api_guide'
   const [pairPhone, setPairPhone] = useState("");
   const [pairAgent, setPairAgent] = useState("");
-  const [pairingCode, setPairingCode] = useState(""); // blank until user generates one
+  const [pairingCode, setPairingCode] = useState("");
   const [codeCountdown, setCodeCountdown] = useState(0);
   const [pairingErrors, setPairingErrors] = useState({});
-  const [qrRefreshedAt, setQrRefreshedAt] = useState(Date.now());
-  const [qrDataUrl, setQrDataUrl] = useState("");
   const [liveApprovedTemplates, setLiveApprovedTemplates] = useState([]);
+  const [bridgeStatus, setBridgeStatus] = useState({ connected: false, state: "close", phone: null, pushname: null });
+  const [bridgeQr, setBridgeQr] = useState(null);
+  const [loadingQr, setLoadingQr] = useState(false);
+  const [generatingPairCode, setGeneratingPairCode] = useState(false);
+  const [disconnectingBridge, setDisconnectingBridge] = useState(false);
+  const [repModalOpen, setRepModalOpen] = useState(false);
+  const [newRepPhone, setNewRepPhone] = useState("");
+  const [newRepName, setNewRepName] = useState("");
+  const [newRepLabel, setNewRepLabel] = useState("");
 
-  // Generate dynamic real QR Code data URL whenever phone or session changes
+  // Poll Baileys Bridge status regularly
+  const fetchBridgeStatus = useCallback(async () => {
+    try {
+      const res = await waBridgeApi.getStatus();
+      if (res?.success && res?.data) {
+        setBridgeStatus(res.data);
+      }
+    } catch (e) {}
+  }, []);
+
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const rawNum = pairPhone.replace(/\D/g, "");
-    if (!rawNum) {
-      setQrDataUrl("");
-      return;
-    }
-    const cleanNum = rawNum.startsWith("91") ? rawNum : `91${rawNum}`;
-    const payload = `https://wa.me/${cleanNum}?text=${encodeURIComponent(`SmoothSales CRM Link Request [${Math.random().toString(36).substring(2, 8).toUpperCase()}]`)}`;
+    fetchBridgeStatus();
+    const interval = setInterval(fetchBridgeStatus, 4000);
+    return () => clearInterval(interval);
+  }, [fetchBridgeStatus]);
 
-    import("qrcode")
-      .then((QRCodeModule) => {
-        const QRCode = QRCodeModule.default || QRCodeModule;
-        return QRCode.toDataURL(payload, {
-          width: 240,
-          margin: 1,
-          color: {
-            dark: "#0f172a",
-            light: "#ffffff",
-          },
-          errorCorrectionLevel: "M",
-        });
-      })
-      .then((url) => setQrDataUrl(url))
-      .catch(() => { });
-  }, [pairPhone, qrRefreshedAt]);
+  // Fetch live QR code when modal is open and on qr_scan tab
+  useEffect(() => {
+    if (!qrModalOpen || pairingMethod !== "qr_scan" || bridgeStatus.connected) return;
+    let isCurrent = true;
+    const fetchQr = async () => {
+      setLoadingQr(true);
+      try {
+        const res = await waBridgeApi.getQr();
+        if (isCurrent && res?.success && res?.data?.qr) {
+          setBridgeQr(res.data.qr);
+        }
+      } catch (e) {}
+      finally {
+        if (isCurrent) setLoadingQr(false);
+      }
+    };
+    fetchQr();
+    const interval = setInterval(fetchQr, 5000);
+    return () => {
+      isCurrent = false;
+      clearInterval(interval);
+    };
+  }, [qrModalOpen, pairingMethod, bridgeStatus.connected]);
+
+  // Auto-close modal when bridge connects
+  useEffect(() => {
+    if (bridgeStatus.connected && qrModalOpen) {
+      toast.success(`Personal WhatsApp connected: +${bridgeStatus.phone || ""}`);
+      setQrModalOpen(false);
+    }
+  }, [bridgeStatus.connected, qrModalOpen, bridgeStatus.phone]);
 
   // Pre-fill credentials modal from existing meta account when opened
   useEffect(() => {
@@ -428,7 +455,8 @@ export default function WhatsAppConnectPage() {
 
   // Accounts
   const metaAccount = accounts.find((a) => a.type === "meta" && (a.phoneId || a.phoneNumberId)) || null;
-  const personalAccount = accounts.find((a) => a.type === "personal") || null;
+  const personalAccounts = accounts.filter((a) => a.type === "personal");
+  const personalAccount = personalAccounts[0] || null;
 
   // Countdown timer for pairing code — only runs after code is generated
   useEffect(() => {
@@ -643,54 +671,51 @@ export default function WhatsAppConnectPage() {
   };
 
   // ── Personal Device Pairing Handlers ──────────────────────────────────────
-  const handleGeneratePairingCode = () => {
-    const val = validateWithZod(personalPairingSchema, {
-      phone: pairPhone.trim(),
-      agentName: pairAgent.trim(),
-    });
-    if (!val.success) {
-      setPairingErrors(val.errors);
+  const handleGeneratePairingCode = async () => {
+    if (!pairPhone.trim()) {
+      setPairingErrors({ phone: "Please enter your WhatsApp phone number" });
       toast.error("Please enter a valid phone number with country code.");
       return;
     }
+    setGeneratingPairCode(true);
     setPairingErrors({});
-    // Generate new 8-digit random code
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let code1 = "", code2 = "";
-    for (let i = 0; i < 4; i++) code1 += chars.charAt(Math.floor(Math.random() * chars.length));
-    for (let i = 0; i < 4; i++) code2 += chars.charAt(Math.floor(Math.random() * chars.length));
-    setPairingCode(`${code1}-${code2}`);
-    setCodeCountdown(120); toast.success("New 8-digit pairing code generated! Valid for 2 minutes.");
+    try {
+      const res = await waBridgeApi.requestPairingCode(pairPhone.trim());
+      if (res?.success && res?.code) {
+        setPairingCode(res.code);
+        setCodeCountdown(120);
+        toast.success(`8-digit pairing code: ${res.code}. Enter this on your phone.`);
+      } else {
+        toast.error(res?.message || "Failed to generate pairing code. Please retry.");
+      }
+    } catch (e) {
+      toast.error(e?.message || "Error generating pairing code");
+    } finally {
+      setGeneratingPairCode(false);
+    }
+  };
+
+  const handleDisconnectBridge = async () => {
+    setDisconnectingBridge(true);
+    try {
+      const res = await waBridgeApi.logout();
+      if (res?.success) {
+        toast.success("Personal WhatsApp disconnected successfully");
+        setBridgeStatus({ connected: false, state: "close", phone: null, pushname: null });
+        setPairingCode("");
+        setBridgeQr(null);
+      } else {
+        toast.error(res?.message || "Failed to disconnect");
+      }
+    } catch (e) {
+      toast.error(e?.message || "Error disconnecting");
+    } finally {
+      setDisconnectingBridge(false);
+    }
   };
 
   const handleConfirmPersonalLink = async () => {
-    const val = validateWithZod(personalPairingSchema, {
-      phone: pairPhone.trim(),
-      agentName: pairAgent.trim() || "Sales Rep",
-    });
-    if (!val.success) {
-      setPairingErrors(val.errors);
-      toast.error(val.errors.phone || "Please enter a valid phone number with country code.");
-      return;
-    }
-    setPairingErrors({});
-    setConnecting(true);
-    try {
-      await addAccount({
-        type: "personal",
-        id: `personal_${pairPhone.replace(/\D/g, "") || Date.now()}`,
-        label: `Rep SIM (${pairAgent.trim() || "Sales Rep"})`,
-        number: pairPhone.trim(),
-        agentName: pairAgent.trim() || "Sales Rep",
-        device: "Sales Rep SIM",
-        status: "registered",
-        syncStatus: "Timeline Logging Active",
-      });
-      toast.success(`Sales Rep SIM (${pairPhone.trim()}) registered for timeline logging!`);
-      setQrModalOpen(false);
-    } finally {
-      setConnecting(false);
-    }
+    setQrModalOpen(false);
   };
 
   const handleDisconnectPersonalDevice = (id) => {
@@ -1171,45 +1196,45 @@ export default function WhatsAppConnectPage() {
                   </div>
                 </div>
 
-                {/* Channel 2: Rep Personal WhatsApp Business (Active or Unlinked) */}
-                {personalAccount ? (
-                  <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-5 space-y-3.5 flex flex-col justify-between shadow-xs">
+                {/* Channel 2: Rep Personal WhatsApp (Active Baileys Multi-Device or Unlinked) */}
+                {bridgeStatus.connected ? (
+                  <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5 space-y-3.5 flex flex-col justify-between shadow-xs">
                     <div>
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-xl bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                          <div className="h-9 w-9 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
                             <Smartphone className="h-4.5 w-4.5" />
                           </div>
                           <div>
                             <div className="flex items-center gap-1.5">
                               <p className="text-xs font-bold text-foreground">
-                                {personalAccount.label || "Personal WhatsApp Business"}
+                                {bridgeStatus.pushname || "Personal WhatsApp Business"}
                               </p>
-                              <Badge className="bg-blue-600 text-white text-[9.5px] py-0 px-1.5">Rep SIM</Badge>
+                              <Badge className="bg-emerald-600 text-white text-[9.5px] py-0 px-1.5">Linked Device</Badge>
                             </div>
                             <p className="text-[11px] text-foreground font-mono font-bold mt-0.5">
-                              {personalAccount.number}
+                              +{bridgeStatus.phone}
                             </p>
                           </div>
                         </div>
-                        <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30 flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                          Registered (Timeline Logger)
+                        <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Live Connected (Baileys)
                         </Badge>
                       </div>
 
                       <div className="space-y-2 text-[11px] text-muted-foreground pt-3 border-t border-border mt-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Assigned Sales Agent:</span>
-                          <span className="font-semibold text-foreground">{personalAccount.agentName || "Sales Rep"}</span>
+                          <span className="text-muted-foreground">Connected Device Pushname:</span>
+                          <span className="font-semibold text-foreground">{bridgeStatus.pushname || "Sales Rep Phone"}</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-muted-foreground">Channel Type:</span>
-                          <span className="font-semibold text-foreground">1-on-1 CRM Timeline Logger</span>
+                          <span className="font-semibold text-foreground">1-on-1 Multi-Device Socket</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">CRM Timeline Sync:</span>
-                          <span className="font-semibold text-emerald-600 dark:text-emerald-400 font-mono">Active (/api/whatsapp/personal-log)</span>
+                          <span className="text-muted-foreground">Live Webhook Forwarder:</span>
+                          <span className="font-semibold text-emerald-600 dark:text-emerald-400 font-mono">Active (127.0.0.1:5050 &rarr; CRM)</span>
                         </div>
                       </div>
                     </div>
@@ -1219,22 +1244,22 @@ export default function WhatsAppConnectPage() {
                         size="sm"
                         variant="ghost"
                         className="h-7 text-xs text-destructive hover:bg-destructive/10 gap-1 font-medium"
-                        onClick={() => handleDisconnectPersonalDevice(personalAccount.id)}
+                        onClick={handleDisconnectBridge}
+                        disabled={disconnectingBridge}
                       >
-                        <Unlink className="h-3 w-3" /> Unlink SIM
+                        {disconnectingBridge ? <Loader2 className="h-3 w-3 animate-spin" /> : <Unlink className="h-3 w-3" />}
+                        Disconnect / Unlink
                       </Button>
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-7 text-xs gap-1.5 font-medium border-blue-500/30 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10"
+                        className="h-7 text-xs gap-1.5 font-medium border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
                         onClick={() => {
-                          setPairPhone(personalAccount.number || "");
-                          setPairAgent(personalAccount.agentName || "");
-                          setPairingMethod("sim_config");
+                          setPairingMethod("qr_scan");
                           setQrModalOpen(true);
                         }}
                       >
-                        <Settings className="h-3 w-3" /> Edit SIM Config
+                        <RefreshCw className="h-3 w-3" /> Connection Info
                       </Button>
                     </div>
                   </div>
@@ -1249,50 +1274,119 @@ export default function WhatsAppConnectPage() {
                           <div>
                             <div className="flex items-center gap-1.5">
                               <p className="text-xs font-bold text-foreground">Personal WhatsApp Business</p>
-                              <Badge variant="outline" className="text-[9.5px] py-0 px-1.5">Add-on</Badge>
+                              <Badge variant="outline" className="text-[9.5px] py-0 px-1.5">Phone Link</Badge>
                             </div>
                             <p className="text-[11px] text-muted-foreground">Direct 1-on-1 team rep device linking</p>
                           </div>
                         </div>
-                        <Badge variant="outline" className="text-[10px] border-border text-muted-foreground">Not Configured</Badge>
+                        <Badge variant="outline" className="text-[10px] border-border text-muted-foreground">Not Connected</Badge>
                       </div>
 
                       <div className="space-y-2 text-[11px] text-muted-foreground pt-3 border-t border-border mt-3">
                         <div className="flex items-center gap-2">
-                          <Check className="h-3.5 w-3.5 text-foreground shrink-0" />
-                          <span>No template approvals required for 1-on-1 chats</span>
+                          <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span>Link via WhatsApp Web QR code or 8-digit pairing code</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Check className="h-3.5 w-3.5 text-foreground shrink-0" />
-                          <span>Sales reps can pair individual business phone SIMs</span>
+                          <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span>No Meta template approvals required for 1-on-1 chats</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Check className="h-3.5 w-3.5 text-foreground shrink-0" />
-                          <span>Timeline logging via /api/whatsapp/personal-log</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                          <span>Direct personal chats logged to CRM timeline</span>
+                          <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span>Inbound customer replies auto-sync to CRM Live Chat</span>
                         </div>
                       </div>
                     </div>
 
                     <div className="pt-3 border-t border-border flex items-center justify-between text-xs">
-                      <span className="text-[11px] text-muted-foreground">Timeline Logger</span>
+                      <span className="text-[11px] text-muted-foreground">Baileys Web Bridge</span>
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="h-7 text-xs gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 font-medium"
+                        className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
                         onClick={() => {
                           setPairPhone("");
-                          setPairAgent("");
-                          setPairingMethod("sim_config");
+                          setPairingMethod("qr_scan");
                           setQrModalOpen(true);
                         }}
                       >
-                        <Smartphone className="h-3.5 w-3.5" /> Configure Rep SIM
+                        <QrCode className="h-3.5 w-3.5" /> Connect Personal WhatsApp
                       </Button>
                     </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Multiple Personal WhatsApp / Team Rep Numbers Section */}
+              <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-border">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                      <Users className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-bold text-foreground">Team Rep Personal WhatsApp Accounts</h3>
+                      <p className="text-[11px] text-muted-foreground">Manage multiple sales reps&apos; WhatsApp numbers for dual-channel chat &amp; timeline sync</p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={() => setRepModalOpen(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Rep WhatsApp
+                  </Button>
+                </div>
+
+                {personalAccounts.length === 0 && !bridgeStatus.connected ? (
+                  <p className="text-xs text-muted-foreground py-2 text-center">No personal WhatsApp accounts added yet. Click &quot;Add Rep WhatsApp&quot; or connect via QR code above.</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {/* Baileys connected socket if any */}
+                    {bridgeStatus.connected && (
+                      <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 flex items-start justify-between">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="text-xs font-bold text-foreground">{bridgeStatus.pushname || "Primary Rep Phone"}</span>
+                            <Badge className="bg-emerald-600 text-white text-[9px] py-0 px-1">Socket</Badge>
+                          </div>
+                          <p className="text-xs text-emerald-700 dark:text-emerald-400 font-mono">+{bridgeStatus.phone}</p>
+                          <p className="text-[10px] text-muted-foreground">Baileys Live Connected</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={handleDisconnectBridge}
+                          title="Disconnect socket"
+                        >
+                          <Unlink className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    )}
+                    {/* Registered personal accounts */}
+                    {personalAccounts.map((acc) => (
+                      <div key={acc.id} className="p-3 rounded-xl border border-border bg-muted/20 flex items-start justify-between">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            <span className="text-xs font-bold text-foreground">{acc.label || acc.agentName}</span>
+                            <Badge variant="outline" className="text-[9px] py-0 px-1">Rep SIM</Badge>
+                          </div>
+                          <p className="text-xs text-foreground font-mono">{acc.number || "No number set"}</p>
+                          <p className="text-[10px] text-muted-foreground">Assigned: {acc.agentName || "General"}</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => removeAccount(acc.id)}
+                          title="Remove account"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -2106,21 +2200,22 @@ export default function WhatsAppConnectPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Personal WhatsApp Rep SIM Registration Modal ── */}
+      {/* ── Personal WhatsApp Real Multi-Device Linking Modal (QR + 8-Digit Pairing Code + Architecture Guide) ── */}
       <Dialog open={qrModalOpen} onOpenChange={setQrModalOpen}>
         <DialogContent className="max-w-lg p-0 overflow-hidden">
           <DialogHeader className="px-5 py-4 border-b border-border bg-muted/20">
             <DialogTitle className="text-sm font-bold flex items-center gap-2">
               <Smartphone className="h-4 w-4 text-emerald-600" />
-              Sales Rep WhatsApp SIM (Timeline Sync)
+              Link Personal WhatsApp (Phone Multi-Device)
             </DialogTitle>
           </DialogHeader>
 
           {/* Subtabs for Registration Mode */}
           <div className="px-5 pt-3 border-b border-border bg-card/60 flex items-center gap-2">
             {[
-              { id: "sim_config", label: "Register Rep SIM", icon: Smartphone },
-              { id: "api_guide", label: "Timeline API and Guide", icon: Terminal },
+              { id: "qr_scan", label: "Scan QR Code", icon: QrCode },
+              { id: "pairing_code", label: "8-Digit Pairing Code", icon: KeyRound },
+              { id: "api_guide", label: "Architecture Guide", icon: Terminal },
             ].map((tab) => {
               const Icon = tab.icon;
               const isSelected = pairingMethod === tab.id;
@@ -2143,59 +2238,126 @@ export default function WhatsAppConnectPage() {
           </div>
 
           <div className="p-5 space-y-4 text-xs">
-            {pairingMethod === "sim_config" && (
+            {pairingMethod === "qr_scan" && (
+              <div className="space-y-4 text-center">
+                <div className="p-3 rounded-xl bg-muted/30 border border-border text-left space-y-1.5">
+                  <p className="font-semibold text-xs text-foreground">How to scan with your phone:</p>
+                  <ol className="list-decimal pl-4 space-y-1 text-[11px] text-muted-foreground">
+                    <li>Open <strong>WhatsApp</strong> on your mobile phone</li>
+                    <li>Tap <strong>Settings</strong> (iPhone) or <strong>Three dots ⋮</strong> (Android)</li>
+                    <li>Tap <strong>Linked Devices</strong> &rarr; <strong>Link a Device</strong></li>
+                    <li>Point your camera at this QR code to log in</li>
+                  </ol>
+                </div>
+
+                <div className="flex flex-col items-center justify-center p-4 bg-muted/20 rounded-xl border border-border min-h-[260px]">
+                  {bridgeQr ? (
+                    <div className="space-y-2">
+                      <div className="p-3 bg-white rounded-xl shadow-xs border inline-block">
+                        <img src={bridgeQr} alt="WhatsApp Web QR Code" className="w-56 h-56 object-contain" />
+                      </div>
+                      <p className="text-[10.5px] text-muted-foreground flex items-center justify-center gap-1">
+                        <RotateCw className="h-3 w-3 animate-spin text-emerald-600" />
+                        Live QR refreshes automatically every few seconds
+                      </p>
+                    </div>
+                  ) : loadingQr ? (
+                    <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
+                      <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+                      <p className="text-xs">Generating WhatsApp Web QR Code...</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
+                      <p className="text-xs">QR code not available or device already linked.</p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          setLoadingQr(true);
+                          const res = await waBridgeApi.getQr();
+                          if (res?.data?.qr) setBridgeQr(res.data.qr);
+                          setLoadingQr(false);
+                        }}
+                        className="text-xs gap-1"
+                      >
+                        <RefreshCw className="h-3 w-3" /> Refresh QR
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {pairingMethod === "pairing_code" && (
               <div className="space-y-4">
                 <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-900 dark:text-blue-300 space-y-1.5">
                   <p className="font-semibold text-xs flex items-center gap-1.5">
-                    <CheckCircle className="h-3.5 w-3.5 text-blue-600" />
-                    Hybrid Mode: Rep SIM Timeline Logger
+                    <KeyRound className="h-3.5 w-3.5 text-blue-600" />
+                    Pair without Scanning (8-Digit Code)
                   </p>
                   <p className="text-[11px] text-blue-800 dark:text-blue-300 leading-relaxed">
-                    Official bulk messaging, templates, and automated inbound lead capture operate through <strong>Meta Cloud API</strong> (Channel 1).
-                    Registering your sales rep&apos;s phone SIM allows them to log direct 1-on-1 customer conversations into the CRM contact timeline without needing Meta template approvals.
+                    Enter your phone number below, click Generate Code, then open WhatsApp &rarr; Linked Devices &rarr; <strong>Link with phone number instead</strong> and enter the 8-digit code.
                   </p>
                 </div>
 
                 <div className="space-y-3 p-3.5 rounded-xl bg-muted/20 border border-border">
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold flex items-center gap-1">
-                      Sales Rep WhatsApp Phone Number <span className="text-destructive">*</span>
+                      Your WhatsApp Phone Number <span className="text-destructive">*</span>
                     </Label>
-                    <Input
-                      value={pairPhone}
-                      onChange={(e) => {
-                        setPairPhone(e.target.value);
-                        if (pairingErrors.phone) setPairingErrors((p) => ({ ...p, phone: null }));
-                      }}
-                      placeholder="+91 98201 55432"
-                      className={cn("h-8 text-xs font-mono", pairingErrors.phone && "border-destructive")}
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        value={pairPhone}
+                        onChange={(e) => {
+                          setPairPhone(e.target.value);
+                          if (pairingErrors.phone) setPairingErrors((p) => ({ ...p, phone: null }));
+                        }}
+                        placeholder="+91 96805 52526"
+                        className={cn("h-8 text-xs font-mono flex-1", pairingErrors.phone && "border-destructive")}
+                      />
+                      <Button
+                        size="sm"
+                        onClick={handleGeneratePairingCode}
+                        disabled={generatingPairCode || !pairPhone.trim()}
+                        className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 gap-1.5"
+                      >
+                        {generatingPairCode ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                        Generate Code
+                      </Button>
+                    </div>
                     {pairingErrors.phone ? (
                       <p className="text-[10px] text-destructive font-medium">{pairingErrors.phone}</p>
                     ) : (
-                      <p className="text-[10px] text-muted-foreground">Format with country code (e.g. +91 98201 55432)</p>
+                      <p className="text-[10px] text-muted-foreground">Format with country code (e.g. +91 96805 52526 or 919680552526)</p>
                     )}
                   </div>
+                </div>
 
-                  <div className="space-y-1">
-                    <Label className="text-xs font-semibold">Sales Rep / Closer Name</Label>
-                    <Input
-                      value={pairAgent}
-                      onChange={(e) => setPairAgent(e.target.value)}
-                      placeholder="e.g. Rahul Sharma (Sales Executive)"
-                      className="h-8 text-xs"
-                    />
+                {pairingCode && (
+                  <div className="p-4 rounded-xl bg-card border-2 border-emerald-500/40 text-center space-y-2 shadow-sm">
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                      Your 8-Digit Pairing Code
+                    </p>
+                    <div className="flex items-center justify-center gap-3">
+                      <span className="font-mono text-2xl font-bold tracking-widest text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-4 py-2 rounded-lg border border-emerald-500/20">
+                        {pairingCode.length === 8 ? `${pairingCode.slice(0, 4)} - ${pairingCode.slice(4)}` : pairingCode}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 px-2.5 text-xs gap-1"
+                        onClick={() => copyToClipboard(pairingCode, "Pairing code")}
+                      >
+                        <Copy className="h-3.5 w-3.5" /> Copy
+                      </Button>
+                    </div>
+                    {codeCountdown > 0 && (
+                      <p className="text-[10.5px] text-muted-foreground">
+                        Valid for <strong className="text-foreground">{codeCountdown}s</strong>. Enter this on your phone now.
+                      </p>
+                    )}
                   </div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-muted/40 border border-border text-[11px] text-muted-foreground space-y-1.5">
-                  <p className="font-bold text-foreground">How 1-on-1 chats are tracked:</p>
-                  <ul className="list-disc pl-4 space-y-1">
-                    <li>Reps send direct messages from their phone SIM to prospective leads.</li>
-                    <li>Chats are logged directly to the lead timeline via the CRM Chrome Extension or Timeline endpoint.</li>
-                    <li>100% compliant with WhatsApp terms — zero risk of multi-device number bans.</li>
-                  </ul>
-                </div>
+                )}
               </div>
             )}
 
@@ -2205,64 +2367,65 @@ export default function WhatsAppConnectPage() {
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-foreground flex items-center gap-1.5">
                       <Terminal className="h-3.5 w-3.5 text-emerald-600" />
-                      Personal WhatsApp Backend Architecture
+                      Hybrid WhatsApp Architecture
                     </span>
                     <Badge variant="outline" className="text-[10px] font-mono text-emerald-700 bg-emerald-500/10 border-emerald-500/20">
-                      LIVE IN BACKEND
+                      LIVE IN PRODUCTION
                     </Badge>
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    SmoothSales uses a <strong>Hybrid WhatsApp Architecture</strong>. Official bulk messaging runs via Meta Cloud API, while personal 1-on-1 team rep SIM messages are logged via the dedicated endpoint.
+                    SmoothSales uses a <strong>Hybrid WhatsApp Architecture</strong>. Channel 1 runs via official <strong>Meta Cloud API</strong> for high-volume verified campaigns and templates. Channel 2 runs via <strong>Baileys WhatsApp Web Bridge</strong> on port 5050 for sales reps 1-on-1 chats.
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-xs font-semibold">Live Backend Endpoints:</Label>
+                  <Label className="text-xs font-semibold">Active Server Endpoints:</Label>
                   <div className="p-2.5 rounded-xl bg-background border border-border font-mono text-[11px] space-y-1">
                     <div className="flex items-center justify-between text-muted-foreground">
-                      <span className="text-emerald-600 font-bold">POST</span>
-                      <span>/api/whatsapp/personal-log</span>
+                      <span className="text-blue-600 font-bold">GET</span>
+                      <span>/api/wa-bridge/status</span>
                     </div>
                     <div className="flex items-center justify-between text-muted-foreground border-t border-border/50 pt-1">
                       <span className="text-blue-600 font-bold">GET</span>
-                      <span>/api/whatsapp/personal-log/customer/&#123;id&#125;</span>
+                      <span>/api/wa-bridge/qr</span>
+                    </div>
+                    <div className="flex items-center justify-between text-muted-foreground border-t border-border/50 pt-1">
+                      <span className="text-emerald-600 font-bold">POST</span>
+                      <span>/api/wa-bridge/pair</span>
+                    </div>
+                    <div className="flex items-center justify-between text-muted-foreground border-t border-border/50 pt-1">
+                      <span className="text-emerald-600 font-bold">POST</span>
+                      <span>/api/wa-bridge/send</span>
+                    </div>
+                    <div className="flex items-center justify-between text-muted-foreground border-t border-border/50 pt-1">
+                      <span className="text-destructive font-bold">POST</span>
+                      <span>/api/wa-bridge/logout</span>
                     </div>
                   </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold">Payload Specification:</Label>
-                  <pre className="p-2.5 rounded-xl bg-muted/60 border border-border text-[10px] font-mono text-foreground overflow-x-auto select-all">
-                    {`{
-  "customerId": "uuid-of-lead",
-  "direction": "SENT", // or "RECEIVED"
-  "messageBody": "Sample chat message logged from rep phone",
-  "messagedAt": "2026-11-09T14:30:00Z"
-}`}
-                  </pre>
                 </div>
               </div>
             )}
           </div>
 
-          <DialogFooter className="px-5 py-3 border-t border-border bg-card flex justify-between">
+          <DialogFooter className="px-5 py-3 border-t border-border bg-card flex justify-between items-center">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setQrModalOpen(false)}
               className="text-xs"
             >
-              Cancel
+              Close
             </Button>
-            <Button
-              size="sm"
-              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 font-medium shadow-xs"
-              onClick={handleConfirmPersonalLink}
-              disabled={connecting}
-            >
-              {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-              Save Rep SIM Configuration
-            </Button>
+            {bridgeStatus.connected ? (
+              <Badge className="bg-emerald-600 text-white text-xs px-2.5 py-1 flex items-center gap-1">
+                <Check className="h-3.5 w-3.5" /> Device Connected
+              </Badge>
+            ) : (
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                <Loader2 className="h-3 w-3 animate-spin text-emerald-600" />
+                Waiting for device pairing...
+              </span>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2363,6 +2526,73 @@ export default function WhatsAppConnectPage() {
             >
               <Check className="h-3.5 w-3.5" />
               Save Trigger
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add Team Rep WhatsApp Modal ── */}
+      <Dialog open={repModalOpen} onOpenChange={setRepModalOpen}>
+        <DialogContent className="max-w-md p-5 space-y-4">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold flex items-center gap-2">
+              <Smartphone className="h-4 w-4 text-emerald-600" />
+              Add Sales Rep WhatsApp Account
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-xs">
+            <div className="space-y-1">
+              <Label className="text-xs">Account / Rep Label</Label>
+              <Input
+                placeholder="e.g. Rahul Sharma (Sales Exec)"
+                value={newRepLabel}
+                onChange={(e) => setNewRepLabel(e.target.value)}
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">WhatsApp Number (with country code)</Label>
+              <Input
+                placeholder="e.g. +91 98765 43210"
+                value={newRepPhone}
+                onChange={(e) => setNewRepPhone(e.target.value)}
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Assigned Agent / Team Member</Label>
+              <Input
+                placeholder="e.g. Rahul Sharma"
+                value={newRepName}
+                onChange={(e) => setNewRepName(e.target.value)}
+                className="h-8 text-xs"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" size="sm" onClick={() => setRepModalOpen(false)}>Cancel</Button>
+            <Button
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={async () => {
+                if (!newRepPhone.trim()) {
+                  toast.error("Please enter a phone number");
+                  return;
+                }
+                await addAccount({
+                  type: "personal",
+                  number: newRepPhone.trim(),
+                  agentName: newRepName.trim() || "Sales Rep",
+                  label: newRepLabel.trim() || `Rep (${newRepName.trim() || newRepPhone.trim()})`,
+                });
+                toast.success("Rep WhatsApp account registered!");
+                setNewRepPhone("");
+                setNewRepName("");
+                setNewRepLabel("");
+                setRepModalOpen(false);
+              }}
+            >
+              Add Account
             </Button>
           </DialogFooter>
         </DialogContent>

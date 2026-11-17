@@ -10,13 +10,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   FileText, Plus, RefreshCw, CheckCircle2, Clock, XCircle, Eye,
-  Copy, Trash2, MessageCircle, Send, Search, Loader2,
+  Copy, CopyPlus, Trash2, MessageCircle, Send, Search, Loader2,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  AlertTriangle, Globe,
+  AlertTriangle, Globe, ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWaAccounts } from "../wa-accounts-context";
-import { whatsappTemplatesApi } from "@/lib/api/whatsapp";
+import { whatsappTemplatesApi, subscribeTemplateStatus } from "@/lib/api/whatsapp";
 import { isApiMode } from "@/lib/api/client";
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ const CAT_CFG = {
 
 const CATEGORIES = ["MARKETING", "UTILITY", "AUTHENTICATION"];
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
-const BLANK_FORM = { displayName: "", category: "MARKETING", language: "en", header: "", body: "", footer: "" };
+const BLANK_FORM = { displayName: "", category: "MARKETING", language: "en", header: "", body: "", footer: "", buttons: [] };
 
 // ─── View Modal ───────────────────────────────────────────────────────────────
 
@@ -82,6 +82,17 @@ function ViewModal({ tmpl, onClose }) {
                 <p className="text-[10px] text-white/40 mt-2 pt-2 border-t border-white/10">{tmpl.footer}</p>
               )}
               <p className="text-[9px] text-white/30 text-right mt-1.5">9:41 AM ✓✓</p>
+
+              {/* Template interactive buttons */}
+              {Array.isArray(tmpl.buttons) && tmpl.buttons.length > 0 && (
+                <div className="border-t border-white/10 mt-2 pt-2 flex flex-col gap-1">
+                  {tmpl.buttons.map((btn, i) => (
+                    <div key={i} className="text-center text-[10px] text-blue-400 py-1 border border-blue-400/30 rounded-lg bg-blue-500/5 font-medium">
+                      {btn.type === "URL" ? "🔗 " : btn.type === "PHONE_NUMBER" ? "📞 " : "↩ "}{btn.text}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -185,6 +196,23 @@ export default function WhatsAppTemplatesPage() {
       .finally(() => setIsLoadingTemplates(false));
   }, []);
 
+  // Real-time WebSocket: Listen for Meta template approval/rejection updates
+  useEffect(() => {
+    if (!isApiMode()) return;
+    const unsub = subscribeTemplateStatus((update) => {
+      if (!update?.templateName) return;
+      setTemplates((prev) => prev.map((t) => {
+        if (t.name === update.templateName || t.displayName === update.templateName) {
+          const newStatus = (update.status || "APPROVED").toUpperCase();
+          toast.success(`Template "${t.displayName}" is now ${newStatus}!`);
+          return { ...t, status: newStatus };
+        }
+        return t;
+      }));
+    });
+    return unsub;
+  }, []);
+
   const filtered = useMemo(() => {
     return templates.filter((t) => {
       const q = search.toLowerCase();
@@ -249,6 +277,7 @@ export default function WhatsAppTemplatesPage() {
           headerText: form.header || null,
           bodyText: form.body,
           footerText: form.footer || null,
+          buttons: form.buttons || [],
           saveDraft: true,
         });
         setTemplates((prev) => [{
@@ -262,6 +291,7 @@ export default function WhatsAppTemplatesPage() {
           body: form.body,
           header: form.header || null,
           footer: form.footer || null,
+          buttons: form.buttons || [],
           variables: vars,
           usedIn: 0,
           createdAt: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
@@ -273,6 +303,7 @@ export default function WhatsAppTemplatesPage() {
     } else {
       setTemplates((prev) => [{
         id: `t_${Date.now()}`, name: slug, ...form,
+        buttons: form.buttons || [],
         status: "DRAFT", source: "local", variables: vars, usedIn: 0,
         createdAt: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
       }, ...prev]);
@@ -485,6 +516,21 @@ export default function WhatsAppTemplatesPage() {
                         className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Copy body">
                         <Copy className="h-3.5 w-3.5" />
                       </button>
+                      <button onClick={() => {
+                        setForm({
+                          displayName: `${tmpl.displayName} (Copy)`,
+                          category: tmpl.category || "MARKETING",
+                          language: tmpl.language || "en",
+                          header: tmpl.header || "",
+                          body: tmpl.body || "",
+                          footer: tmpl.footer || "",
+                          buttons: Array.isArray(tmpl.buttons) ? JSON.parse(JSON.stringify(tmpl.buttons)) : [],
+                        });
+                        setCreateOpen(true);
+                      }}
+                        className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-blue-600 hover:bg-blue-500/10 transition-colors" title="Duplicate Template">
+                        <CopyPlus className="h-3.5 w-3.5" />
+                      </button>
                       {tmpl.status === "DRAFT" && (
                         <button onClick={() => handleSubmit(tmpl.id)}
                           className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors" title="Submit to Meta">
@@ -630,6 +676,99 @@ export default function WhatsAppTemplatesPage() {
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Footer <span className="text-muted-foreground font-normal">(optional)</span></Label>
               <Input value={form.footer} onChange={(e) => setForm((p) => ({ ...p, footer: e.target.value }))} placeholder="e.g. Reply STOP to unsubscribe" className="h-8 text-xs" />
+            </div>
+
+            {/* Interactive Buttons Configurator (Meta CTA / Quick Reply) */}
+            <div className="space-y-2 pt-2 border-t border-border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-xs font-medium">Interactive Buttons</Label>
+                  <p className="text-[10px] text-muted-foreground">Add up to 3 Quick Reply or Call-to-Action buttons</p>
+                </div>
+                {(form.buttons?.length || 0) < 3 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-[11px] px-2 gap-1"
+                    onClick={() => setForm((p) => ({
+                      ...p,
+                      buttons: [...(p.buttons || []), { type: "QUICK_REPLY", text: "", value: "" }]
+                    }))}
+                  >
+                    <Plus className="h-3 w-3" /> Add Button
+                  </Button>
+                )}
+              </div>
+
+              {form.buttons && form.buttons.map((btn, idx) => (
+                <div key={idx} className="p-2 rounded-lg border border-border bg-muted/40 space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Select
+                      value={btn.type}
+                      onValueChange={(t) => {
+                        const updated = [...form.buttons];
+                        updated[idx] = { ...updated[idx], type: t };
+                        setForm((p) => ({ ...p, buttons: updated }));
+                      }}
+                    >
+                      <SelectTrigger className="h-7 text-[11px] w-32"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="QUICK_REPLY" className="text-xs">Quick Reply</SelectItem>
+                        <SelectItem value="URL" className="text-xs">Visit Website</SelectItem>
+                        <SelectItem value="PHONE_NUMBER" className="text-xs">Call Phone</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      placeholder="Button label (max 25)"
+                      maxLength={25}
+                      value={btn.text}
+                      onChange={(e) => {
+                        const updated = [...form.buttons];
+                        updated[idx] = { ...updated[idx], text: e.target.value };
+                        setForm((p) => ({ ...p, buttons: updated }));
+                      }}
+                      className="h-7 text-xs flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-500"
+                      onClick={() => {
+                        const updated = form.buttons.filter((_, i) => i !== idx);
+                        setForm((p) => ({ ...p, buttons: updated }));
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  {btn.type === "URL" && (
+                    <Input
+                      placeholder="https://example.com/property"
+                      value={btn.value || ""}
+                      onChange={(e) => {
+                        const updated = [...form.buttons];
+                        updated[idx] = { ...updated[idx], value: e.target.value };
+                        setForm((p) => ({ ...p, buttons: updated }));
+                      }}
+                      className="h-7 text-xs"
+                    />
+                  )}
+                  {btn.type === "PHONE_NUMBER" && (
+                    <Input
+                      placeholder="+919876543210"
+                      value={btn.value || ""}
+                      onChange={(e) => {
+                        const updated = [...form.buttons];
+                        updated[idx] = { ...updated[idx], value: e.target.value };
+                        setForm((p) => ({ ...p, buttons: updated }));
+                      }}
+                      className="h-7 text-xs"
+                    />
+                  )}
+                </div>
+              ))}
             </div>
             <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-[11px] text-amber-700 dark:text-amber-400">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />

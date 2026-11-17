@@ -69,7 +69,7 @@ export const PERMISSION_ROUTE_MAP = {
   // WhatsApp
   WHATSAPP_VIEW:    [
     "/whatsapp", "/whatsapp/chat", "/whatsapp/connect",
-    "/whatsapp/campaigns", "/whatsapp/templates",
+    "/whatsapp/campaigns", "/whatsapp/templates", "/whatsapp/settings",
     "/whatsapp/ai-agent", "/whatsapp/automation",
   ],
 

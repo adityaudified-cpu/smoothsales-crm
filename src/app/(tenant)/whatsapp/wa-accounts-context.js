@@ -137,7 +137,7 @@ export function WaAccountsProvider({ children }) {
     };
 
     setAccounts((prev) => {
-      const filtered = prev.filter((a) => a.id !== newAcc.id && a.type !== "personal");
+      const filtered = prev.filter((a) => a.id !== newAcc.id);
       const updated = [...filtered, newAcc];
       writeLocal(WA_ACCOUNTS_KEY, updated);
       return updated;

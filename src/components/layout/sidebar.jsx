@@ -149,6 +149,7 @@ export function Sidebar() {
             { name: "Live Chat", href: "/whatsapp/chat" },
             { name: "Campaigns", href: "/whatsapp/campaigns" },
             { name: "Templates", href: "/whatsapp/templates" },
+            { name: "Settings & Anti-Ban", href: "/whatsapp/settings" },
             { name: "AI Agent", href: "/whatsapp/ai-agent" },
             { name: "Automation", href: "/whatsapp/automation" },
           ],
