@@ -299,26 +299,23 @@ export function Sidebar() {
                           className={cn(
                             "relative flex items-center justify-between px-3 py-2 rounded-lg text-[13px] font-medium transition-all group select-none cursor-pointer",
                             isItemActive
-                              ? "bg-primary/10 text-primary font-semibold shadow-2xs border border-primary/20"
-                              : "text-muted-foreground hover:bg-secondary/70 hover:text-foreground border border-transparent"
+                              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                              : "text-muted-foreground hover:bg-sky-50/80 hover:text-[#0284c7] border border-transparent"
                           )}
                           onClick={() => setWaExpanded(!waExpanded)}
                         >
-                          {isItemActive && (
-                            <span className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-primary rounded-r-full" />
-                          )}
                           <Link
                             href={item.href}
                             onClick={(e) => { e.stopPropagation(); setWaExpanded(true); }}
                             className="flex items-center gap-3 flex-1 min-w-0"
                           >
-                            <MessageCircle className={cn("shrink-0 h-4 w-4 transition-transform duration-200 group-hover:scale-105", isItemActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
+                            <MessageCircle className={cn("shrink-0 h-4 w-4 transition-transform duration-200 group-hover:scale-105", isItemActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-[#0284c7]")} />
                             <span className="truncate">{item.name}</span>
                           </Link>
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); setWaExpanded(!waExpanded); }}
-                            className="p-0.5 text-muted-foreground hover:text-foreground rounded"
+                            className={cn("p-0.5 rounded transition-colors", isItemActive ? "text-primary-foreground/80 hover:text-primary-foreground" : "text-muted-foreground hover:text-[#0284c7]")}
                           >
                             <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", waExpanded ? "rotate-0" : "-rotate-90")} />
                           </button>
@@ -334,8 +331,8 @@ export function Sidebar() {
                                   className={cn(
                                     "flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] transition-colors",
                                     isSubActive
-                                      ? "bg-accent text-accent-foreground font-semibold shadow-2xs"
-                                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                                      ? "bg-primary/10 text-primary font-bold shadow-2xs border border-primary/20"
+                                      : "text-muted-foreground hover:text-[#0284c7] hover:bg-sky-50/70"
                                   )}
                                 >
                                   {sub.name === "AI Agent" && <Bot className="h-3 w-3 shrink-0" />}
@@ -356,15 +353,11 @@ export function Sidebar() {
                           className={cn(
                             "relative flex items-center justify-between px-3 py-2 rounded-lg text-[13px] font-medium transition-all group select-none cursor-pointer",
                             isItemActive
-                              ? "bg-primary/10 text-primary font-semibold shadow-2xs border border-primary/20"
-                              : "text-muted-foreground hover:bg-secondary/70 hover:text-foreground border border-transparent"
+                              ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                              : "text-muted-foreground hover:bg-sky-50/80 hover:text-[#0284c7] border border-transparent"
                           )}
                           onClick={() => setLeadsExpanded(!leadsExpanded)}
                         >
-                          {isItemActive && (
-                            <span className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-primary rounded-r-full" />
-                          )}
-
                           <Link
                             href={item.href}
                             onClick={(e) => {
@@ -376,7 +369,7 @@ export function Sidebar() {
                             <Icon
                               className={cn(
                                 "shrink-0 transition-transform duration-200 group-hover:scale-105 h-4 w-4",
-                                isItemActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                                isItemActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-[#0284c7]"
                               )}
                             />
                             <span className="truncate">{item.name}</span>
@@ -384,7 +377,10 @@ export function Sidebar() {
 
                           <div className="flex items-center gap-1.5 ml-auto">
                             {item.badge && (
-                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/15">
+                              <span className={cn(
+                                "text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                                isItemActive ? "bg-white/20 text-white" : "bg-sky-50 text-sky-700 border border-sky-200/60"
+                              )}>
                                 {item.badge}
                               </span>
                             )}
@@ -394,7 +390,7 @@ export function Sidebar() {
                                 e.stopPropagation();
                                 setLeadsExpanded(!leadsExpanded);
                               }}
-                              className="p-0.5 text-muted-foreground hover:text-foreground rounded"
+                              className={cn("p-0.5 rounded transition-colors", isItemActive ? "text-primary-foreground/80 hover:text-primary-foreground" : "text-muted-foreground hover:text-[#0284c7]")}
                             >
                               <ChevronDown
                                 className={cn(
@@ -421,13 +417,16 @@ export function Sidebar() {
                                   className={cn(
                                     "flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] transition-colors relative",
                                     isSubActive
-                                      ? "bg-accent text-accent-foreground font-semibold shadow-2xs"
-                                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                                      ? "bg-primary/10 text-primary font-bold shadow-2xs border border-primary/20"
+                                      : "text-muted-foreground hover:text-[#0284c7] hover:bg-sky-50/70"
                                   )}
                                 >
                                   <span className="truncate">{sub.name}</span>
                                   {sub.href === "/leads/active" && (
-                                    <span className="text-[9.5px] px-1.5 py-0.2 rounded-full bg-primary/10 text-primary font-mono font-semibold">
+                                    <span className={cn(
+                                      "text-[9.5px] px-1.5 py-0.2 rounded-full font-mono font-semibold",
+                                      isSubActive ? "bg-primary text-primary-foreground" : "bg-sky-50 text-sky-700 border border-sky-200/60"
+                                    )}>
                                       24
                                     </span>
                                   )}
@@ -450,15 +449,10 @@ export function Sidebar() {
                           ? "h-10 w-10 mx-auto justify-center rounded-xl"
                           : "gap-3 px-3 py-2 rounded-lg text-[13px] font-medium",
                         isItemActive
-                          ? "bg-primary/10 text-primary font-semibold shadow-2xs border border-primary/20"
-                          : "text-muted-foreground hover:bg-secondary/70 hover:text-foreground border border-transparent"
+                          ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                          : "text-muted-foreground hover:bg-sky-50/80 hover:text-[#0284c7] border border-transparent"
                       )}
                     >
-                      {/* Active indicator bar on expanded */}
-                      {isItemActive && !isCollapsed && (
-                        <span className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-primary rounded-r-full" />
-                      )}
-
                       {/* Micro notification dot in compact mode */}
                       {isCollapsed && item.badge && !isItemActive && (
                         <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary ring-2 ring-card" />
@@ -469,8 +463,8 @@ export function Sidebar() {
                           "shrink-0 transition-transform duration-200 group-hover:scale-105",
                           isCollapsed ? "h-[18px] w-[18px]" : "h-4 w-4",
                           isItemActive
-                            ? "text-primary"
-                            : "text-muted-foreground group-hover:text-foreground"
+                            ? "text-primary-foreground"
+                            : "text-muted-foreground group-hover:text-[#0284c7]"
                         )}
                       />
 
@@ -478,7 +472,10 @@ export function Sidebar() {
                         <>
                           <span className="truncate">{item.name}</span>
                           {item.badge && (
-                            <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/15">
+                            <span className={cn(
+                              "ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                              isItemActive ? "bg-white/20 text-white" : "bg-sky-50 text-sky-700 border border-sky-200/60"
+                            )}>
                               {item.badge}
                             </span>
                           )}

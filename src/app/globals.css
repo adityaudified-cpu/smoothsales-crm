@@ -4,30 +4,40 @@
 
 /*
  * SmoothSales design tokens — "Modern Luxury Enterprise SaaS".
- * Logo-aligned Royal Cobalt & Cyan theme, pristine slate-50 canvas,
- * elevated pure white cards, and crisp high-contrast typography.
+ * Logo-aligned Midnight Navy (#0e1a34) anchor with Electric Cyan (#00c9e8) & Royal Cobalt (#1d4ed8) hover dynamics.
+ * Crisp cool-slate canvas (#f4f6fb) with elevated pure white cards.
  * Values are HSL channels consumed as hsl(var(--x)).
  */
 @layer base {
   :root {
     /* Surfaces: Crisp cool slate canvas with elevated pure white cards */
-    --background: 210 40% 98%;         /* #f8fafc - Slate 50 ultra-clean canvas */
-    --foreground: 222.2 47.4% 11.2%;   /* #0f172a - Slate 900 high-definition ink */
+    --background: 228 33% 97%;         /* #f4f6fb - Trace/BuyBuzz cool soft canvas */
+    --foreground: 222 47% 11%;         /* #0f172a - Slate 900 high-definition ink */
     --card: 0 0% 100%;                 /* #ffffff - pure white elevated card */
-    --card-foreground: 222.2 47.4% 11.2%;
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 47.4% 11.2%;
+    --popover-foreground: 222 47% 11%;
 
-    /* Brand Accent: Royal Cobalt Blue (Logo-Matched) */
-    --primary: 221.2 83.2% 53.3%;      /* #2563eb - vibrant royal cobalt blue */
-    --primary-foreground: 210 40% 98%; /* #ffffff / #f8fafc */
+    /* Brand Logo Anchor: Midnight Navy (Darkest node of logo #0e1a34) */
+    --primary: 222 55% 15%;            /* #111a33 - Deep dark luxury midnight navy */
+    --primary-foreground: 0 0% 100%;   /* Pure crisp white text */
+    --primary-hover: 217 91% 60%;      /* #3b82f6 - Vibrant cobalt/cyan hover */
+
+    /* Logo Gradient Tiers */
+    --brand-dark: 222 58% 14%;         /* #0e1a34 - Bottom dark navy node */
+    --brand-mid: 206 64% 33%;          /* #1e5a8c - Middle ocean cobalt */
+    --brand-cyan: 190 85% 44%;         /* #11b3ce - Top electric cyan node */
+    --brand-ice: 214 90% 95%;          /* #eff6ff - Ambient soft ice-blue wash */
+
     --secondary: 210 40% 96.1%;        /* #f1f5f9 - Slate 100 soft surface */
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --accent: 214 95% 93%;             /* #eff6ff - soft ice-blue active wash */
-    --accent-foreground: 224 76% 48%;  /* #1d4ed8 - bold royal cobalt */
+    --secondary-foreground: 222 47% 11%;
+
+    /* Subtle Ice/Cyan Active Wash (Replaces neon blue with sophisticated soft tone) */
+    --accent: 214 85% 94%;             /* #eaf2fd - soft ice blue */
+    --accent-foreground: 222 55% 15%;  /* #111a33 - dark navy text on active */
 
     --muted: 210 40% 96.1%;            /* #f1f5f9 */
-    --muted-foreground: 215.4 16.3% 46.9%; /* #64748b - Slate 500 readable secondary */
+    --muted-foreground: 215 16% 47%;   /* #64748b - Slate 500 readable secondary */
 
     /* Semantic Status (Authentic, unpolluted colors) */
     --destructive: 0 84.2% 60.2%;      /* #ef4444 - vibrant crimson */
@@ -36,27 +46,21 @@
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;             /* #f59e0b - warm amber for pending/follow-up */
     --warning-foreground: 0 0% 100%;
-    --info: 199 89% 48%;               /* #0ea5e9 - cyan sky */
+    --info: 190 85% 44%;               /* #11b3ce - electric cyan */
     --info-foreground: 0 0% 100%;
 
     /* Lines and controls: Razor-sharp modern slate borders */
     --border: 214.3 31.8% 91.4%;       /* #e2e8f0 - Slate 200 crisp divider */
     --input: 214.3 31.8% 91.4%;
     --input-background: 0 0% 100%;
-    --ring: 221.2 83.2% 53.3%;         /* Royal cobalt focus ring */
+    --ring: 217 91% 60%;               /* Electric blue focus ring */
 
-    /* Charts: Logo cobalt first, then cyan, emerald, amber, crimson */
-    --chart-1: 221.2 83.2% 53.3%;
-    --chart-2: 199 89% 48%;
-    --chart-3: 142.1 76.2% 36.3%;
-    --chart-4: 38 92% 50%;
-    --chart-5: 0 84.2% 60.2%;
-
-    /* Brand Logo Tokens (Directly matched to SmoothSales connected-nodes icon) */
-    --brand-cyan: 192 100% 45%;         /* #00C9E8 - Logo top electric cyan node */
-    --brand-cobalt: 221.2 83.2% 53.3%;  /* #2563EB - Logo center royal cobalt */
-    --brand-navy: 222 84% 10%;          /* #0A1432 - Logo bottom deep navy */
-    --brand-ice: 214 95% 94%;           /* #EFF6FF - Soft ambient blue wash */
+    /* Charts */
+    --chart-1: 222 55% 15%;            /* Dark Navy */
+    --chart-2: 217 91% 60%;            /* Cobalt */
+    --chart-3: 190 85% 44%;            /* Cyan */
+    --chart-4: 142.1 76.2% 36.3%;      /* Emerald */
+    --chart-5: 38 92% 50%;             /* Amber */
 
     --radius: 0.75rem;
     --shadow-color: 222 47% 11%;
