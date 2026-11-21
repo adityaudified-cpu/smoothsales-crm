@@ -3,95 +3,102 @@
 @tailwind utilities;
 
 /*
- * SmoothSales design tokens — "Operator console".
- * Ledger-paper surfaces, register-ink teal as the only accent, stamp red / highlighter
- * amber / read-tick blue for status. Values are HSL channels consumed as hsl(var(--x)).
+ * SmoothSales design tokens — "Modern Luxury Enterprise SaaS".
+ * Logo-aligned Royal Cobalt & Cyan theme, pristine slate-50 canvas,
+ * elevated pure white cards, and crisp high-contrast typography.
+ * Values are HSL channels consumed as hsl(var(--x)).
  */
 @layer base {
   :root {
-    /* Surfaces: canvas is warm paper, panels sit one step lighter */
-    --background: 45 16% 96%;
-    --foreground: 200 25% 11%;
-    --card: 45 30% 99.5%;
-    --card-foreground: 200 25% 11%;
+    /* Surfaces: Crisp cool slate canvas with elevated pure white cards */
+    --background: 210 40% 98%;         /* #f8fafc - Slate 50 ultra-clean canvas */
+    --foreground: 222.2 47.4% 11.2%;   /* #0f172a - Slate 900 high-definition ink */
+    --card: 0 0% 100%;                 /* #ffffff - pure white elevated card */
+    --card-foreground: 222.2 47.4% 11.2%;
     --popover: 0 0% 100%;
-    --popover-foreground: 200 25% 11%;
+    --popover-foreground: 222.2 47.4% 11.2%;
 
-    /* Ink teal — primary action and active state only */
-    --primary: 172 62% 24%;
-    --primary-foreground: 45 30% 98%;
-    --secondary: 45 12% 92%;
-    --secondary-foreground: 200 25% 14%;
-    --accent: 168 32% 92%;
-    --accent-foreground: 172 62% 19%;
+    /* Brand Accent: Royal Cobalt Blue (Logo-Matched) */
+    --primary: 221.2 83.2% 53.3%;      /* #2563eb - vibrant royal cobalt blue */
+    --primary-foreground: 210 40% 98%; /* #ffffff / #f8fafc */
+    --secondary: 210 40% 96.1%;        /* #f1f5f9 - Slate 100 soft surface */
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --accent: 214 95% 93%;             /* #eff6ff - soft ice-blue active wash */
+    --accent-foreground: 224 76% 48%;  /* #1d4ed8 - bold royal cobalt */
 
-    --muted: 45 12% 92.5%;
-    --muted-foreground: 200 8% 36%;
+    --muted: 210 40% 96.1%;            /* #f1f5f9 */
+    --muted-foreground: 215.4 16.3% 46.9%; /* #64748b - Slate 500 readable secondary */
 
-    /* Status */
-    --destructive: 4 70% 45%;
+    /* Semantic Status (Authentic, unpolluted colors) */
+    --destructive: 0 84.2% 60.2%;      /* #ef4444 - vibrant crimson */
     --destructive-foreground: 0 0% 100%;
-    --success: 145 55% 28%;
+    --success: 142.1 76.2% 36.3%;      /* #16a34a - true emerald green for won/positive */
     --success-foreground: 0 0% 100%;
-    --warning: 32 90% 35%;
+    --warning: 38 92% 50%;             /* #f59e0b - warm amber for pending/follow-up */
     --warning-foreground: 0 0% 100%;
-    --info: 208 75% 38%;
+    --info: 199 89% 48%;               /* #0ea5e9 - cyan sky */
     --info-foreground: 0 0% 100%;
 
-    /* Lines and controls */
-    --border: 40 10% 86%;
-    --input: 40 10% 80%;
-    --input-background: 45 14% 97.5%;
-    --ring: 172 62% 30%;
+    /* Lines and controls: Razor-sharp modern slate borders */
+    --border: 214.3 31.8% 91.4%;       /* #e2e8f0 - Slate 200 crisp divider */
+    --input: 214.3 31.8% 91.4%;
+    --input-background: 0 0% 100%;
+    --ring: 221.2 83.2% 53.3%;         /* Royal cobalt focus ring */
 
-    /* Charts: ink teal first, then status hues */
-    --chart-1: 172 62% 28%;
-    --chart-2: 208 70% 45%;
-    --chart-3: 32 85% 45%;
-    --chart-4: 145 45% 38%;
-    --chart-5: 4 60% 52%;
+    /* Charts: Logo cobalt first, then cyan, emerald, amber, crimson */
+    --chart-1: 221.2 83.2% 53.3%;
+    --chart-2: 199 89% 48%;
+    --chart-3: 142.1 76.2% 36.3%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 0 84.2% 60.2%;
 
-    --radius: 0.5rem;
-    --shadow-color: 200 30% 10%;
+    /* Brand Logo Tokens (Directly matched to SmoothSales connected-nodes icon) */
+    --brand-cyan: 192 100% 45%;         /* #00C9E8 - Logo top electric cyan node */
+    --brand-cobalt: 221.2 83.2% 53.3%;  /* #2563EB - Logo center royal cobalt */
+    --brand-navy: 222 84% 10%;          /* #0A1432 - Logo bottom deep navy */
+    --brand-ice: 214 95% 94%;           /* #EFF6FF - Soft ambient blue wash */
+
+    --radius: 0.75rem;
+    --shadow-color: 222 47% 11%;
   }
 
   .dark {
-    --background: 200 18% 8%;
-    --foreground: 45 15% 93%;
-    --card: 200 16% 10.5%;
-    --card-foreground: 45 15% 93%;
-    --popover: 200 15% 12.5%;
-    --popover-foreground: 45 15% 93%;
+    --background: 222.2 84% 4.9%;      /* #020617 - deep midnight obsidian */
+    --foreground: 210 40% 98%;         /* #f8fafc */
+    --card: 222.2 84% 7%;              /* #080d1a - layered dark card */
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 8%;           /* #0b1222 */
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 168 52% 46%;
-    --primary-foreground: 200 30% 7%;
-    --secondary: 200 12% 15%;
-    --secondary-foreground: 45 15% 90%;
-    --accent: 172 30% 16%;
-    --accent-foreground: 168 50% 82%;
+    --primary: 217.2 91.2% 59.8%;      /* #3b82f6 - electric cobalt blue */
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;    /* #1e293b */
+    --secondary-foreground: 210 40% 98%;
+    --accent: 217.2 32.6% 22%;
+    --accent-foreground: 210 40% 98%;
 
-    --muted: 200 12% 14%;
-    --muted-foreground: 200 8% 64%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%; /* #94a3b8 - Slate 400 */
 
-    --destructive: 4 65% 56%;
-    --destructive-foreground: 200 30% 7%;
-    --success: 145 42% 50%;
-    --success-foreground: 200 30% 7%;
-    --warning: 38 82% 56%;
-    --warning-foreground: 200 30% 7%;
-    --info: 208 70% 64%;
-    --info-foreground: 200 30% 7%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 71% 45%;
+    --success-foreground: 222.2 84% 4.9%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 222.2 84% 4.9%;
+    --info: 199 89% 58%;
+    --info-foreground: 222.2 84% 4.9%;
 
-    --border: 200 10% 19%;
-    --input: 200 10% 24%;
-    --input-background: 200 16% 9%;
-    --ring: 168 52% 52%;
+    --border: 217.2 32.6% 17.5%;       /* #1e293b */
+    --input: 217.2 32.6% 17.5%;
+    --input-background: 222.2 84% 6%;
+    --ring: 217.2 91.2% 59.8%;
 
-    --chart-1: 168 52% 48%;
-    --chart-2: 208 65% 62%;
-    --chart-3: 38 80% 58%;
-    --chart-4: 145 40% 52%;
-    --chart-5: 4 60% 60%;
+    --chart-1: 217.2 91.2% 59.8%;
+    --chart-2: 199 89% 58%;
+    --chart-3: 142 71% 45%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 0 72% 51%;
 
     --shadow-color: 0 0% 0%;
   }
@@ -138,6 +145,21 @@
 
   /* Phone numbers, IDs, counters: never let digits shift layout */
   .tabular { font-variant-numeric: tabular-nums; }
+
+  /* SmoothSales Logo Brand Gradient */
+  .brand-gradient {
+    background: linear-gradient(135deg, hsl(192 100% 45%) 0%, hsl(221.2 83.2% 53.3%) 100%);
+  }
+  .brand-gradient-subtle {
+    background: linear-gradient(135deg, hsl(214 95% 97%) 0%, hsl(192 90% 97%) 100%);
+  }
+  .card-hover {
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .card-hover:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px -2px rgba(15, 23, 42, 0.08);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

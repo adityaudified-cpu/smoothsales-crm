@@ -1,421 +1,61 @@
 "use client";
 
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import Link from "next/link";
-import { z } from "zod";
+import { MessageCircle, Send, RefreshCw, Globe, Users, Zap, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
-  Smartphone, QrCode, CheckCircle2, RefreshCw, Zap, Bot, Users,
-  MessageCircle, Shield, Settings, Link2, Unlink, Copy, ExternalLink,
-  Info, Clock, Globe, Star, Layers, Activity, Eye, EyeOff, Trash2,
-  Plus, Check, Building2, PhoneCall, ArrowUpRight, AlertTriangle, BookOpen,
-  X, Loader2, Wifi, WifiOff, RotateCw, Send, ChevronRight, HelpCircle,
-  FileText, Sparkles, UserCheck, Bell, ShieldCheck, Cpu, ArrowRight,
-  CheckCircle, Radio, PlayCircle, SlidersHorizontal, Terminal, BatteryCharging,
-  KeyRound, Hash, HelpCircle as HelpIcon,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
 import { useWaAccounts } from "../wa-accounts-context";
-import { whatsappTemplatesApi, whatsappSendApi, waBridgeApi } from "@/lib/api/whatsapp";
-import { customersApi } from "@/lib/api/customers";
-import { isApiMode } from "@/lib/api/client";
+import { whatsappTemplatesApi, waBridgeApi } from "@/lib/api/whatsapp";
 
-// ── Strict Zod Validation Schemas ─────────────────────────────────────────────
+// Modular Production-Grade Components
+import { CredentialsModal } from "@/components/whatsapp/credentials-modal";
+import { TestPingModal } from "@/components/whatsapp/test-ping-modal";
+import { LinkPersonalModal } from "@/components/whatsapp/link-personal-modal";
+import { AddRepModal } from "@/components/whatsapp/add-rep-modal";
+import { TriggerConfigModal } from "@/components/whatsapp/trigger-config-modal";
+import { ChannelsHealthTab } from "@/components/whatsapp/channels-health-tab";
+import { LeadCaptureTab } from "@/components/whatsapp/lead-capture-tab";
+import { AutomationTriggersTab, AUTOMATION_TRIGGERS_DEF } from "@/components/whatsapp/automation-triggers-tab";
+import { SetupGuideTab, WEBHOOK_CALLBACK_URL, WEBHOOK_VERIFY_TOKEN } from "@/components/whatsapp/setup-guide-tab";
 
-const credentialsSchema = z.object({
-  label: z
-    .string()
-    .trim()
-    .min(2, "Account label must be at least 2 characters")
-    .max(50, "Account label cannot exceed 50 characters"),
-  wabaId: z
-    .string()
-    .trim()
-    .regex(/^\d{10,20}$/, "WABA ID must be 10 to 20 digits from Meta Business Manager"),
-  phoneId: z
-    .string()
-    .trim()
-    .regex(/^\d{10,20}$/, "Phone Number ID must be 10 to 20 digits from Meta API setup"),
-  token: z
-    .string()
-    .trim()
-    .refine(
-      (val) => val === "" || val.length >= 25,
-      "System User Access Token must be at least 25 characters"
-    ),
-});
-
-const testMessageSchema = z.object({
-  phone: z
-    .string()
-    .trim()
-    .regex(
-      /^\+[1-9]\d{9,14}$/,
-      "Must be a valid international phone number starting with + and country code (e.g. +919876543210)"
-    ),
-  message: z
-    .string()
-    .trim()
-    .min(2, "Message body must be at least 2 characters")
-    .max(500, "Message cannot exceed 500 characters"),
-});
-
-const personalPairingSchema = z.object({
-  phone: z
-    .string()
-    .trim()
-    .regex(
-      /^\+[1-9]\d{9,14}$/,
-      "Enter a valid WhatsApp phone number starting with country code (e.g. +91 98201 55432)"
-    ),
-  agentName: z.string().trim().min(2, "Agent name is required"),
-});
-
-const leadCaptureConfigSchema = z.object({
-  sourceTag: z
-    .string()
-    .trim()
-    .min(2, "Source tag must be at least 2 characters (e.g. WhatsApp Inbound)")
-    .max(40, "Source tag cannot exceed 40 characters"),
-  highIntentKeywords: z
-    .string()
-    .trim()
-    .min(2, "Enter at least one keyword (e.g. pricing, quote, demo, discount)"),
-  routingPool: z.enum(["all", "inbound", "senior"], {
-    errorMap: () => ({ message: "Please select a valid distribution pool" }),
-  }),
-  slaMinutes: z
-    .number()
-    .min(5, "Minimum SLA warning is 5 minutes")
-    .max(180, "Maximum SLA warning is 180 minutes"),
-});
-
-const triggerEditSchema = z.object({
-  template: z.string().trim().min(1, "Please select an approved template"),
-  timing: z.string().trim().min(1, "Please select a trigger delay"),
-});
-
-function validateWithZod(schema, data) {
-  const result = schema.safeParse(data);
-  if (!result.success) {
-    const fieldErrors = {};
-    result.error.issues.forEach((issue) => {
-      const field = issue.path[0];
-      if (!fieldErrors[field]) {
-        fieldErrors[field] = issue.message;
-      }
-    });
-    return { success: false, errors: fieldErrors };
-  }
-  return { success: true, data: result.data, errors: {} };
-}
-
-// ── Webhook Info Config ───────────────────────────────────────────────────────
-const WEBHOOK_CALLBACK_URL = typeof window !== "undefined"
-  ? `${window.location.origin}/api/webhooks/whatsapp`
-  : "https://api.smoothsales.com/api/webhooks/whatsapp";
-const WEBHOOK_VERIFY_TOKEN = "smoothsales-webhook-verify";
-
-// ── Automation Triggers Config ────────────────────────────────────────────────
-const AUTOMATION_TRIGGERS = [
-  {
-    id: "ar1",
-    title: "Welcome Message on First Contact",
-    trigger: "First Message",
-    category: "onboarding",
-    desc: "Greet leads automatically with an approved welcome message upon initial outreach.",
-    template: "universal",
-    timing: "Immediate (0s delay)",
-    snippet: "Hi {{1}}! Welcome to SmoothSales CRM. Would you like to schedule a quick discovery demo?",
-    default: true,
-  },
-  {
-    id: "ar2",
-    title: "Meeting / Demo Reminder",
-    trigger: "Meeting Scheduled",
-    category: "engagement",
-    desc: "Send an automated confirmation and reminder 2 hours prior to scheduled meetings.",
-    template: "starting",
-    timing: "2 Hours Before Meeting",
-    snippet: "Hi {{1}}, this is a friendly reminder for your session with our specialist on {{2}} at {{3}}.",
-    default: true,
-  },
-  {
-    id: "ar3",
-    title: "Follow-up After 24h Silence",
-    trigger: "No Reply 24h",
-    category: "engagement",
-    desc: "Send a polite follow-up nudge if a prospect does not reply within 24 hours.",
-    template: "hello_world",
-    timing: "24 Hours of Inactivity",
-    snippet: "Hi {{1}}! Just following up on your enquiry. Reply YES or call us to connect with a specialist.",
-    default: false,
-  },
-  {
-    id: "ar4",
-    title: "Quotation Sent Notification",
-    trigger: "Quotation Sent",
-    category: "onboarding",
-    desc: "Notify customer immediately when a quote or pricing proposal is generated in CRM.",
-    template: "jaspers_market_plain_text_v1",
-    timing: "Immediate on Quote Generate",
-    snippet: "Hi {{1}}, your quotation is ready! Please review and let us know if you have any questions.",
-    default: true,
-  },
-  {
-    id: "ar5",
-    title: "AI Sales Agent Auto-Pilot",
-    trigger: "AI Qualification",
-    category: "ai",
-    desc: "Let Priya (AI Sales Assistant) qualify budget, property requirements, and book site visits 24/7.",
-    template: "universal",
-    timing: "Conversational Real-time",
-    snippet: "Priya qualifies lead requirements, budget range, and instantly proposes available demo slots.",
-    default: true,
-  },
-];
-
-// ── Setup Steps Config ────────────────────────────────────────────────────────
-const SETUP_STEPS = [
-  {
-    step: "1",
-    title: "Open Meta Business Suite",
-    desc: "Go to Meta Business Settings → WhatsApp Accounts. Ensure your business number is verified and linked to your portfolio.",
-    href: "https://business.facebook.com/settings/whatsapp-business-accounts",
-    action: "Open Business Manager",
-  },
-  {
-    step: "2",
-    title: "Retrieve Phone Number ID & WABA ID",
-    desc: "In Meta Developer Console under WhatsApp → API Setup, copy your Phone Number ID and WhatsApp Business Account ID.",
-    href: "https://developers.facebook.com/docs/whatsapp/cloud-api/get-started",
-    action: "View Developer Docs",
-  },
-  {
-    step: "3",
-    title: "Generate Permanent System User Token",
-    desc: "In Business Settings → System Users, create an admin user with 'whatsapp_business_messaging' and 'whatsapp_business_management' permissions.",
-    href: "https://developers.facebook.com/docs/whatsapp/business-management-api/get-started",
-    action: "System User Token Guide",
-  },
-  {
-    step: "4",
-    title: "Configure Webhooks & Verification",
-    desc: "Paste the Callback URL and Verify Token in Meta Developer Console. Subscribe to 'messages' and 'message_template_status_update'.",
-    href: null,
-    action: null,
-  },
-];
-
-// ── Realistic Authentic QR Code Matrix Component ─────────────────────────────
-function AuthenticQrCodeMatrix({ size = 200, scanning = false }) {
-  // Deterministic 25x25 QR Matrix module layout with authentic finder corners
-  const matrix = [
-    [1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1],
-    [1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1],
-    [1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1],
-    [1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1],
-    [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1],
-    [1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1],
-    [1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0],
-    [0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1],
-    [1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-    [1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0],
-    [0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1],
-    [1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0],
-    [1, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1],
-    [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-    [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-    [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0],
-    [1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1],
-    [1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1],
-    [1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0],
-    [1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1],
-    [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0],
-    [1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1],
-    [1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0],
-  ];
-
-  const cellSize = size / 25;
-
-  return (
-    <div className="relative p-2.5 bg-white rounded-2xl shadow-md border border-border inline-block">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="block">
-        {matrix.map((row, r) =>
-          row.map((cell, c) =>
-            cell === 1 ? (
-              <rect
-                key={`${r}-${c}`}
-                x={c * cellSize}
-                y={r * cellSize}
-                width={cellSize}
-                height={cellSize}
-                fill="#0f172a"
-              />
-            ) : null
-          )
-        )}
-      </svg>
-
-      {/* WhatsApp Official Logo in center */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="h-9 w-9 bg-white rounded-xl shadow-md flex items-center justify-center p-1 border border-border/40">
-          <div className="h-full w-full bg-emerald-500 rounded-lg flex items-center justify-center text-white font-bold text-xs">
-            <MessageCircle className="h-4 w-4" />
-          </div>
-        </div>
-      </div>
-
-      {/* Laser Scanning Animation */}
-      {scanning && (
-        <div className="absolute inset-x-2 top-0 h-1 bg-gradient-to-r from-transparent via-emerald-500 to-transparent shadow-[0_0_8px_#10b981] animate-pulse" />
-      )}
-    </div>
-  );
-}
+const LEAD_RULES_KEY = "wa_lead_capture_rules_v4";
+const AUTO_RULES_KEY = "wa_auto_rules_v4";
 
 export default function WhatsAppConnectPage() {
-  const { accounts, addAccount, removeAccount } = useWaAccounts();
+  const { accounts, metaAccount, addAccount, removeAccount, refreshAccounts } = useWaAccounts();
   const [activeTab, setActiveTab] = useState("connect");
   const [templateSyncing, setTemplateSyncing] = useState(false);
-  const [connecting, setConnecting] = useState(false);
 
-  // Scroll Container Ref to reset scroll position on tab switch
-  const scrollContainerRef = useRef(null);
+  // Modals
+  const [credentialsModalOpen, setCredentialsModalOpen] = useState(false);
+  const [testPingModalOpen, setTestPingModalOpen] = useState(false);
+  const [linkPersonalModalOpen, setLinkPersonalModalOpen] = useState(false);
+  const [addRepModalOpen, setAddRepModalOpen] = useState(false);
+  const [triggerConfigModalOpen, setTriggerConfigModalOpen] = useState(false);
+  const [editingTrigger, setEditingTrigger] = useState(null);
 
-  useEffect(() => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTo({ top: 0, behavior: "instant" });
-    }
-  }, [activeTab]);
-
-  // Test Message Modal State & Validation
-  const [testModalOpen, setTestModalOpen] = useState(false);
-  const [testPhone, setTestPhone] = useState("");
-  const [testMessage, setTestMessage] = useState("");
-  const [testSending, setTestSending] = useState(false);
-  const [testErrors, setTestErrors] = useState({});
-
-  // Credentials Modal State & Validation — pre-fill from connected metaAccount
-  const [showCredentialsModal, setShowCredentialsModal] = useState(false);
-  const [phoneId, setPhoneId] = useState("");
-  const [wabaId, setWabaId] = useState("");
-  const [token, setToken] = useState("");
-  const [label, setLabel] = useState("");
-  const [showToken, setShowToken] = useState(false);
-  const [credentialsErrors, setCredentialsErrors] = useState({});
-
-  // Personal WhatsApp Linking Modal (QR + 8-Digit Pairing Code + Architecture Guide)
-  const [qrModalOpen, setQrModalOpen] = useState(false);
-  const [pairingMethod, setPairingMethod] = useState("qr_scan"); // 'qr_scan' | 'pairing_code' | 'api_guide'
-  const [pairPhone, setPairPhone] = useState("");
-  const [pairAgent, setPairAgent] = useState("");
-  const [pairingCode, setPairingCode] = useState("");
-  const [codeCountdown, setCodeCountdown] = useState(0);
-  const [pairingErrors, setPairingErrors] = useState({});
+  // Live Backend & Bridge State
   const [liveApprovedTemplates, setLiveApprovedTemplates] = useState([]);
-  const [bridgeStatus, setBridgeStatus] = useState({ connected: false, state: "close", phone: null, pushname: null });
-  const [bridgeQr, setBridgeQr] = useState(null);
-  const [loadingQr, setLoadingQr] = useState(false);
-  const [generatingPairCode, setGeneratingPairCode] = useState(false);
-  const [disconnectingBridge, setDisconnectingBridge] = useState(false);
-  const [repModalOpen, setRepModalOpen] = useState(false);
-  const [newRepPhone, setNewRepPhone] = useState("");
-  const [newRepName, setNewRepName] = useState("");
-  const [newRepLabel, setNewRepLabel] = useState("");
+  const [bridgeStatus, setBridgeStatus] = useState({
+    connected: false,
+    state: "close",
+    phone: null,
+    pushname: null,
+  });
 
-  // Poll Baileys Bridge status regularly
-  const fetchBridgeStatus = useCallback(async () => {
-    try {
-      const res = await waBridgeApi.getStatus();
-      if (res?.success && res?.data) {
-        setBridgeStatus(res.data);
-      }
-    } catch (e) {}
-  }, []);
-
-  useEffect(() => {
-    fetchBridgeStatus();
-    const interval = setInterval(fetchBridgeStatus, 4000);
-    return () => clearInterval(interval);
-  }, [fetchBridgeStatus]);
-
-  // Fetch live QR code when modal is open and on qr_scan tab
-  useEffect(() => {
-    if (!qrModalOpen || pairingMethod !== "qr_scan" || bridgeStatus.connected) return;
-    let isCurrent = true;
-    const fetchQr = async () => {
-      setLoadingQr(true);
-      try {
-        const res = await waBridgeApi.getQr();
-        if (isCurrent && res?.success && res?.data?.qr) {
-          setBridgeQr(res.data.qr);
-        }
-      } catch (e) {}
-      finally {
-        if (isCurrent) setLoadingQr(false);
-      }
-    };
-    fetchQr();
-    const interval = setInterval(fetchQr, 5000);
-    return () => {
-      isCurrent = false;
-      clearInterval(interval);
-    };
-  }, [qrModalOpen, pairingMethod, bridgeStatus.connected]);
-
-  // Auto-close modal when bridge connects
-  useEffect(() => {
-    if (bridgeStatus.connected && qrModalOpen) {
-      toast.success(`Personal WhatsApp connected: +${bridgeStatus.phone || ""}`);
-      setQrModalOpen(false);
-    }
-  }, [bridgeStatus.connected, qrModalOpen, bridgeStatus.phone]);
-
-  // Pre-fill credentials modal from existing meta account when opened
-  useEffect(() => {
-    if (showCredentialsModal && metaAccount) {
-      setPhoneId(metaAccount.phoneId || "");
-      setWabaId(metaAccount.wabaId || "");
-      setLabel(metaAccount.label || "");
-      setToken("");
-    }
-  }, [showCredentialsModal]);
-
-  useEffect(() => {
-    whatsappTemplatesApi.getApproved()
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setLiveApprovedTemplates(data);
-        }
-      })
-      .catch(() => { });
-  }, []);
-
-  // Webhook Live Health Check State
+  // Webhook Diagnostic State
   const [webhookChecking, setWebhookChecking] = useState(false);
   const [webhookResult, setWebhookResult] = useState(null);
 
-  // Lead Capture Config State & Validation
+  // Lead Rules (persisted)
   const [leadRules, setLeadRules] = useState(() => {
     try {
-      const saved = localStorage.getItem("wa_lead_capture_rules_v4");
+      const saved = localStorage.getItem(LEAD_RULES_KEY);
       if (saved) return JSON.parse(saved);
-    } catch { }
+    } catch {}
     return {
       autoCreateLead: true,
       extractName: true,
@@ -432,54 +72,81 @@ export default function WhatsAppConnectPage() {
       slaMinutes: 15,
     };
   });
-  const [leadCaptureErrors, setLeadCaptureErrors] = useState({});
 
-  // Automation Triggers State & Customization Modal
-  const [autoCategory, setAutoCategory] = useState("all");
+  // Automation Rules (persisted)
   const [autoRules, setAutoRules] = useState(() => {
     try {
-      const saved = localStorage.getItem("wa_auto_rules_v4");
+      const saved = localStorage.getItem(AUTO_RULES_KEY);
       if (saved) return JSON.parse(saved);
-    } catch { }
+    } catch {}
     const initial = {};
-    AUTOMATION_TRIGGERS.forEach((r) => {
+    AUTOMATION_TRIGGERS_DEF.forEach((r) => {
       initial[r.id] = { enabled: r.default, template: r.template, timing: r.timing };
     });
     return initial;
   });
 
-  const [editingTrigger, setEditingTrigger] = useState(null);
-  const [triggerModalOpen, setTriggerModalOpen] = useState(false);
-  const [triggerForm, setTriggerForm] = useState({ template: "", timing: "" });
-  const [triggerErrors, setTriggerErrors] = useState({});
-
-  // Accounts
-  const metaAccount = accounts.find((a) => a.type === "meta" && (a.phoneId || a.phoneNumberId)) || null;
-  const personalAccounts = accounts.filter((a) => a.type === "personal");
-  const personalAccount = personalAccounts[0] || null;
-
-  // Countdown timer for pairing code — only runs after code is generated
+  // Scroll Container Ref to maintain smooth view
+  const scrollContainerRef = useRef(null);
   useEffect(() => {
-    if (!qrModalOpen || pairingMethod !== "pairing_code" || !pairingCode || codeCountdown <= 0) return;
-    const interval = setInterval(() => {
-      setCodeCountdown((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: "instant" });
+    }
+  }, [activeTab]);
+
+  // Poll Baileys Bridge Status
+  const fetchBridgeStatus = useCallback(async () => {
+    try {
+      const res = await waBridgeApi.getStatus();
+      if (res?.success && res?.data) {
+        setBridgeStatus(res.data);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchBridgeStatus();
+    const interval = setInterval(fetchBridgeStatus, 4000);
     return () => clearInterval(interval);
-  }, [qrModalOpen, pairingMethod, pairingCode, codeCountdown]);
+  }, [fetchBridgeStatus]);
+
+  // Auto-close pairing modal when socket connects
+  useEffect(() => {
+    if (bridgeStatus.connected && linkPersonalModalOpen) {
+      toast.success(`Personal WhatsApp connected: +${bridgeStatus.phone || ""}`);
+      setLinkPersonalModalOpen(false);
+    }
+  }, [bridgeStatus.connected, linkPersonalModalOpen, bridgeStatus.phone]);
+
+  // Load Approved Templates from backend
+  useEffect(() => {
+    whatsappTemplatesApi
+      .getApproved()
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setLiveApprovedTemplates(data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Filter personal accounts
+  const personalAccounts = accounts.filter((a) => a.type === "personal");
 
   // ── Template Sync Handler ──────────────────────────────────────────────────
   const handleSyncTemplates = async () => {
     if (!metaAccount) {
       toast.error("Connect a WhatsApp Business Account before syncing templates.");
-      setShowCredentialsModal(true);
+      setCredentialsModalOpen(true);
       return;
     }
     setTemplateSyncing(true);
     try {
       const res = await whatsappTemplatesApi.syncAll();
       const count = Array.isArray(res) ? res.length : 0;
-      setLiveApprovedTemplates(Array.isArray(res) ? res.filter((t) => t.status === "APPROVED") : []);
-      toast.success(`Synced ${count} approved WhatsApp templates directly with Meta Graph API!`);
+      const approved = Array.isArray(res) ? res.filter((t) => t.status === "APPROVED") : [];
+      setLiveApprovedTemplates(approved);
+      toast.success(`Synced ${count} WhatsApp templates directly with Meta Graph API!`);
     } catch (err) {
       toast.error(err?.message || "Failed to sync templates with Meta. Please verify credentials.");
     } finally {
@@ -487,142 +154,60 @@ export default function WhatsAppConnectPage() {
     }
   };
 
-  // ── Test Message Handler with Zod Validation ──────────────────────────────
-  const handleSendTestMessage = async () => {
-    if (!metaAccount) {
-      toast.error("No WhatsApp channel connected. Please connect your Meta WABA account first.");
-      setShowCredentialsModal(true);
-      return;
-    }
-    const payload = {
-      phone: testPhone.trim(),
-      message: testMessage.trim(),
-    };
-    const validation = validateWithZod(testMessageSchema, payload);
-    if (!validation.success) {
-      setTestErrors(validation.errors);
-      toast.error("Please correct the phone number format before sending.");
-      return;
-    }
-    setTestErrors({});
-    setTestSending(true);
-
+  // ── Disconnect Bridge Handler ──────────────────────────────────────────────
+  const handleDisconnectBridge = async () => {
     try {
-      if (isApiMode()) {
-        const custRes = await customersApi.list({ size: 1 });
-        const customerId = custRes?.items?.[0]?.id || custRes?.[0]?.id;
-        if (!customerId) {
-          throw new Error("No customer contact found in workspace to attach test dispatch.");
-        }
-        await whatsappSendApi.sendSession({
-          customerId,
-          messageBody: payload.message,
-        });
+      const res = await waBridgeApi.logout();
+      if (res?.success) {
+        toast.success("Personal WhatsApp socket disconnected successfully.");
+        setBridgeStatus({ connected: false, state: "close", phone: null, pushname: null });
+      } else {
+        toast.error(res?.message || "Failed to disconnect socket.");
       }
-      toast.success(`Test ping dispatched to ${payload.phone}! WhatsApp connection is active.`);
-      setTestModalOpen(false);
-    } catch (err) {
-      toast.error(err?.message || "Failed to dispatch test message. Verify Meta credentials.");
-    } finally {
-      setTestSending(false);
+    } catch (e) {
+      toast.error(e?.message || "Error disconnecting bridge socket.");
     }
   };
 
-  // ── Save Credentials with Zod Validation ───────────────────────────────────
-  const handleSaveCredentials = async () => {
-    const payload = {
-      label: label.trim(),
-      wabaId: wabaId.trim(),
-      phoneId: phoneId.trim(),
-      token: token.trim(),
-    };
-    const validation = validateWithZod(credentialsSchema, payload);
-    if (!validation.success) {
-      setCredentialsErrors(validation.errors);
-      toast.error("Please fill all required credentials accurately.");
-      return;
-    }
-    setCredentialsErrors({});
-    setConnecting(true);
-
+  // ── Save Lead Rules Handler ────────────────────────────────────────────────
+  const handleSaveLeadRules = (rules) => {
+    setLeadRules(rules);
     try {
-      await addAccount({
-        type: "meta",
-        label: payload.label,
-        phoneId: payload.phoneId,
-        wabaId: payload.wabaId,
-        token: payload.token,
-      });
-      toast.success("Meta Cloud API credentials updated and verified successfully!");
-      setShowCredentialsModal(false);
-    } catch (err) {
-      toast.error(err?.message || "Connection failed. Please re-check WABA ID and Phone Number ID.");
-    } finally {
-      setConnecting(false);
-    }
+      localStorage.setItem(LEAD_RULES_KEY, JSON.stringify(rules));
+    } catch {}
   };
 
-  // ── Save Lead Capture Rules with Zod Validation ────────────────────────────
-  const handleSaveLeadRules = () => {
-    const validation = validateWithZod(leadCaptureConfigSchema, {
-      sourceTag: leadRules.sourceTag,
-      highIntentKeywords: leadRules.highIntentKeywords,
-      routingPool: leadRules.routingPool,
-      slaMinutes: Number(leadRules.slaMinutes) || 15,
-    });
-    if (!validation.success) {
-      setLeadCaptureErrors(validation.errors);
-      toast.error("Please resolve configuration validation errors.");
-      return;
-    }
-    setLeadCaptureErrors({});
-    try {
-      localStorage.setItem("wa_lead_capture_rules_v4", JSON.stringify(leadRules));
-    } catch { }
-    toast.success("Lead capture configuration and routing rules saved successfully!");
-  };
-
-  // ── Save Automation Rules ──────────────────────────────────────────────────
+  // ── Save Automation Rules Handler ──────────────────────────────────────────
   const handleSaveAutoRules = () => {
     try {
-      localStorage.setItem("wa_auto_rules_v4", JSON.stringify(autoRules));
-    } catch { }
-    toast.success("All 5 automation trigger rules updated and saved!");
+      localStorage.setItem(AUTO_RULES_KEY, JSON.stringify(autoRules));
+      toast.success("All 5 automation workflow rules saved successfully!");
+    } catch {}
   };
 
-  // ── Configure Trigger Modal Open ───────────────────────────────────────────
-  const openTriggerConfig = (trigger) => {
+  const handleOpenTriggerConfig = (trigger) => {
     setEditingTrigger(trigger);
-    const current = autoRules[trigger.id] || { template: trigger.template, timing: trigger.timing };
-    setTriggerForm({
-      template: current.template || trigger.template,
-      timing: current.timing || trigger.timing,
+    setTriggerConfigModalOpen(true);
+  };
+
+  const handleSaveSingleTrigger = (triggerId, config) => {
+    setAutoRules((prev) => {
+      const next = {
+        ...prev,
+        [triggerId]: {
+          ...(prev[triggerId] || {}),
+          template: config.template,
+          timing: config.timing,
+        },
+      };
+      try {
+        localStorage.setItem(AUTO_RULES_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
     });
-    setTriggerErrors({});
-    setTriggerModalOpen(true);
   };
 
-  const handleSaveTriggerConfig = () => {
-    const validation = validateWithZod(triggerEditSchema, triggerForm);
-    if (!validation.success) {
-      setTriggerErrors(validation.errors);
-      return;
-    }
-    if (!editingTrigger) return;
-
-    setAutoRules((prev) => ({
-      ...prev,
-      [editingTrigger.id]: {
-        ...prev[editingTrigger.id],
-        template: triggerForm.template,
-        timing: triggerForm.timing,
-      },
-    }));
-    toast.success(`Trigger "${editingTrigger.title}" configured!`);
-    setTriggerModalOpen(false);
-  };
-
-  // ── Interactive Live Webhook Health Check ──────────────────────────────────
+  // ── Run Webhook Diagnostic Challenge Check ─────────────────────────────────
   const runWebhookHealthCheck = async () => {
     setWebhookChecking(true);
     const startTime = performance.now();
@@ -668,64 +253,6 @@ export default function WhatsAppConnectPage() {
     } finally {
       setWebhookChecking(false);
     }
-  };
-
-  // ── Personal Device Pairing Handlers ──────────────────────────────────────
-  const handleGeneratePairingCode = async () => {
-    if (!pairPhone.trim()) {
-      setPairingErrors({ phone: "Please enter your WhatsApp phone number" });
-      toast.error("Please enter a valid phone number with country code.");
-      return;
-    }
-    setGeneratingPairCode(true);
-    setPairingErrors({});
-    try {
-      const res = await waBridgeApi.requestPairingCode(pairPhone.trim());
-      if (res?.success && res?.code) {
-        setPairingCode(res.code);
-        setCodeCountdown(120);
-        toast.success(`8-digit pairing code: ${res.code}. Enter this on your phone.`);
-      } else {
-        toast.error(res?.message || "Failed to generate pairing code. Please retry.");
-      }
-    } catch (e) {
-      toast.error(e?.message || "Error generating pairing code");
-    } finally {
-      setGeneratingPairCode(false);
-    }
-  };
-
-  const handleDisconnectBridge = async () => {
-    setDisconnectingBridge(true);
-    try {
-      const res = await waBridgeApi.logout();
-      if (res?.success) {
-        toast.success("Personal WhatsApp disconnected successfully");
-        setBridgeStatus({ connected: false, state: "close", phone: null, pushname: null });
-        setPairingCode("");
-        setBridgeQr(null);
-      } else {
-        toast.error(res?.message || "Failed to disconnect");
-      }
-    } catch (e) {
-      toast.error(e?.message || "Error disconnecting");
-    } finally {
-      setDisconnectingBridge(false);
-    }
-  };
-
-  const handleConfirmPersonalLink = async () => {
-    setQrModalOpen(false);
-  };
-
-  const handleDisconnectPersonalDevice = (id) => {
-    removeAccount(id);
-    toast.success("Sales Rep SIM unlinked from workspace.");
-  };
-
-  const copyToClipboard = (text, itemLabel) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${itemLabel} copied to clipboard!`);
   };
 
   return (
@@ -777,15 +304,14 @@ export default function WhatsAppConnectPage() {
           <Button
             size="sm"
             variant="outline"
-            className="h-8 text-xs gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 font-medium"
+            className="h-8 text-xs gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 font-medium rounded-xl"
             onClick={() => {
               if (!metaAccount) {
                 toast.error("No WhatsApp channel connected. Please connect your Meta WABA account first.");
-                setShowCredentialsModal(true);
+                setCredentialsModalOpen(true);
                 return;
               }
-              setTestErrors({});
-              setTestModalOpen(true);
+              setTestPingModalOpen(true);
             }}
           >
             <Send className="h-3.5 w-3.5" />
@@ -794,7 +320,7 @@ export default function WhatsAppConnectPage() {
 
           <Button
             size="sm"
-            className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-medium"
+            className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-medium rounded-xl"
             onClick={handleSyncTemplates}
             disabled={templateSyncing}
           >
@@ -808,7 +334,12 @@ export default function WhatsAppConnectPage() {
       <div className="shrink-0 px-6 pt-2 pb-0 border-b border-border bg-card/60">
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
           {[
-            { id: "connect", label: "Channels & Health", icon: Globe, badge: `${accounts.filter((a) => a.type === "meta").length} Active` },
+            {
+              id: "connect",
+              label: "Channels & Health",
+              icon: Globe,
+              badge: `${accounts.filter((a) => a.type === "meta").length || (metaAccount ? 1 : 0)} Active`,
+            },
             { id: "settings", label: "Lead Capture", icon: Users, badge: "9 Rules" },
             { id: "automation", label: "Automation Triggers", icon: Zap, badge: "5 Workflows" },
             { id: "setup", label: "Setup Guide & Webhooks", icon: HelpCircle, badge: "Diagnostic" },
@@ -826,7 +357,12 @@ export default function WhatsAppConnectPage() {
                     : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
                 )}
               >
-                <Icon className={cn("h-3.5 w-3.5", isActive ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")} />
+                <Icon
+                  className={cn(
+                    "h-3.5 w-3.5",
+                    isActive ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
+                  )}
+                />
                 {tab.label}
                 <span
                   className={cn(
@@ -844,1759 +380,97 @@ export default function WhatsAppConnectPage() {
         </div>
       </div>
 
-      {/* ── Content View (Scroll Container with ref to prevent scroll jump) ── */}
+      {/* ── Main Scroll View ── */}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-6 py-6 pb-24">
-
-        {/* ════════════════════ TAB 1: CHANNELS & HEALTH ════════════════════ */}
         {activeTab === "connect" && (
-          <div className="max-w-6xl mx-auto space-y-6">
-
-            {/* Enterprise Bento Card: Primary Connected Meta WABA Channel or Empty State */}
-            {!metaAccount ? (
-              <div className="rounded-2xl border border-dashed border-border bg-card/60 p-8 text-center shadow-xs flex flex-col items-center justify-center relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
-                <div className="h-14 w-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-xs mb-3.5">
-                  <Globe className="h-7 w-7" />
-                </div>
-                <h2 className="text-base font-bold text-foreground mb-1">
-                  No WhatsApp Business Account Connected
-                </h2>
-                <p className="text-xs text-muted-foreground max-w-lg mb-6 leading-relaxed">
-                  Connect your official Meta Cloud API credentials (WABA ID, Phone Number ID, and Permanent System User Token) to enable automated customer messaging, CRM broadcasts, and instant inbound lead capture.
-                </p>
-                <div className="flex flex-wrap items-center justify-center gap-3">
-                  <Button
-                    size="sm"
-                    className="h-9 px-4 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-xs"
-                    onClick={() => {
-                      setCredentialsErrors({});
-                      setShowCredentialsModal(true);
-                    }}
-                  >
-                    <Plus className="h-4 w-4" />
-                    Connect Meta WABA
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-9 px-4 text-xs font-semibold border-border gap-2 hover:bg-muted/50"
-                    onClick={() => setActiveTab("setup")}
-                  >
-                    <BookOpen className="h-4 w-4 text-muted-foreground" />
-                    Setup Guide & API Docs
-                  </Button>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8 pt-6 border-t border-border w-full max-w-2xl text-left">
-                  <div className="flex items-start gap-2.5">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-xs font-semibold text-foreground">Official Cloud API v19.0</p>
-                      <p className="text-[11px] text-muted-foreground">High-throughput broadcast delivery direct from Meta servers</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2.5">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-xs font-semibold text-foreground">Inbound Lead Capture</p>
-                      <p className="text-[11px] text-muted-foreground">Instant webhook routing with automated contact segmentation</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2.5">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-xs font-semibold text-foreground">Shared Team Inbox</p>
-                      <p className="text-[11px] text-muted-foreground">Multi-agent live chat with verified Meta template support</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-border bg-card p-5 shadow-xs relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
-
-                {/* Account Top Details Bar */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
-                  <div className="flex items-center gap-3.5">
-                    <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0 text-emerald-600 dark:text-emerald-400 shadow-xs">
-                      <Globe className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h2 className="text-sm font-bold text-foreground">
-                          {metaAccount.label || metaAccount.verifiedName || "WhatsApp Business Account"}
-                        </h2>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                          <CheckCircle2 className="h-3 w-3" /> Meta Verified Official WABA
-                        </span>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          Live & Connected
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
-                        <span className="font-semibold text-foreground font-mono">
-                          {metaAccount.displayPhoneNumber || metaAccount.number || "Phone Number"}
-                        </span>
-                        <span>·</span>
-                        <span>Official Cloud API Primary Channel</span>
-                        {metaAccount.connectedAt && (
-                          <>
-                            <span>·</span>
-                            <span>Connected on {metaAccount.connectedAt}</span>
-                          </>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 text-xs gap-1.5 font-medium border-border hover:bg-muted/50"
-                      onClick={() => setShowCredentialsModal(true)}
-                    >
-                      <Settings className="h-3.5 w-3.5 text-muted-foreground" />
-                      Reconfigure WABA
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 text-xs gap-1.5 font-medium border-blue-500/30 text-blue-700 dark:text-blue-400 hover:bg-blue-500/10"
-                      onClick={() => {
-                        setActiveTab("setup");
-                        setTimeout(runWebhookHealthCheck, 150);
-                      }}
-                    >
-                      <Terminal className="h-3.5 w-3.5" />
-                      Test Webhook
-                    </Button>
-                  </div>
-                </div>
-
-                {/* 4 Health Metrics Bento Grid (Equal Height & Micro Stats) */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 py-4.5 border-b border-border">
-                  <div className="p-3.5 rounded-xl bg-muted/40 border border-border/80 flex flex-col justify-between">
-                    <p className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                      <Activity className="h-3.5 w-3.5 text-emerald-500" />
-                      Quality Rating
-                    </p>
-                    <div className="my-1.5">
-                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
-                        {metaAccount.qualityRating ? `${metaAccount.qualityRating} Status` : "GREEN (Tier 1)"}
-                      </p>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">Official Rating from Meta</p>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-muted/40 border border-border/80 flex flex-col justify-between">
-                    <p className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                      <Zap className="h-3.5 w-3.5 text-blue-500" />
-                      Messaging Limit
-                    </p>
-                    <div className="my-1.5">
-                      <p className="text-sm font-bold text-foreground">
-                        {metaAccount.messagingLimit || "1,000 / 24 Hours"}
-                      </p>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">Automatic tier upgrade on volume</p>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-muted/40 border border-border/80 flex flex-col justify-between">
-                    <p className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                      <FileText className="h-3.5 w-3.5 text-violet-500" />
-                      Templates Synced
-                    </p>
-                    <div className="my-1.5 flex items-center gap-1.5">
-                      <p className="text-sm font-bold text-foreground">
-                        {liveApprovedTemplates.length > 0 ? `${liveApprovedTemplates.length} Approved` : "0 Synced"}
-                      </p>
-                      <Link
-                        href="/whatsapp/templates"
-                        className="text-[10px] text-primary hover:underline font-semibold flex items-center ml-1"
-                      >
-                        View <ChevronRight className="h-2.5 w-2.5" />
-                      </Link>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">Ready for broadcast campaigns & triggers</p>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-muted/40 border border-border/80 flex flex-col justify-between">
-                    <p className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-                      Webhook Health
-                    </p>
-                    <div className="my-1.5">
-                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-                        <Check className="h-3.5 w-3.5" /> {metaAccount.webhookSubscribed ? "Active & Verified" : "Ready to Link"}
-                      </p>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">HTTP 200 · Real-time Inbound Ready</p>
-                  </div>
-                </div>
-
-                {/* Technical Credentials Strip */}
-                <div className="pt-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-                  <div className="flex flex-wrap items-center gap-4">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-muted-foreground text-[11px] font-medium">Phone ID:</span>
-                      <code className="bg-muted px-2 py-0.5 rounded font-mono text-[11px] text-foreground font-semibold">
-                        {metaAccount.phoneNumberId || metaAccount.phoneId || "—"}
-                      </code>
-                      {(metaAccount.phoneNumberId || metaAccount.phoneId) && (
-                        <button
-                          onClick={() => copyToClipboard(metaAccount.phoneNumberId || metaAccount.phoneId, "Phone ID")}
-                          className="text-muted-foreground hover:text-foreground p-0.5 transition-colors"
-                          title="Copy Phone ID"
-                        >
-                          <Copy className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-muted-foreground text-[11px] font-medium">WABA ID:</span>
-                      <code className="bg-muted px-2 py-0.5 rounded font-mono text-[11px] text-foreground font-semibold">
-                        {metaAccount.wabaId || "—"}
-                      </code>
-                      {metaAccount.wabaId && (
-                        <button
-                          onClick={() => copyToClipboard(metaAccount.wabaId, "WABA ID")}
-                          className="text-muted-foreground hover:text-foreground p-0.5 transition-colors"
-                          title="Copy WABA ID"
-                        >
-                          <Copy className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-muted-foreground text-[11px] font-medium">Meta Graph API:</span>
-                      <Badge variant="outline" className="text-[10px] font-mono">v19.0</Badge>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setActiveTab("setup")}
-                      className="h-7 text-xs text-primary gap-1 font-semibold hover:bg-primary/5"
-                    >
-                      Webhook Diagnostics <ArrowRight className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Enterprise Multi-Channel Management Section */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Configured Messaging Channels
-                  </h3>
-                  <p className="text-[11px] text-muted-foreground">
-                    High-throughput broadcast channels and individual sales reps' physical SIM link sessions
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Channel 1: Primary Meta Cloud API Channel Card */}
-                <div className={cn(
-                  "rounded-2xl border p-5 space-y-3.5 flex flex-col justify-between shadow-xs",
-                  metaAccount ? "border-emerald-500/30 bg-card" : "border-border bg-card/60"
-                )}>
-                  <div>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={cn(
-                          "h-9 w-9 rounded-xl flex items-center justify-center shrink-0",
-                          metaAccount ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground"
-                        )}>
-                          <Globe className="h-4.5 w-4.5" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <p className="text-xs font-bold text-foreground">Meta Cloud API (Primary)</p>
-                            {metaAccount && (
-                              <Badge className="bg-emerald-600 text-white text-[9.5px] py-0 px-1.5">Default</Badge>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-muted-foreground font-mono">
-                            {metaAccount ? (metaAccount.displayPhoneNumber || metaAccount.number || "Configured") : "No phone number connected"}
-                          </p>
-                        </div>
-                      </div>
-                      {metaAccount ? (
-                        <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5">
-                          {metaAccount.qualityRating ? `${metaAccount.qualityRating} Active` : "Active"}
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/5">
-                          Not Configured
-                        </Badge>
-                      )}
-                    </div>
-
-                    <div className="space-y-2 text-[11px] text-muted-foreground pt-3 border-t border-border mt-3">
-                      <div className="flex items-center gap-2">
-                        <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                        <span>High-throughput broadcasts to CRM contact segments</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                        <span>Official Meta-approved templates with dynamic variables</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                        <span>Click-to-WhatsApp Meta Ads direct attribution</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                        <span>Automated lead ingestion and AI qualification</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-3 border-t border-border flex items-center justify-between text-xs">
-                    {metaAccount ? (
-                      <>
-                        <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> WABA Primary Router
-                        </span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs font-medium"
-                          onClick={() => setShowCredentialsModal(true)}
-                        >
-                          Edit Credentials
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60" /> Requires Meta Credentials
-                        </span>
-                        <Button
-                          size="sm"
-                          className="h-7 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white"
-                          onClick={() => {
-                            setCredentialsErrors({});
-                            setShowCredentialsModal(true);
-                          }}
-                        >
-                          Connect Now
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Channel 2: Rep Personal WhatsApp (Active Baileys Multi-Device or Unlinked) */}
-                {bridgeStatus.connected ? (
-                  <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5 space-y-3.5 flex flex-col justify-between shadow-xs">
-                    <div>
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                            <Smartphone className="h-4.5 w-4.5" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-xs font-bold text-foreground">
-                                {bridgeStatus.pushname || "Personal WhatsApp Business"}
-                              </p>
-                              <Badge className="bg-emerald-600 text-white text-[9.5px] py-0 px-1.5">Linked Device</Badge>
-                            </div>
-                            <p className="text-[11px] text-foreground font-mono font-bold mt-0.5">
-                              +{bridgeStatus.phone}
-                            </p>
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          Live Connected (Baileys)
-                        </Badge>
-                      </div>
-
-                      <div className="space-y-2 text-[11px] text-muted-foreground pt-3 border-t border-border mt-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Connected Device Pushname:</span>
-                          <span className="font-semibold text-foreground">{bridgeStatus.pushname || "Sales Rep Phone"}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Channel Type:</span>
-                          <span className="font-semibold text-foreground">1-on-1 Multi-Device Socket</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Live Webhook Forwarder:</span>
-                          <span className="font-semibold text-emerald-600 dark:text-emerald-400 font-mono">Active (127.0.0.1:5050 &rarr; CRM)</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-3 border-t border-border flex items-center justify-between text-xs">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-xs text-destructive hover:bg-destructive/10 gap-1 font-medium"
-                        onClick={handleDisconnectBridge}
-                        disabled={disconnectingBridge}
-                      >
-                        {disconnectingBridge ? <Loader2 className="h-3 w-3 animate-spin" /> : <Unlink className="h-3 w-3" />}
-                        Disconnect / Unlink
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs gap-1.5 font-medium border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
-                        onClick={() => {
-                          setPairingMethod("qr_scan");
-                          setQrModalOpen(true);
-                        }}
-                      >
-                        <RefreshCw className="h-3 w-3" /> Connection Info
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-border bg-card p-5 space-y-3.5 flex flex-col justify-between shadow-xs">
-                    <div>
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-xl bg-muted text-foreground flex items-center justify-center shrink-0">
-                            <Smartphone className="h-4.5 w-4.5" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-xs font-bold text-foreground">Personal WhatsApp Business</p>
-                              <Badge variant="outline" className="text-[9.5px] py-0 px-1.5">Phone Link</Badge>
-                            </div>
-                            <p className="text-[11px] text-muted-foreground">Direct 1-on-1 team rep device linking</p>
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="text-[10px] border-border text-muted-foreground">Not Connected</Badge>
-                      </div>
-
-                      <div className="space-y-2 text-[11px] text-muted-foreground pt-3 border-t border-border mt-3">
-                        <div className="flex items-center gap-2">
-                          <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                          <span>Link via WhatsApp Web QR code or 8-digit pairing code</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                          <span>No Meta template approvals required for 1-on-1 chats</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                          <span>Inbound customer replies auto-sync to CRM Live Chat</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-3 border-t border-border flex items-center justify-between text-xs">
-                      <span className="text-[11px] text-muted-foreground">Baileys Web Bridge</span>
-                      <Button
-                        size="sm"
-                        className="h-7 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
-                        onClick={() => {
-                          setPairPhone("");
-                          setPairingMethod("qr_scan");
-                          setQrModalOpen(true);
-                        }}
-                      >
-                        <QrCode className="h-3.5 w-3.5" /> Connect Personal WhatsApp
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Multiple Personal WhatsApp / Team Rep Numbers Section */}
-              <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-border">
-                  <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-                      <Users className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-xs font-bold text-foreground">Team Rep Personal WhatsApp Accounts</h3>
-                      <p className="text-[11px] text-muted-foreground">Manage multiple sales reps&apos; WhatsApp numbers for dual-channel chat &amp; timeline sync</p>
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                    onClick={() => setRepModalOpen(true)}
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Add Rep WhatsApp
-                  </Button>
-                </div>
-
-                {personalAccounts.length === 0 && !bridgeStatus.connected ? (
-                  <p className="text-xs text-muted-foreground py-2 text-center">No personal WhatsApp accounts added yet. Click &quot;Add Rep WhatsApp&quot; or connect via QR code above.</p>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {/* Baileys connected socket if any */}
-                    {bridgeStatus.connected && (
-                      <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 flex items-start justify-between">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                            <span className="text-xs font-bold text-foreground">{bridgeStatus.pushname || "Primary Rep Phone"}</span>
-                            <Badge className="bg-emerald-600 text-white text-[9px] py-0 px-1">Socket</Badge>
-                          </div>
-                          <p className="text-xs text-emerald-700 dark:text-emerald-400 font-mono">+{bridgeStatus.phone}</p>
-                          <p className="text-[10px] text-muted-foreground">Baileys Live Connected</p>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                          onClick={handleDisconnectBridge}
-                          title="Disconnect socket"
-                        >
-                          <Unlink className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    )}
-                    {/* Registered personal accounts */}
-                    {personalAccounts.map((acc) => (
-                      <div key={acc.id} className="p-3 rounded-xl border border-border bg-muted/20 flex items-start justify-between">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                            <span className="text-xs font-bold text-foreground">{acc.label || acc.agentName}</span>
-                            <Badge variant="outline" className="text-[9px] py-0 px-1">Rep SIM</Badge>
-                          </div>
-                          <p className="text-xs text-foreground font-mono">{acc.number || "No number set"}</p>
-                          <p className="text-[10px] text-muted-foreground">Assigned: {acc.agentName || "General"}</p>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                          onClick={() => removeAccount(acc.id)}
-                          title="Remove account"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          <ChannelsHealthTab
+            metaAccount={metaAccount}
+            personalAccounts={personalAccounts}
+            bridgeStatus={bridgeStatus}
+            liveApprovedTemplates={liveApprovedTemplates}
+            onOpenCredentialsModal={() => setCredentialsModalOpen(true)}
+            onOpenLinkPersonalModal={() => setLinkPersonalModalOpen(true)}
+            onOpenAddRepModal={() => setAddRepModalOpen(true)}
+            onDisconnectBridge={handleDisconnectBridge}
+            onRemovePersonalAccount={(id) => {
+              removeAccount(id);
+              toast.success("Sales Rep account unlinked from workspace.");
+            }}
+            onSwitchTab={(t) => setActiveTab(t)}
+            onRunWebhookCheck={runWebhookHealthCheck}
+            onRefreshAccounts={refreshAccounts}
+          />
         )}
 
-        {/* ════════════════════ TAB 2: LEAD CAPTURE ════════════════════ */}
         {activeTab === "settings" && (
-          <div className="max-w-6xl mx-auto space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
-              <div>
-                <h2 className="text-sm font-bold text-foreground">Inbound Lead Capture & Routing Rules</h2>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Configure automated lead creation, tagging, AI intent parsing, and assignment for incoming WhatsApp messages
-                </p>
-              </div>
-              <Button
-                size="sm"
-                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-xs font-medium"
-                onClick={handleSaveLeadRules}
-              >
-                <Check className="h-3.5 w-3.5" /> Save Lead Settings
-              </Button>
-            </div>
-
-            {/* 3 Balanced Equal-Height Bento Cards (Consistent Structure) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {/* Card 1: Lead Generation & Profiling */}
-              <div className="rounded-2xl border border-border bg-card p-5 flex flex-col justify-between shadow-xs min-h-[460px]">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2.5 pb-3 border-b border-border">
-                    <div className="h-8 w-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                      <Users className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-xs font-bold text-foreground">Lead Generation & Profiling</h3>
-                      <p className="text-[10px] text-muted-foreground">Inbound contact capture</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="p-3 rounded-xl bg-muted/30 border border-border/70 hover:bg-muted/50 transition-colors flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <p className="text-xs font-semibold text-foreground leading-snug">
-                          Auto-create lead from new number
-                        </p>
-                        <p className="text-[10.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                          Instantly create a new CRM lead profile when an unknown number messages
-                        </p>
-                      </div>
-                      <Switch
-                        checked={leadRules.autoCreateLead}
-                        onCheckedChange={(c) => setLeadRules((p) => ({ ...p, autoCreateLead: c }))}
-                        className="data-[state=checked]:bg-emerald-600 shrink-0"
-                      />
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-muted/30 border border-border/70 hover:bg-muted/50 transition-colors flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <p className="text-xs font-semibold text-foreground leading-snug">
-                          Extract name from WhatsApp profile
-                        </p>
-                        <p className="text-[10.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                          Automatically sync contact's WhatsApp display name as the lead name
-                        </p>
-                      </div>
-                      <Switch
-                        checked={leadRules.extractName}
-                        onCheckedChange={(c) => setLeadRules((p) => ({ ...p, extractName: c }))}
-                        className="data-[state=checked]:bg-emerald-600 shrink-0"
-                      />
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-muted/30 border border-border/70 hover:bg-muted/50 transition-colors flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <p className="text-xs font-semibold text-foreground leading-snug">
-                          Tag source as WhatsApp Inbound
-                        </p>
-                        <p className="text-[10.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                          Tag all incoming chats with custom lead source for attribution
-                        </p>
-                      </div>
-                      <Switch
-                        checked={leadRules.tagSource}
-                        onCheckedChange={(c) => setLeadRules((p) => ({ ...p, tagSource: c }))}
-                        className="data-[state=checked]:bg-emerald-600 shrink-0"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-border mt-3">
-                  <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    Source Tag Value
-                  </Label>
-                  <Input
-                    value={leadRules.sourceTag}
-                    onChange={(e) => setLeadRules((p) => ({ ...p, sourceTag: e.target.value }))}
-                    placeholder="WhatsApp Inbound"
-                    disabled={!leadRules.tagSource}
-                    className="h-8 text-xs mt-1.5"
-                  />
-                  {leadCaptureErrors.sourceTag && (
-                    <p className="text-[10px] text-destructive mt-1 font-medium">{leadCaptureErrors.sourceTag}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Card 2: Smart AI Data Extraction */}
-              <div className="rounded-2xl border border-border bg-card p-5 flex flex-col justify-between shadow-xs min-h-[460px]">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2.5 pb-3 border-b border-border">
-                    <div className="h-8 w-8 rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0">
-                      <Sparkles className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-xs font-bold text-foreground">Smart AI Data Extraction</h3>
-                      <p className="text-[10px] text-muted-foreground">Automated intent intelligence</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="p-3 rounded-xl bg-muted/30 border border-border/70 hover:bg-muted/50 transition-colors flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <p className="text-xs font-semibold text-foreground leading-snug">
-                          AI Budget & Requirement Parsing
-                        </p>
-                        <p className="text-[10.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                          Scan inbound messages with AI to extract budget and requirements
-                        </p>
-                      </div>
-                      <Switch
-                        checked={leadRules.aiBudgetParsing}
-                        onCheckedChange={(c) => setLeadRules((p) => ({ ...p, aiBudgetParsing: c }))}
-                        className="data-[state=checked]:bg-emerald-600 shrink-0"
-                      />
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-muted/30 border border-border/70 hover:bg-muted/50 transition-colors flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <p className="text-xs font-semibold text-foreground leading-snug">
-                          High-Intent Keyword Detection
-                        </p>
-                        <p className="text-[10.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                          Flag leads as 'Hot' if intent keywords appear in chats
-                        </p>
-                      </div>
-                      <Switch
-                        checked={leadRules.highIntentDetection}
-                        onCheckedChange={(c) => setLeadRules((p) => ({ ...p, highIntentDetection: c }))}
-                        className="data-[state=checked]:bg-emerald-600 shrink-0"
-                      />
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-muted/30 border border-border/70 hover:bg-muted/50 transition-colors flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <p className="text-xs font-semibold text-foreground leading-snug">
-                          Filter Spam & Promotional Bots
-                        </p>
-                        <p className="text-[10.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                          Automatically suppress bot pings and marketing forwards
-                        </p>
-                      </div>
-                      <Switch
-                        checked={leadRules.filterSpam}
-                        onCheckedChange={(c) => setLeadRules((p) => ({ ...p, filterSpam: c }))}
-                        className="data-[state=checked]:bg-emerald-600 shrink-0"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-border mt-3">
-                  <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    Monitored Hot Keywords
-                  </Label>
-                  <Input
-                    value={leadRules.highIntentKeywords}
-                    onChange={(e) => setLeadRules((p) => ({ ...p, highIntentKeywords: e.target.value }))}
-                    placeholder="pricing, quote, demo, discount"
-                    disabled={!leadRules.highIntentDetection}
-                    className="h-8 text-xs mt-1.5"
-                  />
-                  {leadCaptureErrors.highIntentKeywords && (
-                    <p className="text-[10px] text-destructive mt-1 font-medium">{leadCaptureErrors.highIntentKeywords}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Card 3: Routing & SLA Escalation */}
-              <div className="rounded-2xl border border-border bg-card p-5 flex flex-col justify-between shadow-xs min-h-[460px]">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2.5 pb-3 border-b border-border">
-                    <div className="h-8 w-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                      <Bell className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-xs font-bold text-foreground">Routing & SLA Alerts</h3>
-                      <p className="text-[10px] text-muted-foreground">Team dispatch configuration</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="p-3 rounded-xl bg-muted/30 border border-border/70 hover:bg-muted/50 transition-colors flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <p className="text-xs font-semibold text-foreground leading-snug">
-                          Notify assigned sales rep
-                        </p>
-                        <p className="text-[10.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                          Trigger instant in-app alerts whenever a lead replies on WhatsApp
-                        </p>
-                      </div>
-                      <Switch
-                        checked={leadRules.notifyRep}
-                        onCheckedChange={(c) => setLeadRules((p) => ({ ...p, notifyRep: c }))}
-                        className="data-[state=checked]:bg-emerald-600 shrink-0"
-                      />
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-muted/30 border border-border/70 hover:bg-muted/50 transition-colors flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <p className="text-xs font-semibold text-foreground leading-snug">
-                          Auto-assign to round-robin pool
-                        </p>
-                        <p className="text-[10.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                          Distribute newly created WhatsApp leads evenly among reps
-                        </p>
-                      </div>
-                      <Switch
-                        checked={leadRules.autoAssign}
-                        onCheckedChange={(c) => setLeadRules((p) => ({ ...p, autoAssign: c }))}
-                        className="data-[state=checked]:bg-emerald-600 shrink-0"
-                      />
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-muted/30 border border-border/70 hover:bg-muted/50 transition-colors flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <p className="text-xs font-semibold text-foreground leading-snug">
-                          Response SLA Breach Warning
-                        </p>
-                        <p className="text-[10.5px] text-muted-foreground mt-0.5 leading-relaxed">
-                          Alert manager if an incoming WhatsApp chat remains unanswered
-                        </p>
-                      </div>
-                      <Switch
-                        checked={leadRules.slaWarning}
-                        onCheckedChange={(c) => setLeadRules((p) => ({ ...p, slaWarning: c }))}
-                        className="data-[state=checked]:bg-emerald-600 shrink-0"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-border mt-3 grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                      Pool
-                    </Label>
-                    <Select
-                      value={leadRules.routingPool}
-                      onValueChange={(val) => setLeadRules((p) => ({ ...p, routingPool: val }))}
-                      disabled={!leadRules.autoAssign}
-                    >
-                      <SelectTrigger className="h-8 text-xs mt-1.5">
-                        <SelectValue placeholder="Select Pool" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="inbound">Inbound Closers</SelectItem>
-                        <SelectItem value="all">All CRM Reps</SelectItem>
-                        <SelectItem value="senior">Senior Closers</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                      SLA Threshold
-                    </Label>
-                    <div className="flex items-center gap-1.5 mt-1.5">
-                      <Input
-                        type="number"
-                        min={5}
-                        max={180}
-                        value={leadRules.slaMinutes}
-                        onChange={(e) => setLeadRules((p) => ({ ...p, slaMinutes: Number(e.target.value) }))}
-                        disabled={!leadRules.slaWarning}
-                        className="h-8 text-xs text-center font-mono"
-                      />
-                      <span className="text-xs text-muted-foreground">mins</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <LeadCaptureTab initialRules={leadRules} onSave={handleSaveLeadRules} />
         )}
 
-        {/* ════════════════════ TAB 3: AUTOMATION TRIGGERS ════════════════════ */}
         {activeTab === "automation" && (
-          <div className="max-w-6xl mx-auto space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
-              <div>
-                <h2 className="text-sm font-bold text-foreground">Automated Trigger Rules</h2>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Pre-configured WhatsApp auto-replies linked with Meta-approved templates and CRM events
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Link href="/whatsapp/automation">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 text-xs gap-1.5 text-primary border-primary/30 hover:bg-primary/5 font-medium"
-                  >
-                    Open Workflow Canvas <ArrowUpRight className="h-3 w-3" />
-                  </Button>
-                </Link>
-                <Button
-                  size="sm"
-                  className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-xs font-medium"
-                  onClick={handleSaveAutoRules}
-                >
-                  <Check className="h-3.5 w-3.5" /> Save Rules
-                </Button>
-              </div>
-            </div>
-
-            {/* Category Filter Pills */}
-            <div className="flex items-center gap-1.5">
-              {[
-                { id: "all", label: "All Triggers (5)" },
-                { id: "onboarding", label: "Onboarding (2)" },
-                { id: "engagement", label: "Engagement (2)" },
-                { id: "ai", label: "AI Autopilot (1)" },
-              ].map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => setAutoCategory(cat.id)}
-                  className={cn(
-                    "text-xs px-3 py-1 rounded-full font-medium transition-colors",
-                    autoCategory === cat.id
-                      ? "bg-foreground text-background font-semibold"
-                      : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  {cat.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Clean Grid of All 5 Triggers (Responsive, compact, no cutoffs) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {AUTOMATION_TRIGGERS.filter(
-                (t) => autoCategory === "all" || t.category === autoCategory
-              ).map((t) => {
-                const ruleState = autoRules[t.id] || { enabled: t.default, template: t.template, timing: t.timing };
-                return (
-                  <div
-                    key={t.id}
-                    className="rounded-2xl border border-border bg-card p-4 space-y-3 flex flex-col justify-between shadow-xs hover:border-border/80 transition-all"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-2 mb-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className="h-6 w-6 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                            <Zap className="h-3.5 w-3.5" />
-                          </span>
-                          <h3 className="text-xs font-bold text-foreground leading-snug">{t.title}</h3>
-                        </div>
-                        <Badge variant="outline" className="text-[9px] bg-muted/60 shrink-0 font-medium">
-                          {t.trigger}
-                        </Badge>
-                      </div>
-
-                      <p className="text-[11px] text-muted-foreground leading-relaxed mb-2.5">
-                        {t.desc}
-                      </p>
-
-                      {/* Template Preview Snippet */}
-                      <div className="p-2.5 rounded-xl bg-muted/40 border border-border/80 space-y-1">
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className="font-semibold text-muted-foreground uppercase tracking-wider">
-                            Template:
-                          </span>
-                          <code className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono font-bold">
-                            {ruleState.template || t.template}
-                          </code>
-                        </div>
-                        <p className="text-[10.5px] text-foreground/80 italic leading-snug line-clamp-2">
-                          "{t.snippet}"
-                        </p>
-                        <div className="flex items-center justify-between pt-1 border-t border-border/60 text-[10px] text-muted-foreground">
-                          <span>Delay:</span>
-                          <span className="font-semibold text-foreground">{ruleState.timing || t.timing}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-border flex items-center justify-between">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
-                        onClick={() => openTriggerConfig(t)}
-                      >
-                        <SlidersHorizontal className="h-3 w-3" /> Configure
-                      </Button>
-
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10.5px] font-bold text-foreground">
-                          {ruleState.enabled ? "Active" : "Disabled"}
-                        </span>
-                        <Switch
-                          checked={ruleState.enabled}
-                          onCheckedChange={(checked) =>
-                            setAutoRules((prev) => ({
-                              ...prev,
-                              [t.id]: { ...prev[t.id], enabled: checked },
-                            }))
-                          }
-                          className="data-[state=checked]:bg-emerald-600"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <AutomationTriggersTab
+            autoRules={autoRules}
+            setAutoRules={setAutoRules}
+            onOpenTriggerConfig={handleOpenTriggerConfig}
+            onSaveRules={handleSaveAutoRules}
+          />
         )}
 
-        {/* ════════════════════ TAB 4: SETUP GUIDE & WEBHOOKS ════════════════════ */}
         {activeTab === "setup" && (
-          <div className="max-w-6xl mx-auto space-y-6">
-
-            {/* Interactive Live Webhook Diagnostic Hero */}
-            <div className="rounded-2xl border border-border bg-card p-6 space-y-5 shadow-xs relative overflow-hidden">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
-                <div className="flex items-start gap-3.5">
-                  <div className="h-11 w-11 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20 shadow-xs">
-                    <ShieldCheck className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-sm font-bold text-foreground">
-                        Live Webhook Endpoint & Health Check
-                      </h2>
-                      <Badge variant="outline" className="text-[10px] font-mono text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20">
-                        HTTP 200 Ready
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Meta Cloud API sends incoming user messages, delivery receipts, and template approval updates to this endpoint.
-                    </p>
-                  </div>
-                </div>
-
-                <Button
-                  size="sm"
-                  className="h-9 px-4 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shrink-0 shadow-xs font-semibold rounded-xl"
-                  onClick={runWebhookHealthCheck}
-                  disabled={webhookChecking}
-                >
-                  <Activity className={cn("h-3.5 w-3.5", webhookChecking && "animate-spin")} />
-                  {webhookChecking ? "Verifying Webhook..." : "Run Webhook Health Check"}
-                </Button>
-              </div>
-
-              {/* Dynamic Health Ping Result Card */}
-              {webhookResult && (
-                <div
-                  className={cn(
-                    "p-4 rounded-xl border text-xs space-y-2 animate-in fade-in duration-200",
-                    webhookResult.status === "success"
-                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-950 dark:text-emerald-200"
-                      : "bg-amber-500/10 border-amber-500/30 text-amber-950 dark:text-amber-200"
-                  )}
-                >
-                  <div className="flex items-center justify-between font-bold flex-wrap gap-2">
-                    <span className="flex items-center gap-2 text-xs">
-                      <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                      Status: HTTP {webhookResult.statusCode} OK — Webhook Verified Successfully
-                    </span>
-                    <Badge variant="outline" className="text-[10px] font-mono bg-background/80">
-                      Latency: {webhookResult.latency}
-                    </Badge>
-                  </div>
-                  <p className="text-xs opacity-90 pl-6">{webhookResult.message}</p>
-                  <p className="text-[10px] opacity-75 pl-6 font-mono">Last verified at {webhookResult.timestamp}</p>
-                </div>
-              )}
-
-              {/* Webhook Credentials Copy Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                      <Link2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                      Callback URL (Meta Configuration)
-                    </p>
-                    <span className="text-[10px] text-muted-foreground">Endpoint</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 bg-background p-2.5 rounded-lg border border-border">
-                    <code className="text-xs font-mono text-foreground font-semibold truncate select-all">
-                      {WEBHOOK_CALLBACK_URL}
-                    </code>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2.5 text-xs text-primary font-medium hover:bg-primary/10 shrink-0 gap-1"
-                      onClick={() => copyToClipboard(WEBHOOK_CALLBACK_URL, "Callback URL")}
-                    >
-                      <Copy className="h-3 w-3" /> Copy
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-muted/30 border border-border space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                      <KeyRound className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                      Verify Token (Meta Handshake Security)
-                    </p>
-                    <span className="text-[10px] text-muted-foreground">Secret Token</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 bg-background p-2.5 rounded-lg border border-border">
-                    <code className="text-xs font-mono text-foreground font-bold select-all truncate">
-                      {WEBHOOK_VERIFY_TOKEN}
-                    </code>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2.5 text-xs text-primary font-medium hover:bg-primary/10 shrink-0 gap-1"
-                      onClick={() => copyToClipboard(WEBHOOK_VERIFY_TOKEN, "Verify Token")}
-                    >
-                      <Copy className="h-3 w-3" /> Copy
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Required Meta Webhook Fields Subscriptions */}
-              <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border text-xs text-muted-foreground">
-                <span className="font-semibold text-foreground flex items-center gap-1">
-                  <Check className="h-3.5 w-3.5 text-emerald-600" /> Required Meta Subscriptions:
-                </span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-medium bg-muted text-foreground border border-border">
-                  messages
-                </span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-medium bg-muted text-foreground border border-border">
-                  message_template_status_update
-                </span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-medium bg-muted text-foreground border border-border">
-                  message_echoes
-                </span>
-              </div>
-            </div>
-
-            {/* 4-Step Interactive Onboarding Stepper */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between pb-1">
-                <div>
-                  <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                    <BookOpen className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    Step-by-Step Meta Integration Walkthrough
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Follow these 4 official steps in Meta Developer Console to configure your production WABA connection
-                  </p>
-                </div>
-                <Badge variant="outline" className="text-[11px] font-semibold border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5">
-                  4 Steps Walkthrough
-                </Badge>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {SETUP_STEPS.map((s) => (
-                  <div
-                    key={s.step}
-                    className="p-5 rounded-2xl border border-border bg-card flex flex-col justify-between shadow-xs hover:border-emerald-500/40 hover:shadow-md transition-all duration-200 group relative"
-                  >
-                    <div className="space-y-2.5">
-                      <div className="flex items-center gap-3">
-                        <span className="h-8 w-8 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 text-xs font-bold flex items-center justify-center shrink-0 shadow-xs group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                          {s.step}
-                        </span>
-                        <h4 className="text-xs font-bold text-foreground group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
-                          {s.title}
-                        </h4>
-                      </div>
-                      <p className="text-xs text-muted-foreground leading-relaxed pl-11">
-                        {s.desc}
-                      </p>
-                    </div>
-
-                    {s.href && (
-                      <div className="pt-4 border-t border-border/70 mt-3 flex items-center justify-between pl-11">
-                        <a
-                          href={s.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-semibold text-xs transition-colors"
-                        >
-                          {s.action} <ExternalLink className="h-3 w-3" />
-                        </a>
-                        <span className="text-[10px] text-muted-foreground font-mono">
-                          Step {s.step} of 4
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <SetupGuideTab
+            webhookChecking={webhookChecking}
+            webhookResult={webhookResult}
+            onRunWebhookCheck={runWebhookHealthCheck}
+          />
         )}
       </div>
 
-      {/* ── Send Test Message Modal (Strict Zod Validation) ── */}
-      <Dialog open={testModalOpen} onOpenChange={setTestModalOpen}>
-        <DialogContent className="max-w-md p-0 overflow-hidden">
-          <DialogHeader className="px-5 py-4 border-b border-border bg-muted/20">
-            <DialogTitle className="text-sm font-bold flex items-center gap-2">
-              <div className="h-7 w-7 rounded-lg bg-emerald-500 flex items-center justify-center text-white">
-                <Send className="h-3.5 w-3.5" />
-              </div>
-              Send WhatsApp Test Message
-            </DialogTitle>
-          </DialogHeader>
+      {/* ── Production-Grade Modals (React Hook Form + Zod) ── */}
+      <CredentialsModal
+        open={credentialsModalOpen}
+        onOpenChange={setCredentialsModalOpen}
+        metaAccount={metaAccount}
+        onSave={async (vals) => {
+          await addAccount({
+            type: "meta",
+            label: vals.label,
+            phoneId: vals.phoneId,
+            wabaId: vals.wabaId,
+            token: vals.token,
+          });
+          await refreshAccounts();
+        }}
+      />
 
-          <div className="p-5 space-y-4 text-xs">
-            <p className="text-muted-foreground">
-              Verify real-time delivery via your Meta Cloud API connection
-              {metaAccount ? (
-                <> (<span className="font-semibold text-foreground font-mono">{metaAccount.displayPhoneNumber || metaAccount.number || metaAccount.label}</span>)</>
-              ) : null}.
-            </p>
+      <TestPingModal
+        open={testPingModalOpen}
+        onOpenChange={setTestPingModalOpen}
+        metaAccount={metaAccount}
+      />
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Recipient Phone Number (with Country Code)</Label>
-              <Input
-                value={testPhone}
-                onChange={(e) => {
-                  setTestPhone(e.target.value);
-                  if (testErrors.phone) setTestErrors((p) => ({ ...p, phone: null }));
-                }}
-                placeholder="+919876543210"
-                className={cn("h-9 text-xs font-mono", testErrors.phone && "border-destructive focus-visible:ring-destructive")}
-              />
-              {testErrors.phone ? (
-                <p className="text-[10.5px] text-destructive font-medium">{testErrors.phone}</p>
-              ) : (
-                <p className="text-[10.5px] text-muted-foreground">Include country code with + prefix (e.g. +91 9876543210)</p>
-              )}
-            </div>
+      <LinkPersonalModal
+        open={linkPersonalModalOpen}
+        onOpenChange={setLinkPersonalModalOpen}
+        bridgeStatus={bridgeStatus}
+        onBridgeStatusRefresh={fetchBridgeStatus}
+      />
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Test Message Payload</Label>
-              <Textarea
-                value={testMessage}
-                onChange={(e) => {
-                  setTestMessage(e.target.value);
-                  if (testErrors.message) setTestErrors((p) => ({ ...p, message: null }));
-                }}
-                rows={3}
-                className={cn("text-xs resize-none", testErrors.message && "border-destructive focus-visible:ring-destructive")}
-              />
-              {testErrors.message && (
-                <p className="text-[10.5px] text-destructive font-medium">{testErrors.message}</p>
-              )}
-            </div>
-          </div>
+      <AddRepModal
+        open={addRepModalOpen}
+        onOpenChange={setAddRepModalOpen}
+        onAddAccount={async (acc) => {
+          await addAccount(acc);
+          await refreshAccounts();
+        }}
+      />
 
-          <DialogFooter className="px-5 py-3 border-t border-border bg-card flex justify-between">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setTestModalOpen(false)}
-              className="text-xs font-medium"
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 font-medium shadow-xs"
-              onClick={handleSendTestMessage}
-              disabled={testSending}
-            >
-              {testSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-              Send Test Message
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Reconfigure Meta Credentials Modal (Strict Zod Validation) ── */}
-      <Dialog open={showCredentialsModal} onOpenChange={setShowCredentialsModal}>
-        <DialogContent className="max-w-lg p-0 overflow-hidden">
-          <DialogHeader className="px-5 py-4 border-b border-border bg-muted/20">
-            <DialogTitle className="text-sm font-bold flex items-center gap-2">
-              <Settings className="h-4 w-4 text-emerald-600" />
-              Configure Meta Cloud API Credentials
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="p-5 space-y-4 text-xs">
-            <p className="text-muted-foreground text-[11px]">
-              Update your WhatsApp Business Account (WABA) credentials retrieved from Meta Developer Console.
-            </p>
-
-            <div className="space-y-3.5">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Account Display Label</Label>
-                <Input
-                  value={label}
-                  onChange={(e) => {
-                    setLabel(e.target.value);
-                    if (credentialsErrors.label) setCredentialsErrors((p) => ({ ...p, label: null }));
-                  }}
-                  placeholder="e.g. Official WhatsApp Support"
-                  className={cn("h-8 text-xs", credentialsErrors.label && "border-destructive")}
-                />
-                {credentialsErrors.label && (
-                  <p className="text-[10px] text-destructive font-medium">{credentialsErrors.label}</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">WABA ID (Account ID)</Label>
-                  <Input
-                    value={wabaId}
-                    onChange={(e) => {
-                      setWabaId(e.target.value);
-                      if (credentialsErrors.wabaId) setCredentialsErrors((p) => ({ ...p, wabaId: null }));
-                    }}
-                    placeholder="e.g. 15-16 digit Meta WABA ID"
-                    className={cn("h-8 text-xs font-mono", credentialsErrors.wabaId && "border-destructive")}
-                  />
-                  {credentialsErrors.wabaId && (
-                    <p className="text-[10px] text-destructive font-medium">{credentialsErrors.wabaId}</p>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">Phone Number ID</Label>
-                  <Input
-                    value={phoneId}
-                    onChange={(e) => {
-                      setPhoneId(e.target.value);
-                      if (credentialsErrors.phoneId) setCredentialsErrors((p) => ({ ...p, phoneId: null }));
-                    }}
-                    placeholder="e.g. 15-16 digit Phone Number ID"
-                    className={cn("h-8 text-xs font-mono", credentialsErrors.phoneId && "border-destructive")}
-                  />
-                  {credentialsErrors.phoneId && (
-                    <p className="text-[10px] text-destructive font-medium">{credentialsErrors.phoneId}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs font-medium">Permanent System User Token</Label>
-                  <button
-                    type="button"
-                    onClick={() => setShowToken(!showToken)}
-                    className="text-[10px] text-primary hover:underline flex items-center gap-1 font-semibold"
-                  >
-                    {showToken ? <EyeOff className="h-2.5 w-2.5" /> : <Eye className="h-2.5 w-2.5" />}
-                    {showToken ? "Hide Token" : "Show Token"}
-                  </button>
-                </div>
-                <Input
-                  type={showToken ? "text" : "password"}
-                  value={token}
-                  onChange={(e) => {
-                    setToken(e.target.value);
-                    if (credentialsErrors.token) setCredentialsErrors((p) => ({ ...p, token: null }));
-                  }}
-                  placeholder="EAAM5fbS29hoB..."
-                  className={cn("h-8 text-xs font-mono", credentialsErrors.token && "border-destructive")}
-                />
-                {credentialsErrors.token && (
-                  <p className="text-[10px] text-destructive font-medium">{credentialsErrors.token}</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="px-5 py-3 border-t border-border bg-card flex justify-between">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowCredentialsModal(false)}
-              className="text-xs"
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 font-medium shadow-xs"
-              onClick={handleSaveCredentials}
-              disabled={connecting}
-            >
-              {connecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-              Save & Re-verify
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Personal WhatsApp Real Multi-Device Linking Modal (QR + 8-Digit Pairing Code + Architecture Guide) ── */}
-      <Dialog open={qrModalOpen} onOpenChange={setQrModalOpen}>
-        <DialogContent className="max-w-lg p-0 overflow-hidden">
-          <DialogHeader className="px-5 py-4 border-b border-border bg-muted/20">
-            <DialogTitle className="text-sm font-bold flex items-center gap-2">
-              <Smartphone className="h-4 w-4 text-emerald-600" />
-              Link Personal WhatsApp (Phone Multi-Device)
-            </DialogTitle>
-          </DialogHeader>
-
-          {/* Subtabs for Registration Mode */}
-          <div className="px-5 pt-3 border-b border-border bg-card/60 flex items-center gap-2">
-            {[
-              { id: "qr_scan", label: "Scan QR Code", icon: QrCode },
-              { id: "pairing_code", label: "8-Digit Pairing Code", icon: KeyRound },
-              { id: "api_guide", label: "Architecture Guide", icon: Terminal },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isSelected = pairingMethod === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setPairingMethod(tab.id)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 transition-all",
-                    isSelected
-                      ? "border-emerald-600 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="p-5 space-y-4 text-xs">
-            {pairingMethod === "qr_scan" && (
-              <div className="space-y-4 text-center">
-                <div className="p-3 rounded-xl bg-muted/30 border border-border text-left space-y-1.5">
-                  <p className="font-semibold text-xs text-foreground">How to scan with your phone:</p>
-                  <ol className="list-decimal pl-4 space-y-1 text-[11px] text-muted-foreground">
-                    <li>Open <strong>WhatsApp</strong> on your mobile phone</li>
-                    <li>Tap <strong>Settings</strong> (iPhone) or <strong>Three dots ⋮</strong> (Android)</li>
-                    <li>Tap <strong>Linked Devices</strong> &rarr; <strong>Link a Device</strong></li>
-                    <li>Point your camera at this QR code to log in</li>
-                  </ol>
-                </div>
-
-                <div className="flex flex-col items-center justify-center p-4 bg-muted/20 rounded-xl border border-border min-h-[260px]">
-                  {bridgeQr ? (
-                    <div className="space-y-2">
-                      <div className="p-3 bg-white rounded-xl shadow-xs border inline-block">
-                        <img src={bridgeQr} alt="WhatsApp Web QR Code" className="w-56 h-56 object-contain" />
-                      </div>
-                      <p className="text-[10.5px] text-muted-foreground flex items-center justify-center gap-1">
-                        <RotateCw className="h-3 w-3 animate-spin text-emerald-600" />
-                        Live QR refreshes automatically every few seconds
-                      </p>
-                    </div>
-                  ) : loadingQr ? (
-                    <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
-                      <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
-                      <p className="text-xs">Generating WhatsApp Web QR Code...</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground">
-                      <p className="text-xs">QR code not available or device already linked.</p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={async () => {
-                          setLoadingQr(true);
-                          const res = await waBridgeApi.getQr();
-                          if (res?.data?.qr) setBridgeQr(res.data.qr);
-                          setLoadingQr(false);
-                        }}
-                        className="text-xs gap-1"
-                      >
-                        <RefreshCw className="h-3 w-3" /> Refresh QR
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {pairingMethod === "pairing_code" && (
-              <div className="space-y-4">
-                <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-900 dark:text-blue-300 space-y-1.5">
-                  <p className="font-semibold text-xs flex items-center gap-1.5">
-                    <KeyRound className="h-3.5 w-3.5 text-blue-600" />
-                    Pair without Scanning (8-Digit Code)
-                  </p>
-                  <p className="text-[11px] text-blue-800 dark:text-blue-300 leading-relaxed">
-                    Enter your phone number below, click Generate Code, then open WhatsApp &rarr; Linked Devices &rarr; <strong>Link with phone number instead</strong> and enter the 8-digit code.
-                  </p>
-                </div>
-
-                <div className="space-y-3 p-3.5 rounded-xl bg-muted/20 border border-border">
-                  <div className="space-y-1">
-                    <Label className="text-xs font-semibold flex items-center gap-1">
-                      Your WhatsApp Phone Number <span className="text-destructive">*</span>
-                    </Label>
-                    <div className="flex gap-2">
-                      <Input
-                        value={pairPhone}
-                        onChange={(e) => {
-                          setPairPhone(e.target.value);
-                          if (pairingErrors.phone) setPairingErrors((p) => ({ ...p, phone: null }));
-                        }}
-                        placeholder="+91 96805 52526"
-                        className={cn("h-8 text-xs font-mono flex-1", pairingErrors.phone && "border-destructive")}
-                      />
-                      <Button
-                        size="sm"
-                        onClick={handleGeneratePairingCode}
-                        disabled={generatingPairCode || !pairPhone.trim()}
-                        className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 gap-1.5"
-                      >
-                        {generatingPairCode ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-                        Generate Code
-                      </Button>
-                    </div>
-                    {pairingErrors.phone ? (
-                      <p className="text-[10px] text-destructive font-medium">{pairingErrors.phone}</p>
-                    ) : (
-                      <p className="text-[10px] text-muted-foreground">Format with country code (e.g. +91 96805 52526 or 919680552526)</p>
-                    )}
-                  </div>
-                </div>
-
-                {pairingCode && (
-                  <div className="p-4 rounded-xl bg-card border-2 border-emerald-500/40 text-center space-y-2 shadow-sm">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                      Your 8-Digit Pairing Code
-                    </p>
-                    <div className="flex items-center justify-center gap-3">
-                      <span className="font-mono text-2xl font-bold tracking-widest text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-4 py-2 rounded-lg border border-emerald-500/20">
-                        {pairingCode.length === 8 ? `${pairingCode.slice(0, 4)} - ${pairingCode.slice(4)}` : pairingCode}
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 px-2.5 text-xs gap-1"
-                        onClick={() => copyToClipboard(pairingCode, "Pairing code")}
-                      >
-                        <Copy className="h-3.5 w-3.5" /> Copy
-                      </Button>
-                    </div>
-                    {codeCountdown > 0 && (
-                      <p className="text-[10.5px] text-muted-foreground">
-                        Valid for <strong className="text-foreground">{codeCountdown}s</strong>. Enter this on your phone now.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {pairingMethod === "api_guide" && (
-              <div className="space-y-3.5 text-xs">
-                <div className="p-3 rounded-xl bg-muted/50 border border-border space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-foreground flex items-center gap-1.5">
-                      <Terminal className="h-3.5 w-3.5 text-emerald-600" />
-                      Hybrid WhatsApp Architecture
-                    </span>
-                    <Badge variant="outline" className="text-[10px] font-mono text-emerald-700 bg-emerald-500/10 border-emerald-500/20">
-                      LIVE IN PRODUCTION
-                    </Badge>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    SmoothSales uses a <strong>Hybrid WhatsApp Architecture</strong>. Channel 1 runs via official <strong>Meta Cloud API</strong> for high-volume verified campaigns and templates. Channel 2 runs via <strong>Baileys WhatsApp Web Bridge</strong> on port 5050 for sales reps 1-on-1 chats.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold">Active Server Endpoints:</Label>
-                  <div className="p-2.5 rounded-xl bg-background border border-border font-mono text-[11px] space-y-1">
-                    <div className="flex items-center justify-between text-muted-foreground">
-                      <span className="text-blue-600 font-bold">GET</span>
-                      <span>/api/wa-bridge/status</span>
-                    </div>
-                    <div className="flex items-center justify-between text-muted-foreground border-t border-border/50 pt-1">
-                      <span className="text-blue-600 font-bold">GET</span>
-                      <span>/api/wa-bridge/qr</span>
-                    </div>
-                    <div className="flex items-center justify-between text-muted-foreground border-t border-border/50 pt-1">
-                      <span className="text-emerald-600 font-bold">POST</span>
-                      <span>/api/wa-bridge/pair</span>
-                    </div>
-                    <div className="flex items-center justify-between text-muted-foreground border-t border-border/50 pt-1">
-                      <span className="text-emerald-600 font-bold">POST</span>
-                      <span>/api/wa-bridge/send</span>
-                    </div>
-                    <div className="flex items-center justify-between text-muted-foreground border-t border-border/50 pt-1">
-                      <span className="text-destructive font-bold">POST</span>
-                      <span>/api/wa-bridge/logout</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="px-5 py-3 border-t border-border bg-card flex justify-between items-center">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setQrModalOpen(false)}
-              className="text-xs"
-            >
-              Close
-            </Button>
-            {bridgeStatus.connected ? (
-              <Badge className="bg-emerald-600 text-white text-xs px-2.5 py-1 flex items-center gap-1">
-                <Check className="h-3.5 w-3.5" /> Device Connected
-              </Badge>
-            ) : (
-              <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                <Loader2 className="h-3 w-3 animate-spin text-emerald-600" />
-                Waiting for device pairing...
-              </span>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Trigger Customization Modal (Strict Zod Validation) ── */}
-      <Dialog open={triggerModalOpen} onOpenChange={setTriggerModalOpen}>
-        <DialogContent className="max-w-md p-0 overflow-hidden">
-          <DialogHeader className="px-5 py-4 border-b border-border bg-muted/20">
-            <DialogTitle className="text-sm font-bold flex items-center gap-2">
-              <Zap className="h-4 w-4 text-emerald-600" />
-              Configure Trigger: {editingTrigger?.title}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="p-5 space-y-4 text-xs">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Linked Meta-Approved Template</Label>
-              <Select
-                value={triggerForm.template}
-                onValueChange={(val) => {
-                  setTriggerForm((p) => ({ ...p, template: val }));
-                  if (triggerErrors.template) setTriggerErrors((p) => ({ ...p, template: null }));
-                }}
-              >
-                <SelectTrigger className="h-8 text-xs font-mono">
-                  <SelectValue placeholder="Select Template" />
-                </SelectTrigger>
-                <SelectContent>
-                  {liveApprovedTemplates.length > 0 ? (
-                    liveApprovedTemplates.map((t) => {
-                      const name = t.templateName || t.name;
-                      const display = t.displayName || name;
-                      return (
-                        <SelectItem key={t.id || name} value={name}>
-                          {display} ({t.status || "Approved"})
-                        </SelectItem>
-                      );
-                    })
-                  ) : (
-                    <SelectItem value="" disabled>
-                      No approved templates — click &quot;Sync Templates&quot; first
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              {triggerErrors.template && (
-                <p className="text-[10px] text-destructive font-medium">{triggerErrors.template}</p>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Execution Timing & Delay</Label>
-              <Select
-                value={triggerForm.timing}
-                onValueChange={(val) => {
-                  setTriggerForm((p) => ({ ...p, timing: val }));
-                  if (triggerErrors.timing) setTriggerErrors((p) => ({ ...p, timing: null }));
-                }}
-              >
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Select Timing" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Immediate (0s delay)">Immediate (0s delay)</SelectItem>
-                  <SelectItem value="15 Minutes After Contact">15 Minutes After Contact</SelectItem>
-                  <SelectItem value="2 Hours Before Meeting">2 Hours Before Meeting</SelectItem>
-                  <SelectItem value="24 Hours of Inactivity">24 Hours of Inactivity</SelectItem>
-                  <SelectItem value="Immediate on Quote Generate">Immediate on Quote Generate</SelectItem>
-                  <SelectItem value="Conversational Real-time">Conversational Real-time</SelectItem>
-                </SelectContent>
-              </Select>
-              {triggerErrors.timing && (
-                <p className="text-[10px] text-destructive font-medium">{triggerErrors.timing}</p>
-              )}
-            </div>
-
-            <div className="p-3 rounded-xl bg-muted/40 border border-border text-[11px] space-y-1">
-              <p className="font-semibold text-foreground">Variable Placeholders:</p>
-              <p className="text-muted-foreground font-mono text-[10.5px]">
-                {"{{1}}"} = Contact Name · {"{{2}}"} = Date/Time · {"{{3}}"} = Rep Name / Quote Value
-              </p>
-            </div>
-          </div>
-
-          <DialogFooter className="px-5 py-3 border-t border-border bg-card flex justify-between">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setTriggerModalOpen(false)}
-              className="text-xs"
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 font-medium shadow-xs"
-              onClick={handleSaveTriggerConfig}
-            >
-              <Check className="h-3.5 w-3.5" />
-              Save Trigger
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Add Team Rep WhatsApp Modal ── */}
-      <Dialog open={repModalOpen} onOpenChange={setRepModalOpen}>
-        <DialogContent className="max-w-md p-5 space-y-4">
-          <DialogHeader>
-            <DialogTitle className="text-sm font-bold flex items-center gap-2">
-              <Smartphone className="h-4 w-4 text-emerald-600" />
-              Add Sales Rep WhatsApp Account
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 text-xs">
-            <div className="space-y-1">
-              <Label className="text-xs">Account / Rep Label</Label>
-              <Input
-                placeholder="e.g. Rahul Sharma (Sales Exec)"
-                value={newRepLabel}
-                onChange={(e) => setNewRepLabel(e.target.value)}
-                className="h-8 text-xs"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">WhatsApp Number (with country code)</Label>
-              <Input
-                placeholder="e.g. +91 98765 43210"
-                value={newRepPhone}
-                onChange={(e) => setNewRepPhone(e.target.value)}
-                className="h-8 text-xs"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Assigned Agent / Team Member</Label>
-              <Input
-                placeholder="e.g. Rahul Sharma"
-                value={newRepName}
-                onChange={(e) => setNewRepName(e.target.value)}
-                className="h-8 text-xs"
-              />
-            </div>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" size="sm" onClick={() => setRepModalOpen(false)}>Cancel</Button>
-            <Button
-              size="sm"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={async () => {
-                if (!newRepPhone.trim()) {
-                  toast.error("Please enter a phone number");
-                  return;
-                }
-                await addAccount({
-                  type: "personal",
-                  number: newRepPhone.trim(),
-                  agentName: newRepName.trim() || "Sales Rep",
-                  label: newRepLabel.trim() || `Rep (${newRepName.trim() || newRepPhone.trim()})`,
-                });
-                toast.success("Rep WhatsApp account registered!");
-                setNewRepPhone("");
-                setNewRepName("");
-                setNewRepLabel("");
-                setRepModalOpen(false);
-              }}
-            >
-              Add Account
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <TriggerConfigModal
+        open={triggerConfigModalOpen}
+        onOpenChange={setTriggerConfigModalOpen}
+        trigger={editingTrigger}
+        currentConfig={editingTrigger ? autoRules[editingTrigger.id] : null}
+        templates={liveApprovedTemplates}
+        onSave={handleSaveSingleTrigger}
+      />
     </div>
   );
 }

@@ -24,6 +24,12 @@ module.exports = {
         accent: { DEFAULT: token("accent"), foreground: token("accent-foreground") },
         popover: { DEFAULT: token("popover"), foreground: token("popover-foreground") },
         card: { DEFAULT: token("card"), foreground: token("card-foreground") },
+        brand: {
+          cyan: token("brand-cyan"),
+          cobalt: token("brand-cobalt"),
+          navy: token("brand-navy"),
+          ice: token("brand-ice"),
+        },
         chart: {
           1: token("chart-1"),
           2: token("chart-2"),
@@ -49,6 +55,9 @@ module.exports = {
       },
       boxShadow: {
         xs: "0 1px 2px 0 hsl(var(--shadow-color) / 0.05)",
+        soft: "0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.02)",
+        card: "0 1px 3px 0 rgb(0 0 0 / 0.05), 0 4px 14px -2px rgb(0 0 0 / 0.04)",
+        popover: "0 10px 30px -6px rgb(0 0 0 / 0.12)",
         panel:
           "0 0 0 1px hsl(var(--shadow-color) / 0.06), 0 1px 2px -1px hsl(var(--shadow-color) / 0.06), 0 2px 4px hsl(var(--shadow-color) / 0.04)",
         overlay:

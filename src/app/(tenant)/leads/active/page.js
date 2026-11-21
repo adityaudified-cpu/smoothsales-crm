@@ -329,7 +329,12 @@ export default function ActiveLeadsPage() {
               onClick={() => { setAttentionQueue(isActive ? null : queue.id); setRowSelection({}); }}
               title={queue.hint}
               aria-pressed={isActive}
-              className="relative flex items-center gap-2.5 rounded-lg border border-border bg-white dark:bg-card px-3 py-2.5 text-left w-full hover:border-border"
+              className={cn(
+                "relative flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left w-full transition-all duration-150 cursor-pointer shadow-xs",
+                isActive
+                  ? "border-primary bg-primary/[0.04] ring-1 ring-primary/30"
+                  : "border-border bg-card hover:border-border/80 hover:bg-accent/40"
+              )}
             >
               <div className="text-sm font-bold leading-none tabular-nums shrink-0 min-w-[1.5rem] text-right text-foreground">
                 {count}

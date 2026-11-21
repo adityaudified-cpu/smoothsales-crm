@@ -26,9 +26,10 @@ export async function deleteIntegration(key) {
   });
 }
 
-export async function testIntegration(key) {
+export async function testIntegration(key, payload = null) {
   return apiRequest(`/integrations/${key}/test`, {
     method: "POST",
+    ...(payload ? { body: payload } : {}),
   });
 }
 

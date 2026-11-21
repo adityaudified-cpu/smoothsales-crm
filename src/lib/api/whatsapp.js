@@ -720,10 +720,20 @@ export function subscribeTemplateStatus(onStatusUpdate) {
 
 // ── Personal WhatsApp Web Bridge API (Baileys Daemon on VPS) ──────────────────
 
+function getBridgeEndpoint(path) {
+  if (typeof window !== "undefined") {
+    const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    if (isLocal) {
+      return `https://crm.smoothsales.in/api/wa-bridge${path}`;
+    }
+  }
+  return `/api/wa-bridge${path}`;
+}
+
 export const waBridgeApi = {
   getStatus: async () => {
     try {
-      const res = await fetch("/api/wa-bridge/status");
+      const res = await fetch(getBridgeEndpoint("/status"));
       return await res.json();
     } catch (e) {
       return { success: false, data: { connected: false, state: "close" } };
@@ -731,7 +741,7 @@ export const waBridgeApi = {
   },
   getQr: async () => {
     try {
-      const res = await fetch("/api/wa-bridge/qr");
+      const res = await fetch(getBridgeEndpoint("/qr"));
       return await res.json();
     } catch (e) {
       return { success: false, data: { qr: null } };
@@ -739,10 +749,11 @@ export const waBridgeApi = {
   },
   requestPairingCode: async (phone) => {
     try {
-      const res = await fetch("/api/wa-bridge/pair", {
+      const cleanPhone = String(phone).replace(/[^0-9]/g, "");
+      const res = await fetch(getBridgeEndpoint("/pair"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone: cleanPhone }),
       });
       return await res.json();
     } catch (e) {
@@ -751,10 +762,11 @@ export const waBridgeApi = {
   },
   sendMessage: async (phone, message) => {
     try {
-      const res = await fetch("/api/wa-bridge/send", {
+      const cleanPhone = String(phone).replace(/[^0-9]/g, "");
+      const res = await fetch(getBridgeEndpoint("/send"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, message }),
+        body: JSON.stringify({ phone: cleanPhone, message }),
       });
       return await res.json();
     } catch (e) {
@@ -763,7 +775,7 @@ export const waBridgeApi = {
   },
   logout: async () => {
     try {
-      const res = await fetch("/api/wa-bridge/logout", {
+      const res = await fetch(getBridgeEndpoint("/logout"), {
         method: "POST",
       });
       return await res.json();

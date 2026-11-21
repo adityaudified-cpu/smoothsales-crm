@@ -1,10 +1,18 @@
 /** @type {import('next').NextConfig} */
-const BACKEND_URL = (process.env.INTERNAL_API_URL || "http://localhost:8080/api").replace(/\/$/, "");
-
 const nextConfig = {
   output: "standalone",
+  transpilePackages: ["@smoothsales/ui", "@smoothsales/lib"],
   async rewrites() {
-    return [{ source: "/api/:path*", destination: `${BACKEND_URL}/:path*` }];
+    return [
+      {
+        source: "/api/wa-bridge/:path*",
+        destination: "https://crm.smoothsales.in/api/wa-bridge/:path*",
+      },
+      {
+        source: "/api/:path*",
+        destination: "http://127.0.0.1:8080/api/:path*",
+      },
+    ];
   },
 };
 
