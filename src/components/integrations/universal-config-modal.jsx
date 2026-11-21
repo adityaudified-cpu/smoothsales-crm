@@ -342,10 +342,10 @@ export function UniversalConfigModal({
     }
     setAddingAdAccount(true);
     try {
-      await metaAdminApi.addAdAccount({
-        adAccountId: newAdAccountId.trim(),
-        name: newAdAccountName.trim() || `Ad Account (${newAdAccountId.trim()})`,
-      });
+      await metaAdminApi.addAdAccount(
+        newAdAccountId.trim(),
+        newAdAccountName.trim() || `Ad Account (${newAdAccountId.trim()})`
+      );
       toast.success("Ad Account linked successfully!");
       setNewAdAccountId("");
       setNewAdAccountName("");
@@ -365,10 +365,10 @@ export function UniversalConfigModal({
     }
     setAddingPageManual(true);
     try {
-      await metaAdminApi.addPageManual({
-        pageId: manualPageId.trim(),
-        pageName: manualPageName.trim() || `Page ${manualPageId.trim()}`,
-      });
+      await metaAdminApi.addPageManual(
+        manualPageId.trim(),
+        manualPageName.trim() || `Page ${manualPageId.trim()}`
+      );
       toast.success("Facebook Page registered successfully!");
       setManualPageId("");
       setManualPageName("");
@@ -2447,6 +2447,46 @@ export function UniversalConfigModal({
 {`curl -X POST "${activeWebhookUrl || "https://your-crm/api/webhooks/..."}" \\
   -H "Content-Type: application/json" \\
   -d '{"name":"Rahul Sharma","phone":"+919876543210","email":"rahul@example.com"}'`}
+                </pre>
+              </div>
+
+              {/* Website JS / Form Embed Snippets */}
+              <div className="p-4 rounded-xl border border-border bg-card space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <Globe className="h-3.5 w-3.5 text-teal-500" /> Website Form JavaScript (Fetch API)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(`// Add this to your website's contact form submit handler:
+async function submitLeadToCRM(formData) {
+  const response = await fetch("${activeWebhookUrl || "https://your-crm/api/webhooks/..."}", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: formData.name,
+      phone: formData.phone,
+      email: formData.email,
+      city: formData.city,
+      propertyInterest: formData.propertyInterest,
+      notes: formData.message,
+      utm_source: "website",
+      utm_campaign: "direct_lead_capture"
+    })
+  });
+  return response.json();
+}`, "js_fetch_snippet")}
+                    className="text-[10px] text-primary hover:underline flex items-center gap-1"
+                  >
+                    <Copy className="h-3 w-3" /> Copy JS Snippet
+                  </button>
+                </div>
+                <pre className="p-2.5 rounded-lg bg-muted text-[11px] font-mono text-muted-foreground overflow-x-auto select-all">
+{`fetch("${activeWebhookUrl || "https://your-crm/api/webhooks/..."}", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ name, phone, email, city, notes })
+});`}
                 </pre>
               </div>
 

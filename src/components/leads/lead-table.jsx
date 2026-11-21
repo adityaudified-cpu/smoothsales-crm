@@ -80,6 +80,7 @@ import { toast } from "sonner";
 import { formatCellValue, formatINR, parseValidDate } from "@/lib/format-cell-value";
 import { LEADS_COLUMNS_CONFIG } from "@/lib/leads-columns.config";
 import { encodeLeadId } from "@/lib/lead-id-codec";
+import { OccurrenceCountBadge } from "@/components/leads/LeadAttributionsModal";
 
 export function LeadTable({
   data = [],
@@ -307,13 +308,18 @@ export function LeadTable({
 
                     <div className="flex flex-col min-w-0 gap-0.5">
                       {/* Row 1: Name + source badge */}
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <Link
                           href={`/leads/active/${encodeLeadId(lead.id)}`}
                           className="font-bold text-foreground hover:text-primary hover:underline truncate text-[13px] leading-tight"
                         >
                           {name}
                         </Link>
+                        <OccurrenceCountBadge
+                          count={lead.occurrence_count ?? lead.occurrenceCount ?? 1}
+                          customerId={lead.id}
+                          leadName={name}
+                        />
                         {source === "IndiaMART" && (
                           <span className="px-1 rounded text-[9px] font-bold bg-orange-500/10 text-orange-600 border border-orange-500/20 shrink-0">
                             IM
@@ -729,6 +735,14 @@ export function LeadTable({
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/25">
                     <FileSpreadsheet className="h-3 w-3 text-slate-500 shrink-0" />
                     <span>CSV Import</span>
+                  </span>
+                );
+              }
+              if (src.includes("Website") || src.toUpperCase() === "WEBSITE") {
+                return (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/25">
+                    <Globe className="h-3 w-3 text-teal-500 shrink-0" />
+                    <span>Website Form</span>
                   </span>
                 );
               }

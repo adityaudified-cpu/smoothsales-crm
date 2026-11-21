@@ -92,7 +92,15 @@ export async function apiRequest(path, { method = "GET", query, body, signal, re
 
   const text = await response.text();
   let payload = null;
-  try { payload = text ? JSON.parse(text) : null; } catch { payload = { message: text }; }
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    const isHtml = text && (text.includes("<!doctype") || text.includes("<html") || text.includes("<head"));
+    const cleanMessage = isHtml
+      ? `Server error (${response.status} ${response.statusText || "Bad Request"})`
+      : text;
+    payload = { message: cleanMessage };
+  }
 
   if (!response.ok || payload?.success === false) {
     throw new ApiError(payload?.message || `Request failed (${response.status})`, { status: response.status, errors: payload?.errors, path });
