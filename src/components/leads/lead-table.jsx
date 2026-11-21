@@ -689,11 +689,23 @@ export function LeadTable({
                 );
               }
               if (src.includes("Google")) {
+                const campId = lead?.source_campaign_id || lead?.sourceCampaignId;
+                const formId = lead?.source_form_id || lead?.sourceFormId;
+                const gclid = lead?.gclid;
                 return (
-                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/25">
-                    <span className="font-bold text-[9px] px-1 py-0.2 rounded bg-red-500 text-white leading-none">G</span>
-                    <span>Google Ads</span>
-                  </span>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/25 w-fit">
+                      <span className="font-bold text-[9px] px-1 py-0.2 rounded bg-red-500 text-white leading-none">G</span>
+                      <span>Google Ads</span>
+                    </span>
+                    {(campId || formId || gclid) && (
+                      <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1.5">
+                        {formId && <span>Form:{formId}</span>}
+                        {campId && <span>Camp:{campId}</span>}
+                        {gclid && <span className="text-[9px] text-primary underline cursor-help" title={`GCLID: ${gclid}`}>GCLID</span>}
+                      </span>
+                    )}
+                  </div>
                 );
               }
               if (src.includes("JustDial")) {

@@ -248,6 +248,10 @@ export default function IntegrationsPage() {
       window.location.href = "/whatsapp/connect";
       return;
     }
+    if (item.key === "google_ads" || item.key === "google-ads") {
+      window.location.href = "/integrations/google_ads";
+      return;
+    }
     setSelectedIntegration(item);
     setIsModalOpen(true);
   };

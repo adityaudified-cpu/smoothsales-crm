@@ -960,6 +960,15 @@ export default function LeadDetailPage() {
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <InfoRow label="Source" value={leadSource} />
+              {(lead?.sourceCampaignId || lead?.source_campaign_id) && (
+                <InfoRow label="Google Campaign ID" value={String(lead.sourceCampaignId || lead.source_campaign_id)} mono />
+              )}
+              {(lead?.sourceFormId || lead?.source_form_id) && (
+                <InfoRow label="Google Form ID" value={String(lead.sourceFormId || lead.source_form_id)} mono />
+              )}
+              {lead?.gclid && (
+                <InfoRow label="GCLID" value={lead.gclid} mono />
+              )}
               <InfoRow label="Campaign" value={lead.source_level_2} />
               <InfoRow label="Segment" value={lead.source_level_3} />
             </CardContent>
