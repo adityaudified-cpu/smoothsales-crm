@@ -121,7 +121,6 @@ export function Sidebar() {
           name: "Leads",
           href: "/leads/active",
           icon: Users,
-          badge: "24",
           isGroup: true,
           permission: "LEADS_VIEW",
           subItems: [
@@ -134,7 +133,7 @@ export function Sidebar() {
             { name: "Distributions", href: "/leads/distributions" },
           ],
         },
-        { name: "Deals & Pipeline", href: "/deals", icon: Kanban, badge: "8", permission: "CUSTOMERS_EDIT" },
+        { name: "Deals & Pipeline", href: "/deals", icon: Kanban, permission: "CUSTOMERS_EDIT" },
         { name: "Activities", href: "/activities", icon: CalendarCheck, permission: "CALLS_VIEW" },
         { name: "Forecasting", href: "/forecasting", icon: TrendingUp, permission: "MONITORING_VIEW" },
         {
@@ -297,25 +296,27 @@ export function Sidebar() {
                       <div key={item.name} className="space-y-0.5">
                         <div
                           className={cn(
-                            "relative flex items-center justify-between px-3 py-2 rounded-lg text-[13px] font-medium transition-all group select-none cursor-pointer",
-                            isItemActive
+                            "relative flex items-center justify-between px-3 py-2 rounded-lg text-[13px] font-medium transition-all group select-none cursor-pointer outline-none focus:outline-none",
+                            isItemActive && !waExpanded
                               ? "bg-primary text-primary-foreground font-semibold shadow-xs"
-                              : "text-muted-foreground hover:bg-sky-50/80 hover:text-[#0284c7] border border-transparent"
+                              : isItemActive
+                              ? "text-primary font-semibold bg-primary/[0.06]"
+                              : "text-muted-foreground hover:bg-sky-50/80 hover:text-primary border border-transparent"
                           )}
                           onClick={() => setWaExpanded(!waExpanded)}
                         >
                           <Link
                             href={item.href}
                             onClick={(e) => { e.stopPropagation(); setWaExpanded(true); }}
-                            className="flex items-center gap-3 flex-1 min-w-0"
+                            className="flex items-center gap-3 flex-1 min-w-0 outline-none focus:outline-none"
                           >
-                            <MessageCircle className={cn("shrink-0 h-4 w-4 transition-transform duration-200 group-hover:scale-105", isItemActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-[#0284c7]")} />
+                            <MessageCircle className={cn("shrink-0 h-4 w-4 transition-transform duration-200 group-hover:scale-105", isItemActive && !waExpanded ? "text-primary-foreground" : isItemActive ? "text-primary" : "text-muted-foreground group-hover:text-primary")} />
                             <span className="truncate">{item.name}</span>
                           </Link>
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); setWaExpanded(!waExpanded); }}
-                            className={cn("p-0.5 rounded transition-colors", isItemActive ? "text-primary-foreground/80 hover:text-primary-foreground" : "text-muted-foreground hover:text-[#0284c7]")}
+                            className={cn("p-0.5 rounded transition-colors outline-none focus:outline-none", isItemActive && !waExpanded ? "text-primary-foreground/80 hover:text-primary-foreground" : "text-muted-foreground hover:text-primary")}
                           >
                             <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", waExpanded ? "rotate-0" : "-rotate-90")} />
                           </button>
@@ -329,10 +330,10 @@ export function Sidebar() {
                                   key={sub.href}
                                   href={sub.href}
                                   className={cn(
-                                    "flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] transition-colors",
+                                    "flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] transition-colors outline-none focus:outline-none",
                                     isSubActive
                                       ? "bg-primary/10 text-primary font-bold shadow-2xs border border-primary/20"
-                                      : "text-muted-foreground hover:text-[#0284c7] hover:bg-sky-50/70"
+                                      : "text-muted-foreground hover:text-primary hover:bg-sky-50/70"
                                   )}
                                 >
                                   {sub.name === "AI Agent" && <Bot className="h-3 w-3 shrink-0" />}
@@ -351,10 +352,12 @@ export function Sidebar() {
                       <div key={item.name} className="space-y-0.5">
                         <div
                           className={cn(
-                            "relative flex items-center justify-between px-3 py-2 rounded-lg text-[13px] font-medium transition-all group select-none cursor-pointer",
-                            isItemActive
+                            "relative flex items-center justify-between px-3 py-2 rounded-lg text-[13px] font-medium transition-all group select-none cursor-pointer outline-none focus:outline-none",
+                            isItemActive && !leadsExpanded
                               ? "bg-primary text-primary-foreground font-semibold shadow-xs"
-                              : "text-muted-foreground hover:bg-sky-50/80 hover:text-[#0284c7] border border-transparent"
+                              : isItemActive
+                              ? "text-primary font-semibold bg-primary/[0.06]"
+                              : "text-muted-foreground hover:bg-sky-50/80 hover:text-primary border border-transparent"
                           )}
                           onClick={() => setLeadsExpanded(!leadsExpanded)}
                         >
@@ -364,33 +367,25 @@ export function Sidebar() {
                               e.stopPropagation();
                               setLeadsExpanded(true);
                             }}
-                            className="flex items-center gap-3 flex-1 min-w-0"
+                            className="flex items-center gap-3 flex-1 min-w-0 outline-none focus:outline-none"
                           >
                             <Icon
                               className={cn(
                                 "shrink-0 transition-transform duration-200 group-hover:scale-105 h-4 w-4",
-                                isItemActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-[#0284c7]"
+                                isItemActive && !leadsExpanded ? "text-primary-foreground" : isItemActive ? "text-primary" : "text-muted-foreground group-hover:text-primary"
                               )}
                             />
                             <span className="truncate">{item.name}</span>
                           </Link>
 
                           <div className="flex items-center gap-1.5 ml-auto">
-                            {item.badge && (
-                              <span className={cn(
-                                "text-[10px] font-semibold px-2 py-0.5 rounded-full",
-                                isItemActive ? "bg-white/20 text-white" : "bg-sky-50 text-sky-700 border border-sky-200/60"
-                              )}>
-                                {item.badge}
-                              </span>
-                            )}
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setLeadsExpanded(!leadsExpanded);
                               }}
-                              className={cn("p-0.5 rounded transition-colors", isItemActive ? "text-primary-foreground/80 hover:text-primary-foreground" : "text-muted-foreground hover:text-[#0284c7]")}
+                              className={cn("p-0.5 rounded transition-colors outline-none focus:outline-none", isItemActive && !leadsExpanded ? "text-primary-foreground/80 hover:text-primary-foreground" : "text-muted-foreground hover:text-primary")}
                             >
                               <ChevronDown
                                 className={cn(
@@ -415,21 +410,13 @@ export function Sidebar() {
                                   key={sub.href}
                                   href={sub.href}
                                   className={cn(
-                                    "flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] transition-colors relative",
+                                    "flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] transition-all outline-none focus:outline-none",
                                     isSubActive
                                       ? "bg-primary/10 text-primary font-bold shadow-2xs border border-primary/20"
-                                      : "text-muted-foreground hover:text-[#0284c7] hover:bg-sky-50/70"
+                                      : "text-muted-foreground hover:text-primary hover:bg-sky-50/70"
                                   )}
                                 >
                                   <span className="truncate">{sub.name}</span>
-                                  {sub.href === "/leads/active" && (
-                                    <span className={cn(
-                                      "text-[9.5px] px-1.5 py-0.2 rounded-full font-mono font-semibold",
-                                      isSubActive ? "bg-primary text-primary-foreground" : "bg-sky-50 text-sky-700 border border-sky-200/60"
-                                    )}>
-                                      24
-                                    </span>
-                                  )}
                                 </Link>
                               );
                             })}
@@ -450,36 +437,21 @@ export function Sidebar() {
                           : "gap-3 px-3 py-2 rounded-lg text-[13px] font-medium",
                         isItemActive
                           ? "bg-primary text-primary-foreground font-semibold shadow-xs"
-                          : "text-muted-foreground hover:bg-sky-50/80 hover:text-[#0284c7] border border-transparent"
+                          : "text-muted-foreground hover:bg-sky-50/80 hover:text-primary border border-transparent"
                       )}
                     >
-                      {/* Micro notification dot in compact mode */}
-                      {isCollapsed && item.badge && !isItemActive && (
-                        <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary ring-2 ring-card" />
-                      )}
-
                       <Icon
                         className={cn(
                           "shrink-0 transition-transform duration-200 group-hover:scale-105",
                           isCollapsed ? "h-[18px] w-[18px]" : "h-4 w-4",
                           isItemActive
                             ? "text-primary-foreground"
-                            : "text-muted-foreground group-hover:text-[#0284c7]"
+                            : "text-muted-foreground group-hover:text-primary"
                         )}
                       />
 
                       {!isCollapsed && (
-                        <>
-                          <span className="truncate">{item.name}</span>
-                          {item.badge && (
-                            <span className={cn(
-                              "ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full",
-                              isItemActive ? "bg-white/20 text-white" : "bg-sky-50 text-sky-700 border border-sky-200/60"
-                            )}>
-                              {item.badge}
-                            </span>
-                          )}
-                        </>
+                        <span className="truncate">{item.name}</span>
                       )}
                     </Link>
                   );
@@ -494,11 +466,6 @@ export function Sidebar() {
                           className="font-medium text-xs px-2.5 py-1 bg-foreground text-background shadow-md flex items-center gap-2"
                         >
                           <span>{item.name}</span>
-                          {item.badge && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.2 bg-primary text-primary-foreground rounded-full">
-                              {item.badge}
-                            </span>
-                          )}
                         </TooltipContent>
                       </Tooltip>
                     );

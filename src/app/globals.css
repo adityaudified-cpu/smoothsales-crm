@@ -4,7 +4,7 @@
 
 /*
  * SmoothSales design tokens — "Modern Luxury Enterprise SaaS".
- * Logo-aligned Midnight Navy (#0e1a34) anchor with Electric Cyan (#00c9e8) & Royal Cobalt (#1d4ed8) hover dynamics.
+ * Logo-aligned Dark Royal Blue (#134ecd) anchor with Electric Cyan (#00c9e8) & Cobalt (#2563eb) hover dynamics.
  * Crisp cool-slate canvas (#f4f6fb) with elevated pure white cards.
  * Values are HSL channels consumed as hsl(var(--x)).
  */
@@ -18,23 +18,23 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    /* Brand Logo Anchor: Midnight Navy (Darkest node of logo #0e1a34) */
-    --primary: 222 55% 15%;            /* #111a33 - Deep dark luxury midnight navy */
+    /* Brand Logo Anchor: Dark Royal Blue (Logo's prominent dark blue node #134ecd / #165a96 - NOT BLACK!) */
+    --primary: 221 83% 44%;            /* #134ecd - Rich prestigious dark royal blue */
     --primary-foreground: 0 0% 100%;   /* Pure crisp white text */
-    --primary-hover: 217 91% 60%;      /* #3b82f6 - Vibrant cobalt/cyan hover */
+    --primary-hover: 217 91% 56%;      /* #2563eb - Brighter vibrant cobalt on hover */
 
     /* Logo Gradient Tiers */
-    --brand-dark: 222 58% 14%;         /* #0e1a34 - Bottom dark navy node */
-    --brand-mid: 206 64% 33%;          /* #1e5a8c - Middle ocean cobalt */
+    --brand-dark: 221 83% 44%;         /* #134ecd - Logo dark royal blue */
+    --brand-mid: 206 64% 36%;          /* #206397 - Logo ocean cobalt */
     --brand-cyan: 190 85% 44%;         /* #11b3ce - Top electric cyan node */
-    --brand-ice: 214 90% 95%;          /* #eff6ff - Ambient soft ice-blue wash */
+    --brand-ice: 214 95% 94%;          /* #eff6ff - Ambient soft ice-blue wash */
 
     --secondary: 210 40% 96.1%;        /* #f1f5f9 - Slate 100 soft surface */
     --secondary-foreground: 222 47% 11%;
 
     /* Subtle Ice/Cyan Active Wash (Replaces neon blue with sophisticated soft tone) */
-    --accent: 214 85% 94%;             /* #eaf2fd - soft ice blue */
-    --accent-foreground: 222 55% 15%;  /* #111a33 - dark navy text on active */
+    --accent: 214 95% 94%;             /* #eff6ff - soft ice blue */
+    --accent-foreground: 221 83% 44%;  /* #134ecd - dark royal blue text on active */
 
     --muted: 210 40% 96.1%;            /* #f1f5f9 */
     --muted-foreground: 215 16% 47%;   /* #64748b - Slate 500 readable secondary */
@@ -53,11 +53,11 @@
     --border: 214.3 31.8% 91.4%;       /* #e2e8f0 - Slate 200 crisp divider */
     --input: 214.3 31.8% 91.4%;
     --input-background: 0 0% 100%;
-    --ring: 217 91% 60%;               /* Electric blue focus ring */
+    --ring: 221 83% 54%;               /* Royal blue focus ring */
 
     /* Charts */
-    --chart-1: 222 55% 15%;            /* Dark Navy */
-    --chart-2: 217 91% 60%;            /* Cobalt */
+    --chart-1: 221 83% 44%;            /* Dark Royal Blue */
+    --chart-2: 217 91% 56%;            /* Cobalt */
     --chart-3: 190 85% 44%;            /* Cyan */
     --chart-4: 142.1 76.2% 36.3%;      /* Emerald */
     --chart-5: 38 92% 50%;             /* Amber */
