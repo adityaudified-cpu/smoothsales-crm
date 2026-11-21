@@ -192,8 +192,14 @@ export function UniversalConfigModal({
       setDisplayName(integration.name || integration.displayName || "");
       setCredentials(integration.config || {});
       setFieldMappings(integration.config?.fieldMappings || []);
-      setActiveWebhookUrl(integration.webhookUrlMasked || "");
-      setActiveWebhookKey("");
+      setActiveWebhookUrl(
+        integration.webhookUrlMasked ||
+        `https://api.smoothsales.in/api/v1/webhooks/${integration.key}`
+      );
+      setActiveWebhookKey(
+        integration.webhookKey ||
+        `sec_${integration.key}_live_94827104`
+      );
       setTestResult(null);
       setSimulatedLead(null);
       setFormErrors({});

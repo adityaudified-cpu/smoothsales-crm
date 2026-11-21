@@ -75,6 +75,16 @@ export function IndiaMartLogo({ className = "h-6 w-6" }) {
   );
 }
 
+export function TradeIndiaLogo({ className = "h-6 w-6" }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#0052CC" />
+      <path d="M6 10h20v4H18v12h-4V14H6v-4z" fill="#FFFFFF" />
+      <circle cx="24" cy="22" r="3" fill="#FFAB00" />
+    </svg>
+  );
+}
+
 export function Acres99Logo({ className = "h-6 w-6" }) {
   return (
     <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -100,6 +110,15 @@ export function MagicBricksLogo({ className = "h-6 w-6" }) {
   );
 }
 
+export function HousingLogo({ className = "h-6 w-6" }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#00B074" />
+      <path d="M16 6L6 15h4v11h12V15h4L16 6zm0 4.2l6 5.4V24h-4v-6h-4v6h-4v-8.4l6-5.4z" fill="#FFFFFF" />
+    </svg>
+  );
+}
+
 export function JustdialLogo({ className = "h-6 w-6" }) {
   return (
     <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -107,6 +126,136 @@ export function JustdialLogo({ className = "h-6 w-6" }) {
       <text x="6" y="22" fill="#FFFFFF" fontFamily="sans-serif" fontSize="13" fontWeight="bold">
         JD
       </text>
+    </svg>
+  );
+}
+
+export function NoBrokerLogo({ className = "h-6 w-6" }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#E61E2A" />
+      <path d="M16 6l-8 7v12h6v-6h4v6h6V13l-8-7z" fill="#FFFFFF" />
+      <circle cx="16" cy="18" r="1.5" fill="#E61E2A" />
+    </svg>
+  );
+}
+
+export function SulekhaLogo({ className = "h-6 w-6" }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#FF5722" />
+      <path
+        d="M21 11c-1.5-1.5-3.5-2-5.5-1.5-2.5.6-4.5 2.8-4.5 5.5 0 3 2.5 5.5 5.5 5.5 2 0 3.8-.9 5-2.5l-2.2-1.5c-.7.9-1.7 1.5-2.8 1.5-1.7 0-3-1.3-3-3s1.3-3 3-3c1.1 0 2.1.6 2.6 1.5L21 11z"
+        fill="#FFFFFF"
+      />
+    </svg>
+  );
+}
+
+export function ExportersIndiaLogo({ className = "h-6 w-6" }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#0D47A1" />
+      <circle cx="16" cy="16" r="9" stroke="#FFFFFF" strokeWidth="2" fill="none" />
+      <path d="M7 16h18M16 7c2.5 2.5 4 5.5 4 9s-1.5 6.5-4 9c-2.5-2.5-4-5.5-4-9s1.5-6.5 4-9z" stroke="#FFFFFF" strokeWidth="1.5" fill="none" />
+    </svg>
+  );
+}
+
+export function AndroidLogo({ className = "h-6 w-6" }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#3DDC84" />
+      {/* Android Robot Head */}
+      <path
+        d="M10 18a6 6 0 0112 0H10z"
+        fill="#FFFFFF"
+      />
+      {/* Eyes */}
+      <circle cx="13" cy="15.5" r="0.75" fill="#3DDC84" />
+      <circle cx="19" cy="15.5" r="0.75" fill="#3DDC84" />
+      {/* Antennas */}
+      <line x1="12" y1="12" x2="10.5" y2="9.5" stroke="#FFFFFF" strokeWidth="1.2" strokeLinecap="round" />
+      <line x1="20" y1="12" x2="21.5" y2="9.5" stroke="#FFFFFF" strokeWidth="1.2" strokeLinecap="round" />
+      {/* Body */}
+      <path d="M10 19.5h12v5a2 2 0 01-2 2h-8a2 2 0 01-2-2v-5z" fill="#FFFFFF" />
+      <line x1="12.5" y1="26.5" x2="12.5" y2="29" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="19.5" y1="26.5" x2="19.5" y2="29" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function WordPressLogo({ className = "h-6 w-6" }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#21759B" />
+      <circle cx="16" cy="16" r="9" stroke="#FFFFFF" strokeWidth="1.5" fill="none" />
+      <path
+        d="M9.5 16c0 2.8 1.8 5.2 4.3 6.1L10.3 12.3c-.5 1.1-.8 2.4-.8 3.7zm10.7-3.4c.3.5.5 1.1.5 1.7 0 1.2-.6 2.3-1.2 3.4l-2.4 6.8c1.8-.7 3.1-2.2 3.6-4.1l-.5-7.8zm-7.6 9.8l2.6-7.5-1.5-4.2c-.3 0-.6.1-.9.1h-.2l3.4 9.6-3.4 2zm3.4-3.2l1.6-4.7c-.5 0-.9-.1-1.3-.1h-.3l-1.3 4.8 1.3 0z"
+        fill="#FFFFFF"
+      />
+    </svg>
+  );
+}
+
+export function ZapierLogo({ className = "h-6 w-6" }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#FF4A00" />
+      <path
+        d="M16 8v16M8 16h16M10.3 10.3l11.4 11.4M21.7 10.3L10.3 21.7"
+        stroke="#FFFFFF"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+export function PabblyLogo({ className = "h-6 w-6" }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#00C292" />
+      <path d="M10 11h7a4 4 0 014 4 4 4 0 01-4 4h-4v4h-3V11zm3 5h4a1.5 1.5 0 000-3h-4v3z" fill="#FFFFFF" />
+      <circle cx="23" cy="11" r="2" fill="#FFFFFF" />
+    </svg>
+  );
+}
+
+export function MakeLogo({ className = "h-6 w-6" }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#6D28D9" />
+      <path
+        d="M8 12l8-5 8 5v10l-8 5-8-5V12zm8-2.5L10.5 14 16 17.5 21.5 14 16 9.5z"
+        fill="#FFFFFF"
+      />
+    </svg>
+  );
+}
+
+export function WhatsAppWidgetLogo({ className = "h-6 w-6" }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#25D366" />
+      <path
+        d="M9 10a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 3v-3h-2a2 2 0 01-2-2v-8z"
+        fill="#FFFFFF"
+      />
+      <circle cx="13" cy="14" r="1.2" fill="#25D366" />
+      <circle cx="16" cy="14" r="1.2" fill="#25D366" />
+      <circle cx="19" cy="14" r="1.2" fill="#25D366" />
+    </svg>
+  );
+}
+
+export function GmailLogo({ className = "h-6 w-6" }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#F1F3F4" stroke="#E0E0E0" />
+      <path d="M8 11l8 6 8-6v11a1 1 0 01-1 1H9a1 1 0 01-1-1V11z" fill="#EA4335" opacity="0.9" />
+      <path d="M8 11l8 6 8-6H8z" fill="#EA4335" />
+      <path d="M8 11v11h4V14l4 3 4-3v8h4V11l-8 6-8-6z" fill="#D93025" />
     </svg>
   );
 }
@@ -133,6 +282,25 @@ export function ExotelLogo({ className = "h-6 w-6" }) {
         d="M8 12c0-2.2 1.8-4 4-4h8c2.2 0 4 1.8 4 4v8c0 2.2-1.8 4-4 4h-8c-2.2 0-4-1.8-4-4v-8zm8-1a5 5 0 100 10 5 5 0 000-10zm0 2.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5z"
         fill="#FFFFFF"
       />
+    </svg>
+  );
+}
+
+export function KnowlarityLogo({ className = "h-6 w-6" }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#E65100" />
+      <path d="M10 8h4v7l6-7h5l-7 8 8 8h-5l-6-7v7h-4V8z" fill="#FFFFFF" />
+    </svg>
+  );
+}
+
+export function CallerDeskLogo({ className = "h-6 w-6" }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#6A1B9A" />
+      <path d="M8 12a4 4 0 014-4h8a4 4 0 014 4v8a4 4 0 01-4 4h-8a4 4 0 01-4-4v-8zm4 0v8h8v-8h-8z" fill="#FFFFFF" />
+      <circle cx="16" cy="16" r="2" fill="#00E676" />
     </svg>
   );
 }
@@ -199,12 +367,10 @@ export function WebhookFormLogo({ className = "h-6 w-6" }) {
     <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect width="32" height="32" rx="8" fill="#059669" />
       <path
-        d="M11 12l-4 4 4 4m10-8l4 4-4 4m-3-9l-4 10"
-        stroke="#FFFFFF"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        d="M16 6a10 10 0 00-7.07 17.07l1.41-1.41A8 8 0 1116 24v-2a6 6 0 10-6-6H8a8 8 0 118 8v2a10 10 0 000-20z"
+        fill="#FFFFFF"
       />
+      <circle cx="16" cy="16" r="3" fill="#34D399" />
     </svg>
   );
 }
@@ -221,33 +387,88 @@ export function JotformLogo({ className = "h-6 w-6" }) {
   );
 }
 
+export function WebsiteLogo({ className = "h-6 w-6" }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="8" fill="#0284C7" />
+      <circle cx="16" cy="16" r="9" stroke="#FFFFFF" strokeWidth="2" />
+      <ellipse cx="16" cy="16" rx="4.5" ry="9" stroke="#FFFFFF" strokeWidth="1.8" />
+      <path d="M7 16h18" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M9.5 11h13" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" opacity="0.8" />
+      <path d="M9.5 21h13" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" opacity="0.8" />
+    </svg>
+  );
+}
+
 /**
  * Universal logo resolver based on integration key.
  */
 export function getIntegrationLogo(key, className = "h-6 w-6") {
-  switch (key.toLowerCase()) {
+  const k = (key || "").toLowerCase();
+  switch (k) {
     case "meta_ads":
     case "meta_capi":
     case "instagram_ads":
+    case "instagram_dm":
       return <MetaLogo className={className} />;
     case "google_ads":
     case "google_oci":
     case "google_forms":
       return <GoogleLogo className={className} />;
+    case "website":
+    case "website_form":
+    case "website_webhook":
+      return <WebsiteLogo className={className} />;
     case "whatsapp":
       return <WhatsAppLogo className={className} />;
+    case "whatsapp_widget":
+      return <WhatsAppWidgetLogo className={className} />;
     case "indiamart":
       return <IndiaMartLogo className={className} />;
+    case "trade_india":
+      return <TradeIndiaLogo className={className} />;
     case "99acres":
       return <Acres99Logo className={className} />;
     case "magicbricks":
       return <MagicBricksLogo className={className} />;
+    case "housing":
+      return <HousingLogo className={className} />;
+    case "nobroker":
+      return <NoBrokerLogo className={className} />;
+    case "sulekha":
+      return <SulekhaLogo className={className} />;
+    case "exporters_india":
+    case "exportersindia":
+      return <ExportersIndiaLogo className={className} />;
+    case "android_companion":
+    case "android":
+      return <AndroidLogo className={className} />;
+    case "wordpress":
+    case "wpforms":
+      return <WordPressLogo className={className} />;
+    case "zapier":
+      return <ZapierLogo className={className} />;
+    case "pabbly":
+    case "pabbly_connect":
+      return <PabblyLogo className={className} />;
+    case "make":
+    case "n8n":
+      return <MakeLogo className={className} />;
+    case "gmail_parser":
+    case "gmail":
+      return <GmailLogo className={className} />;
     case "justdial":
       return <JustdialLogo className={className} />;
     case "openai":
       return <OpenAILogo className={className} />;
     case "exotel":
       return <ExotelLogo className={className} />;
+    case "knowlarity":
+      return <KnowlarityLogo className={className} />;
+    case "caller_desk":
+    case "bon_voice":
+    case "tata_tele":
+      return <CallerDeskLogo className={className} />;
     case "razorpay":
       return <RazorpayLogo className={className} />;
     case "cashfree":
@@ -260,9 +481,10 @@ export function getIntegrationLogo(key, className = "h-6 w-6") {
       return <GoogleMeetLogo className={className} />;
     case "jotform":
       return <JotformLogo className={className} />;
+    case "website":
     case "website_webhook":
+    case "outbound_webhook":
     default:
       return <WebhookFormLogo className={className} />;
   }
 }
-
