@@ -336,13 +336,13 @@ export default function IntegrationsPage() {
       return matchesSearch && matchesCat && matchesConnected;
     });
 
-    // When viewing "All Channels", ensure top 5 priority integrations always show first in exact requested order:
+    // Ensure top priority integrations always show first in exact requested order:
     // 1. Meta Lead Ads (meta_ads)
     // 2. Meta Conversions API (meta_capi)
     // 3. Website Integration (website)
     // 4. Google Ads Lead Forms (google_ads)
     // 5. Google Offline Conversions (google_oci)
-    if (activeTab === "all" && !searchQuery.trim()) {
+    if (!searchQuery.trim()) {
       return [...list].sort((a, b) => {
         const indexA = PRIORITY_KEYS.indexOf(a.key);
         const indexB = PRIORITY_KEYS.indexOf(b.key);
@@ -454,7 +454,7 @@ export default function IntegrationsPage() {
       </div>
 
       {/* ── Filter Toolbar ───────────────────────────────────────────────── */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 p-2 rounded-2xl bg-card border border-border shadow-xs w-full min-w-0">
+      <div className="sticky top-0 z-20 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 p-2 rounded-2xl bg-card/95 backdrop-blur-md border border-border shadow-xs w-full min-w-0">
         {/* Category Pills */}
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar w-full lg:w-auto p-1 min-w-0">
           {[
