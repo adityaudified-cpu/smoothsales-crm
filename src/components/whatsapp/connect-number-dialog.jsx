@@ -76,7 +76,16 @@ export function ConnectNumberDialog({ open, onOpenChange, onConnected }) {
 
   const finish = useCallback(async () => {
     const { code, info } = session.current;
-    if (!code || !info) return;
+    if (!code) return;
+    if (!info) {
+      setTimeout(() => {
+        if (!session.current.info) {
+          setBusy(false);
+          toast.error("Meta skipped number selection because this account was previously linked. In the Facebook popup, please click 'Edit settings' or remove Smoothsales from Facebook Business Integrations.", { duration: 7000 });
+        }
+      }, 1500);
+      return;
+    }
     session.current = { code: null, info: null };
     try {
       const account = await whatsappAccountsApi.completeSignup({
@@ -136,6 +145,7 @@ export function ConnectNumberDialog({ open, onOpenChange, onConnected }) {
         config_id: config.configId,
         response_type: "code",
         override_default_response_type: true,
+        auth_type: "rerequest",
         extras: {
           setup: {},
           sessionInfoVersion: "3",
