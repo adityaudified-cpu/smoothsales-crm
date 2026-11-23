@@ -33,7 +33,8 @@ function newToken() {
 }
 
 /** The workspace's Meta app: credentials for signup, webhooks and template samples. Admins only. */
-export function MetaAppSettings({ fields = [] }) {
+export function MetaAppSettings({ fields = [], product = "whatsapp" }) {
+  const leads = product === "leads";
   const [state, setState] = useState("loading"); // loading | ready | hidden | error
   const [saved, setSaved] = useState(null);
   const [form, setForm] = useState({ appId: "", appSecret: "", signupConfigId: "", verifyToken: "" });
@@ -81,7 +82,9 @@ export function MetaAppSettings({ fields = [] }) {
       <div>
         <h2 id="meta-app-h" className="text-sm font-semibold">Meta app and webhook</h2>
         <p className="text-xs text-muted-foreground">
-          From developers.facebook.com: your app, then App settings and WhatsApp configuration. Needed once per workspace.
+          {leads
+            ? "From developers.facebook.com: your app, then App settings and Webhooks. The same app is used for WhatsApp."
+            : "From developers.facebook.com: your app, then App settings and WhatsApp configuration. Needed once per workspace."}
         </p>
       </div>
 
@@ -102,10 +105,12 @@ export function MetaAppSettings({ fields = [] }) {
               <Input id="ma-secret" type="password" autoComplete="new-password" value={form.appSecret} onChange={set("appSecret")}
                 placeholder={saved.appSecretSet ? "Saved. Leave blank to keep it" : "Paste the App Secret"} className="h-8 text-xs font-mono" />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ma-config" className="text-xs">Embedded Signup configuration ID</Label>
-              <Input id="ma-config" inputMode="numeric" value={form.signupConfigId} onChange={set("signupConfigId")} placeholder="Facebook Login for Business" className="h-8 text-xs font-mono" />
-            </div>
+            {!leads && (
+              <div className="space-y-1.5">
+                <Label htmlFor="ma-config" className="text-xs">Embedded Signup configuration ID</Label>
+                <Input id="ma-config" inputMode="numeric" value={form.signupConfigId} onChange={set("signupConfigId")} placeholder="Facebook Login for Business" className="h-8 text-xs font-mono" />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="ma-verify" className="text-xs">Webhook verify token</Label>
               <div className="flex gap-1.5">
@@ -116,16 +121,16 @@ export function MetaAppSettings({ fields = [] }) {
             </div>
             <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2">
               <p className="flex items-center gap-1.5 text-2xs text-foreground">
-                {saved.webhookSigned
+                {(leads ? saved.leadWebhookSigned : saved.webhookSigned)
                   ? <><ShieldCheck className="h-3.5 w-3.5 text-success" aria-hidden /> Incoming events are signature-checked</>
-                  : <><AlertTriangle className="h-3.5 w-3.5 text-warning" aria-hidden /> Add the App Secret so fake messages cannot be posted to your inbox</>}
+                  : <><AlertTriangle className="h-3.5 w-3.5 text-warning" aria-hidden /> {leads ? "Add the App Secret. Lead notifications are refused without it" : "Add the App Secret so fake messages cannot be posted to your inbox"}</>}
               </p>
               <Button type="submit" size="sm" disabled={saving}>{saving && <Loader2 className="animate-spin" />} Check & save</Button>
             </div>
           </form>
 
           <div className="grid sm:grid-cols-2 gap-3 border-t border-border pt-4">
-            <CopyField label="Callback URL" value={saved.webhookUrl} />
+            <CopyField label="Callback URL" value={leads ? saved.leadWebhookUrl : saved.webhookUrl} />
             <CopyField label="Verify token" value={saved.verifyToken} />
           </div>
           <div>

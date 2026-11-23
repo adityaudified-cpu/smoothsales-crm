@@ -64,7 +64,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { testIntegration, simulateLead, rotateWebhookKey, sendMetaCapiConversion, metaAdminApi } from "@/lib/api/integrations";
+import { testIntegration, simulateLead, rotateWebhookKey, metaAdminApi } from "@/lib/api/integrations";
 import { getIntegrationLogo } from "./brand-logos";
 
 // Standard CRM Columns available for field mapping

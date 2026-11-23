@@ -65,20 +65,19 @@ export async function reprocessWebhook(id) {
   });
 }
 
-export async function sendMetaCapiConversion(data) {
-  return apiRequest("/integrations/conversions/meta", {
-    method: "POST",
-    body: data,
-  });
-}
+/** Conversions reported to Meta (destination META) and Google Ads (GOOGLE). */
+export const conversionsApi = {
+  list: (destination, { status, page = 0, size = 25 } = {}) =>
+    apiRequest(`/integrations/conversions/${destination}/events`, { query: { ...(status ? { status } : {}), page, size } }),
+  retry: (id) => apiRequest(`/integrations/conversions/events/${id}/retry`, { method: "POST" }),
+};
 
-export async function sendGoogleOciConversion(data) {
-  return apiRequest("/integrations/conversions/google", {
-    method: "POST",
-    body: data,
-  });
-}
-
+/** Google sign-in for the Data Manager API. */
+export const googleOAuthApi = {
+  start: (redirectUri) => apiRequest("/integrations/google_oci/oauth/start", { method: "POST", body: { redirectUri } }),
+  complete: (code, state) => apiRequest("/integrations/google_oci/oauth/complete", { method: "POST", body: { code, state } }),
+  disconnect: () => apiRequest("/integrations/google_oci/oauth", { method: "DELETE" }),
+};
 /**
  * Unified object export for components using integrationsApi namespace
  */
