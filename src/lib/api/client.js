@@ -108,6 +108,31 @@ export async function apiRequest(path, { method = "GET", query, body, signal, re
   return payload && "data" in payload ? payload.data : payload;
 }
 
+/** Absolute API base for non-fetch clients (WebSocket/SockJS). */
+export function apiBaseUrl() {
+  return resolveBase();
+}
+
+/** Current access token (for WebSocket CONNECT headers). */
+export function getAccessToken() {
+  return readToken(ACCESS_TOKEN_KEY);
+}
+
+// Authenticated binary download (e.g. chat attachments) → Blob.
+export async function apiBlob(path, { signal, retry = true } = {}) {
+  const headers = {};
+  const token = readToken(ACCESS_TOKEN_KEY);
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(buildUrl(path), { headers, signal });
+  if (response.status === 401 && retry && (await refreshAccessToken())) return apiBlob(path, { signal, retry: false });
+  if (!response.ok) {
+    let message = `Download failed (${response.status})`;
+    try { message = (await response.json())?.message || message; } catch {}
+    throw new ApiError(message, { status: response.status, path });
+  }
+  return response.blob();
+}
+
 // Spring Data Page<T> → { items, total, page, size, totalPages }.
 export function unwrapPage(page) {
   if (Array.isArray(page)) return { items: page, total: page.length, page: 0, size: page.length, totalPages: 1 };

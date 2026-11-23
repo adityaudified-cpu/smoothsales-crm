@@ -1,476 +1,279 @@
 "use client";
 
-import React, { useState, useCallback, useEffect, useRef } from "react";
-import { MessageCircle, Send, RefreshCw, Globe, Users, Zap, HelpCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import React, { useEffect, useState } from "react";
+import {
+  Plus, RefreshCw, MoreHorizontal, Star, ShieldCheck, Pencil, KeyRound, ExternalLink, Unplug,
+  AlertTriangle, Smartphone, Cloud, Loader2,
+} from "lucide-react";
 import { toast } from "sonner";
-
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useWaAccounts } from "../wa-accounts-context";
-import { whatsappTemplatesApi, waBridgeApi } from "@/lib/api/whatsapp";
+import { whatsappAccountsApi, whatsappTemplatesApi, whatsappInboxApi } from "@/lib/api/whatsapp";
+import { MetaAppSettings } from "@/components/whatsapp/meta-app-settings";
+import { ConnectNumberDialog } from "@/components/whatsapp/connect-number-dialog";
+import { cn } from "@/lib/utils";
 
-// Modular Production-Grade Components
-import { CredentialsModal } from "@/components/whatsapp/credentials-modal";
-import { TestPingModal } from "@/components/whatsapp/test-ping-modal";
-import { LinkPersonalModal } from "@/components/whatsapp/link-personal-modal";
-import { AddRepModal } from "@/components/whatsapp/add-rep-modal";
-import { TriggerConfigModal } from "@/components/whatsapp/trigger-config-modal";
-import { ChannelsHealthTab } from "@/components/whatsapp/channels-health-tab";
-import { LeadCaptureTab } from "@/components/whatsapp/lead-capture-tab";
-import { AutomationTriggersTab, AUTOMATION_TRIGGERS_DEF } from "@/components/whatsapp/automation-triggers-tab";
-import { SetupGuideTab, WEBHOOK_CALLBACK_URL, WEBHOOK_VERIFY_TOKEN } from "@/components/whatsapp/setup-guide-tab";
+const WEBHOOK_FIELDS = [
+  ["messages", "Incoming messages and delivery ticks"],
+  ["smb_message_echoes", "Replies typed in the WhatsApp Business app (coexistence)"],
+  ["message_template_status_update", "Template approved / rejected"],
+  ["message_template_quality_update", "Template quality changes"],
+  ["template_category_update", "Template category changes"],
+];
 
-const LEAD_RULES_KEY = "wa_lead_capture_rules_v4";
-const AUTO_RULES_KEY = "wa_auto_rules_v4";
+const STATUS_TONE = {
+  CONNECTED: "text-success",
+  ERROR: "text-destructive",
+  DISCONNECTED: "text-muted-foreground",
+};
+
+const QUALITY_TONE = { GREEN: "text-success", YELLOW: "text-foreground", RED: "text-destructive" };
+
+function NumberRow({ acc, onChanged, onRename, onToken, onDisconnect }) {
+  const [busy, setBusy] = useState(null);
+  const run = async (key, fn, ok) => {
+    setBusy(key);
+    try { await fn(); toast.success(ok); onChanged(); } catch (e) { toast.error(e?.message || "Action failed"); } finally { setBusy(null); }
+  };
+  const TypeIcon = acc.connectionType === "BUSINESS_APP" ? Smartphone : Cloud;
+  return (
+    <li className="grid grid-cols-[1fr_auto] sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-x-4 gap-y-1 items-center px-4 py-3">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-sm font-semibold truncate">{acc.label}</span>
+          {acc.isDefault && (
+            <span className="inline-flex items-center gap-1 rounded-sm bg-accent px-1.5 py-0.5 text-2xs font-medium text-accent-foreground">
+              <Star className="h-3 w-3" aria-hidden /> Default
+            </span>
+          )}
+        </div>
+        <p className="font-mono text-xs text-muted-foreground tabular truncate">{acc.number || acc.phoneNumberId}</p>
+      </div>
+      <div className="hidden sm:block text-xs space-y-0.5">
+        <p className="flex items-center gap-1.5">
+          <TypeIcon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+          {acc.connectionType === "BUSINESS_APP" ? "Business app + CRM" : "Cloud API"}
+        </p>
+        <p className="text-muted-foreground">{acc.verifiedName || "—"}</p>
+      </div>
+      <div className="hidden sm:block text-xs space-y-0.5">
+        <p className={cn("font-medium", STATUS_TONE[acc.status])}>
+          {acc.status === "CONNECTED" ? "Connected" : acc.status === "ERROR" ? "Needs attention" : acc.status}
+        </p>
+        <p className="text-muted-foreground">
+          Quality <span className={cn("font-medium", QUALITY_TONE[acc.qualityRating] || "")}>{acc.qualityRating || "—"}</span>
+          {acc.messagingLimit && <> · {acc.messagingLimit.replace("TIER_", "").replace("_", " ")}/day</>}
+        </p>
+      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${acc.label}`} disabled={Boolean(busy)}>
+            {busy ? <Loader2 className="animate-spin" /> : <MoreHorizontal />}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          {!acc.isDefault && (
+            <DropdownMenuItem onClick={() => run("default", () => whatsappAccountsApi.makeDefault(acc.id), "Default number changed")}>
+              <Star className="h-4 w-4" /> Make default
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onClick={() => run("verify", () => whatsappAccountsApi.verify(acc.id), "Checked with Meta")}>
+            <ShieldCheck className="h-4 w-4" /> Re-check with Meta
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onRename(acc)}><Pencil className="h-4 w-4" /> Rename</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onToken(acc)}><KeyRound className="h-4 w-4" /> Replace access token</DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <a href={acc.templateManagerUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" /> Templates in Meta</a>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDisconnect(acc)}>
+            <Unplug className="h-4 w-4" /> Disconnect
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {(acc.lastError || !acc.webhookSubscribed) && (
+        <p className="col-span-full flex items-start gap-1.5 text-2xs text-foreground">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />
+          {acc.lastError || "App is not subscribed to this business account's webhooks yet — use “Re-check with Meta”."}
+        </p>
+      )}
+    </li>
+  );
+}
 
 export default function WhatsAppConnectPage() {
-  const { accounts, metaAccount, addAccount, removeAccount, refreshAccounts } = useWaAccounts();
-  const [activeTab, setActiveTab] = useState("connect");
-  const [templateSyncing, setTemplateSyncing] = useState(false);
+  const { accounts, isLoading, error, refreshAccounts } = useWaAccounts();
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [renaming, setRenaming] = useState(null);
+  const [tokenFor, setTokenFor] = useState(null);
+  const [disconnecting, setDisconnecting] = useState(null);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [settings, setSettings] = useState(null);
 
-  // Modals
-  const [credentialsModalOpen, setCredentialsModalOpen] = useState(false);
-  const [testPingModalOpen, setTestPingModalOpen] = useState(false);
-  const [linkPersonalModalOpen, setLinkPersonalModalOpen] = useState(false);
-  const [addRepModalOpen, setAddRepModalOpen] = useState(false);
-  const [triggerConfigModalOpen, setTriggerConfigModalOpen] = useState(false);
-  const [editingTrigger, setEditingTrigger] = useState(null);
-
-  // Live Backend & Bridge State
-  const [liveApprovedTemplates, setLiveApprovedTemplates] = useState([]);
-  const [bridgeStatus, setBridgeStatus] = useState({
-    connected: false,
-    state: "close",
-    phone: null,
-    pushname: null,
-  });
-
-  // Webhook Diagnostic State
-  const [webhookChecking, setWebhookChecking] = useState(false);
-  const [webhookResult, setWebhookResult] = useState(null);
-
-  // Lead Rules (persisted)
-  const [leadRules, setLeadRules] = useState(() => {
-    try {
-      const saved = localStorage.getItem(LEAD_RULES_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return {
-      autoCreateLead: true,
-      extractName: true,
-      tagSource: true,
-      sourceTag: "WhatsApp Inbound",
-      aiBudgetParsing: true,
-      highIntentDetection: true,
-      highIntentKeywords: "pricing, quote, demo, discount, urgent, cost",
-      filterSpam: true,
-      notifyRep: true,
-      autoAssign: true,
-      routingPool: "inbound",
-      slaWarning: true,
-      slaMinutes: 15,
-    };
-  });
-
-  // Automation Rules (persisted)
-  const [autoRules, setAutoRules] = useState(() => {
-    try {
-      const saved = localStorage.getItem(AUTO_RULES_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    const initial = {};
-    AUTOMATION_TRIGGERS_DEF.forEach((r) => {
-      initial[r.id] = { enabled: r.default, template: r.template, timing: r.timing };
-    });
-    return initial;
-  });
-
-  // Scroll Container Ref to maintain smooth view
-  const scrollContainerRef = useRef(null);
   useEffect(() => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTo({ top: 0, behavior: "instant" });
-    }
-  }, [activeTab]);
-
-  // Poll Baileys Bridge Status
-  const fetchBridgeStatus = useCallback(async () => {
-    try {
-      const res = await waBridgeApi.getStatus();
-      if (res?.success && res?.data) {
-        setBridgeStatus(res.data);
-      }
-    } catch {}
+    whatsappInboxApi.settings().then(setSettings).catch(() => setSettings({ inboundAutoLead: false, error: true }));
   }, []);
 
-  useEffect(() => {
-    fetchBridgeStatus();
-    const interval = setInterval(fetchBridgeStatus, 4000);
-    return () => clearInterval(interval);
-  }, [fetchBridgeStatus]);
-
-  // Auto-close pairing modal when socket connects
-  useEffect(() => {
-    if (bridgeStatus.connected && linkPersonalModalOpen) {
-      toast.success(`Personal WhatsApp connected: +${bridgeStatus.phone || ""}`);
-      setLinkPersonalModalOpen(false);
-    }
-  }, [bridgeStatus.connected, linkPersonalModalOpen, bridgeStatus.phone]);
-
-  // Load Approved Templates from backend
-  useEffect(() => {
-    whatsappTemplatesApi
-      .getApproved()
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setLiveApprovedTemplates(data);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  // Filter personal accounts
-  const personalAccounts = accounts.filter((a) => a.type === "personal");
-
-  // ── Template Sync Handler ──────────────────────────────────────────────────
-  const handleSyncTemplates = async () => {
-    if (!metaAccount) {
-      toast.error("Connect a WhatsApp Business Account before syncing templates.");
-      setCredentialsModalOpen(true);
-      return;
-    }
-    setTemplateSyncing(true);
+  const syncTemplates = async () => {
+    setSyncing(true);
     try {
-      const res = await whatsappTemplatesApi.syncAll();
-      const count = Array.isArray(res) ? res.length : 0;
-      const approved = Array.isArray(res) ? res.filter((t) => t.status === "APPROVED") : [];
-      setLiveApprovedTemplates(approved);
-      toast.success(`Synced ${count} WhatsApp templates directly with Meta Graph API!`);
-    } catch (err) {
-      toast.error(err?.message || "Failed to sync templates with Meta. Please verify credentials.");
-    } finally {
-      setTemplateSyncing(false);
-    }
-  };
-
-  // ── Disconnect Bridge Handler ──────────────────────────────────────────────
-  const handleDisconnectBridge = async () => {
-    try {
-      const res = await waBridgeApi.logout();
-      if (res?.success) {
-        toast.success("Personal WhatsApp socket disconnected successfully.");
-        setBridgeStatus({ connected: false, state: "close", phone: null, pushname: null });
-      } else {
-        toast.error(res?.message || "Failed to disconnect socket.");
-      }
+      const list = await whatsappTemplatesApi.syncAll();
+      toast.success(`${list.length} templates synced from Meta`);
     } catch (e) {
-      toast.error(e?.message || "Error disconnecting bridge socket.");
-    }
-  };
-
-  // ── Save Lead Rules Handler ────────────────────────────────────────────────
-  const handleSaveLeadRules = (rules) => {
-    setLeadRules(rules);
-    try {
-      localStorage.setItem(LEAD_RULES_KEY, JSON.stringify(rules));
-    } catch {}
-  };
-
-  // ── Save Automation Rules Handler ──────────────────────────────────────────
-  const handleSaveAutoRules = () => {
-    try {
-      localStorage.setItem(AUTO_RULES_KEY, JSON.stringify(autoRules));
-      toast.success("All 5 automation workflow rules saved successfully!");
-    } catch {}
-  };
-
-  const handleOpenTriggerConfig = (trigger) => {
-    setEditingTrigger(trigger);
-    setTriggerConfigModalOpen(true);
-  };
-
-  const handleSaveSingleTrigger = (triggerId, config) => {
-    setAutoRules((prev) => {
-      const next = {
-        ...prev,
-        [triggerId]: {
-          ...(prev[triggerId] || {}),
-          template: config.template,
-          timing: config.timing,
-        },
-      };
-      try {
-        localStorage.setItem(AUTO_RULES_KEY, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-  };
-
-  // ── Run Webhook Diagnostic Challenge Check ─────────────────────────────────
-  const runWebhookHealthCheck = async () => {
-    setWebhookChecking(true);
-    const startTime = performance.now();
-    const challengeTest = `test_challenge_${Math.floor(Math.random() * 900000 + 100000)}`;
-
-    try {
-      const url = `${WEBHOOK_CALLBACK_URL}?hub.mode=subscribe&hub.verify_token=${encodeURIComponent(
-        WEBHOOK_VERIFY_TOKEN
-      )}&hub.challenge=${challengeTest}`;
-
-      const res = await fetch(url, { method: "GET" });
-      const elapsed = Math.round(performance.now() - startTime);
-      const text = await res.text();
-
-      if (res.ok && text.trim() === challengeTest) {
-        setWebhookResult({
-          status: "success",
-          statusCode: res.status,
-          latency: `${elapsed} ms`,
-          message: "Handshake verified! Server returned exact challenge echo.",
-          timestamp: new Date().toLocaleTimeString(),
-        });
-        toast.success(`Webhook verified! Response time: ${elapsed}ms`);
-      } else {
-        setWebhookResult({
-          status: "warning",
-          statusCode: res.status,
-          latency: `${elapsed} ms`,
-          message: `Endpoint responded with status ${res.status}. Expected challenge echo.`,
-          timestamp: new Date().toLocaleTimeString(),
-        });
-      }
-    } catch (err) {
-      const elapsed = Math.round(performance.now() - startTime);
-      setWebhookResult({
-        status: "error",
-        statusCode: 500,
-        latency: `${elapsed} ms`,
-        message: err?.message || "Could not reach webhook endpoint from browser context.",
-        timestamp: new Date().toLocaleTimeString(),
-      });
-      toast.error("Webhook endpoint ping failed. Check Nginx proxy settings.");
+      toast.error(e?.message || "Template sync failed");
     } finally {
-      setWebhookChecking(false);
+      setSyncing(false);
     }
   };
+
+  const saveDialog = async () => {
+    setSaving(true);
+    try {
+      if (renaming) {
+        await whatsappAccountsApi.rename(renaming.id, draft);
+        toast.success("Number renamed");
+        setRenaming(null);
+      } else if (tokenFor) {
+        await whatsappAccountsApi.updateToken(tokenFor.id, draft);
+        toast.success("Token replaced");
+        setTokenFor(null);
+      } else if (disconnecting) {
+        await whatsappAccountsApi.disconnect(disconnecting.id);
+        toast.success(`${disconnecting.label} disconnected`);
+        setDisconnecting(null);
+      }
+      setDraft("");
+      refreshAccounts();
+    } catch (e) {
+      toast.error(e?.message || "Action failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleAutoLead = async (v) => {
+    const prev = settings;
+    setSettings((s) => ({ ...s, inboundAutoLead: v }));
+    try {
+      setSettings(await whatsappInboxApi.updateSettings({ inboundAutoLead: v }));
+    } catch (e) {
+      setSettings(prev);
+      toast.error(e?.message || "Only admins can change this");
+    }
+  };
+
+  const dialogOpen = Boolean(renaming || tokenFor || disconnecting);
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-background text-foreground">
-      {/* ── Top Header Bar ── */}
-      <div className="shrink-0 flex items-center justify-between gap-4 px-6 py-3.5 border-b border-border bg-card shadow-xs">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20 shadow-xs">
-            <MessageCircle className="h-5 w-5" />
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        <header className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight">WhatsApp numbers</h1>
+            <p className="text-sm text-muted-foreground">Connect as many numbers as you need — each gets its own inbox channel, templates and campaigns.</p>
           </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm font-bold text-foreground leading-tight tracking-tight">
-                WhatsApp Connection Hub
-              </h1>
-              {metaAccount && metaAccount.status === "CONNECTED" ? (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 gap-1.5 py-0.5"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Meta Cloud API Active
-                </Badge>
-              ) : metaAccount ? (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 gap-1.5 py-0.5"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                  {metaAccount.status || "Needs Verification"}
-                </Badge>
-              ) : (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] bg-muted text-muted-foreground border-border gap-1.5 py-0.5"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60" />
-                  No WABA Connected
-                </Badge>
-              )}
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={syncTemplates} disabled={syncing || accounts.length === 0}>
+              <RefreshCw className={cn(syncing && "animate-spin")} /> Sync templates
+            </Button>
+            <Button size="sm" onClick={() => setConnectOpen(true)}><Plus /> Connect number</Button>
+          </div>
+        </header>
+
+        {/* Numbers */}
+        <section className="rounded-lg border border-border bg-card" aria-labelledby="numbers-h">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <h2 id="numbers-h" className="text-sm font-semibold">Connected numbers <span className="text-muted-foreground font-normal tabular">({accounts.length})</span></h2>
+          </div>
+          {isLoading ? (
+            <ul className="divide-y divide-border" aria-busy="true">
+              {[0, 1].map((i) => (
+                <li key={i} className="px-4 py-3 flex items-center gap-4">
+                  <div className="space-y-1.5 flex-1"><div className="h-3.5 w-40 rounded bg-muted animate-pulse" /><div className="h-3 w-28 rounded bg-muted animate-pulse" /></div>
+                  <div className="h-8 w-8 rounded bg-muted animate-pulse" />
+                </li>
+              ))}
+            </ul>
+          ) : error ? (
+            <div className="px-4 py-8 text-center space-y-2">
+              <p className="text-sm text-destructive">{error}</p>
+              <Button variant="outline" size="sm" onClick={refreshAccounts}>Retry</Button>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-              Official WhatsApp Business Cloud API v19.0 · Multi-Channel Inbound Routing · Lead Automation
-            </p>
-          </div>
-        </div>
+          ) : accounts.length === 0 ? (
+            <div className="px-4 py-10 text-center space-y-3">
+              <p className="text-sm font-medium">No WhatsApp number connected</p>
+              <p className="text-xs text-muted-foreground max-w-md mx-auto">Connect your WhatsApp Business app number (keeps working on your phone) or a Cloud API number to chat, send templates and run campaigns.</p>
+              <Button size="sm" onClick={() => setConnectOpen(true)}><Plus /> Connect number</Button>
+            </div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {accounts.map((acc) => (
+                <NumberRow key={acc.id} acc={acc} onChanged={refreshAccounts}
+                  onRename={(a) => { setDraft(a.label); setRenaming(a); }}
+                  onToken={(a) => { setDraft(""); setTokenFor(a); }}
+                  onDisconnect={(a) => setDisconnecting(a)} />
+              ))}
+            </ul>
+          )}
+        </section>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 text-xs gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 font-medium rounded-xl"
-            onClick={() => {
-              if (!metaAccount) {
-                toast.error("No WhatsApp channel connected. Please connect your Meta WABA account first.");
-                setCredentialsModalOpen(true);
-                return;
-              }
-              setTestPingModalOpen(true);
-            }}
-          >
-            <Send className="h-3.5 w-3.5" />
-            Send Test Ping
-          </Button>
+        <div className="grid lg:grid-cols-[1.4fr_1fr] gap-6">
+          <MetaAppSettings fields={WEBHOOK_FIELDS} />
 
-          <Button
-            size="sm"
-            className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-medium rounded-xl"
-            onClick={handleSyncTemplates}
-            disabled={templateSyncing}
-          >
-            <RefreshCw className={cn("h-3.5 w-3.5", templateSyncing && "animate-spin")} />
-            {templateSyncing ? "Syncing..." : "Sync Templates"}
-          </Button>
-        </div>
-      </div>
-
-      {/* ── Segmented Navigation Tabs ── */}
-      <div className="shrink-0 px-6 pt-2 pb-0 border-b border-border bg-card/60">
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
-          {[
-            {
-              id: "connect",
-              label: "Channels & Health",
-              icon: Globe,
-              badge: `${accounts.filter((a) => a.type === "meta").length || (metaAccount ? 1 : 0)} Active`,
-            },
-            { id: "settings", label: "Lead Capture", icon: Users, badge: "9 Rules" },
-            { id: "automation", label: "Automation Triggers", icon: Zap, badge: "5 Workflows" },
-            { id: "setup", label: "Setup Guide & Webhooks", icon: HelpCircle, badge: "Diagnostic" },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-all whitespace-nowrap",
-                  isActive
-                    ? "border-emerald-500 text-emerald-700 dark:text-emerald-400 bg-emerald-500/5 rounded-t-lg"
-                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                )}
-              >
-                <Icon
-                  className={cn(
-                    "h-3.5 w-3.5",
-                    isActive ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
-                  )}
-                />
-                {tab.label}
-                <span
-                  className={cn(
-                    "text-[10px] px-1.5 py-0.2 rounded-full font-bold ml-1",
-                    isActive
-                      ? "bg-emerald-500/20 text-emerald-800 dark:text-emerald-300"
-                      : "bg-muted text-muted-foreground"
-                  )}
-                >
-                  {tab.badge}
+          {/* Inbox rules */}
+          <section className="rounded-lg border border-border bg-card p-4 space-y-3" aria-labelledby="rules-h">
+            <h2 id="rules-h" className="text-sm font-semibold">New people who message you</h2>
+            <label className="flex items-start justify-between gap-4">
+              <span className="space-y-0.5">
+                <span className="block text-xs font-medium">Add to leads automatically</span>
+                <span className="block text-2xs text-muted-foreground">
+                  Off: they wait in the inbox as contacts and an agent chooses “Add to leads” or “Not a lead”. Click-to-WhatsApp ad replies are always leads.
                 </span>
-              </button>
-            );
-          })}
+              </span>
+              <Switch checked={Boolean(settings?.inboundAutoLead)} onCheckedChange={toggleAutoLead} disabled={!settings} aria-label="Add new WhatsApp contacts to leads automatically" />
+            </label>
+          </section>
         </div>
       </div>
 
-      {/* ── Main Scroll View ── */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-6 py-6 pb-24">
-        {activeTab === "connect" && (
-          <ChannelsHealthTab
-            metaAccount={metaAccount}
-            personalAccounts={personalAccounts}
-            bridgeStatus={bridgeStatus}
-            liveApprovedTemplates={liveApprovedTemplates}
-            onOpenCredentialsModal={() => setCredentialsModalOpen(true)}
-            onOpenLinkPersonalModal={() => setLinkPersonalModalOpen(true)}
-            onOpenAddRepModal={() => setAddRepModalOpen(true)}
-            onDisconnectBridge={handleDisconnectBridge}
-            onRemovePersonalAccount={(id) => {
-              removeAccount(id);
-              toast.success("Sales Rep account unlinked from workspace.");
-            }}
-            onSwitchTab={(t) => setActiveTab(t)}
-            onRunWebhookCheck={runWebhookHealthCheck}
-            onRefreshAccounts={refreshAccounts}
-          />
-        )}
+      <ConnectNumberDialog open={connectOpen} onOpenChange={setConnectOpen} onConnected={() => refreshAccounts()} />
 
-        {activeTab === "settings" && (
-          <LeadCaptureTab initialRules={leadRules} onSave={handleSaveLeadRules} />
-        )}
-
-        {activeTab === "automation" && (
-          <AutomationTriggersTab
-            autoRules={autoRules}
-            setAutoRules={setAutoRules}
-            onOpenTriggerConfig={handleOpenTriggerConfig}
-            onSaveRules={handleSaveAutoRules}
-          />
-        )}
-
-        {activeTab === "setup" && (
-          <SetupGuideTab
-            webhookChecking={webhookChecking}
-            webhookResult={webhookResult}
-            onRunWebhookCheck={runWebhookHealthCheck}
-          />
-        )}
-      </div>
-
-      {/* ── Production-Grade Modals (React Hook Form + Zod) ── */}
-      <CredentialsModal
-        open={credentialsModalOpen}
-        onOpenChange={setCredentialsModalOpen}
-        metaAccount={metaAccount}
-        onSave={async (vals) => {
-          await addAccount({
-            type: "meta",
-            label: vals.label,
-            phoneId: vals.phoneId,
-            wabaId: vals.wabaId,
-            token: vals.token,
-          });
-          await refreshAccounts();
-        }}
-      />
-
-      <TestPingModal
-        open={testPingModalOpen}
-        onOpenChange={setTestPingModalOpen}
-        metaAccount={metaAccount}
-      />
-
-      <LinkPersonalModal
-        open={linkPersonalModalOpen}
-        onOpenChange={setLinkPersonalModalOpen}
-        bridgeStatus={bridgeStatus}
-        onBridgeStatusRefresh={fetchBridgeStatus}
-      />
-
-      <AddRepModal
-        open={addRepModalOpen}
-        onOpenChange={setAddRepModalOpen}
-        onAddAccount={async (acc) => {
-          await addAccount(acc);
-          await refreshAccounts();
-        }}
-      />
-
-      <TriggerConfigModal
-        open={triggerConfigModalOpen}
-        onOpenChange={setTriggerConfigModalOpen}
-        trigger={editingTrigger}
-        currentConfig={editingTrigger ? autoRules[editingTrigger.id] : null}
-        templates={liveApprovedTemplates}
-        onSave={handleSaveSingleTrigger}
-      />
+      <Dialog open={dialogOpen} onOpenChange={(v) => { if (!v) { setRenaming(null); setTokenFor(null); setDisconnecting(null); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader className="text-left">
+            <DialogTitle className="text-base font-semibold">
+              {renaming ? "Rename number" : tokenFor ? "Replace access token" : `Disconnect ${disconnecting?.label}?`}
+            </DialogTitle>
+            <DialogDescription>
+              {disconnecting
+                ? "Chats and campaign history stay in the CRM. You can connect the number again later."
+                : tokenFor ? "Paste a new permanent System User token. It is checked with Meta before saving." : "Shown to your team in the inbox and campaign builder."}
+            </DialogDescription>
+          </DialogHeader>
+          {!disconnecting && (
+            <div className="space-y-1.5">
+              <Label htmlFor="num-dialog-input" className="text-xs">{renaming ? "Name" : "Access token"}</Label>
+              <Input id="num-dialog-input" value={draft} onChange={(e) => setDraft(e.target.value)} type={tokenFor ? "password" : "text"}
+                autoComplete="off" className={cn("h-9 text-sm", tokenFor && "font-mono")} />
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => { setRenaming(null); setTokenFor(null); setDisconnecting(null); }}>Cancel</Button>
+            <Button size="sm" variant={disconnecting ? "destructive" : "default"} onClick={saveDialog} disabled={saving || (!disconnecting && !draft.trim())}>
+              {saving && <Loader2 className="animate-spin" />} {disconnecting ? "Disconnect" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

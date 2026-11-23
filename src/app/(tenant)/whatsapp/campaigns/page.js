@@ -1,901 +1,289 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
+import { Plus, Search, MoreHorizontal, Play, Pause, Ban, CopyPlus, Trash2, Eye, Loader2, AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Megaphone, Plus, Send, Eye, MessageCircle, CheckCheck, XCircle,
-  Clock, Users, Play, Pause, Copy, Trash2, Search, AlertCircle,
-  RefreshCw, Upload, FileSpreadsheet, AlertTriangle, Loader2,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileText,
-  Globe, Smartphone, Filter, Check,
-} from "lucide-react";
-import { toast } from "sonner";
-import {
-  MOCK_TEMPLATES, STATUS_CFG, encodeId,
-} from "./data";
-// Note: MOCK_CAMPAIGNS removed — campaigns loaded from API
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useWaAccounts } from "../wa-accounts-context";
-import { whatsappCampaignsApi, whatsappTemplatesApi, whatsappSendApi, subscribeCampaignProgress } from "@/lib/api/whatsapp";
-import { isApiMode, apiRequest } from "@/lib/api/client";
+import { whatsappCampaignsApi, subscribeCampaignProgress } from "@/lib/api/whatsapp";
+import { CampaignBuilderDialog } from "@/components/whatsapp/campaign-builder-dialog";
+import { STATUS_CFG, encodeId } from "./data";
+import { cn } from "@/lib/utils";
 
-const PAGE_SIZE_OPTIONS = [5, 10, 20];
-const BLANK_FORM = {
-  name: "", templateId: "", segmentId: "",
-  scheduleDate: "", scheduleTime: "",
-  contactMode: "segment",
-  manualNumbers: "",
-  excelFile: null,
-  excelFileName: "",
-  parsedPhones: [],
-  filterStage: "all",
-  filterSource: "all",
-  filterCity: "",
-  audienceCount: null,
-  testPhone: "",
-  variableValues: {},
-};
+const FILTERS = ["all", "running", "scheduled", "draft", "paused", "completed", "cancelled"];
 
-// ─── Template Preview ─────────────────────────────────────────────────────────
+function mapCampaign(c) {
+  return {
+    id: String(c.id),
+    name: c.name,
+    template: c.templateName || "—",
+    status: String(c.status || "DRAFT").toLowerCase(),
+    total: c.totalRecipients || 0,
+    sent: c.sentCount || 0,
+    delivered: c.deliveredCount || 0,
+    read: c.readCount || 0,
+    replied: c.repliedCount || 0,
+    failed: c.failedCount || 0,
+    accountId: c.whatsappAccountId || null,
+    scheduledAt: c.scheduledAt,
+    createdAt: c.createdAt,
+  };
+}
 
-function TemplatePreview({ tmpl, varValues }) {
-  if (!tmpl) return null;
-  const rendered = tmpl.body.replace(/\{\{(\d+)\}\}/g, (_, n) => {
-    const key = tmpl.variables[parseInt(n) - 1];
-    return varValues?.[key] ? `[${varValues[key]}]` : `{{${n}}}`;
-  });
+const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
+const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
+
+/** Funnel strip: sent → delivered → read → replied, plus failures. */
+function Funnel({ c }) {
+  const processed = c.sent + c.failed;
   return (
-    <div className="rounded-xl bg-[#0b141a] p-3">
-      <p className="text-[9px] font-semibold uppercase tracking-widest text-white/30 mb-2">Preview</p>
-      <div className="bg-[#1f2c34] rounded-xl rounded-tl-sm p-2.5 max-w-[90%] shadow-sm">
-        {tmpl.header && <p className="text-[10px] font-bold text-white mb-1.5 pb-1.5 border-b border-white/10">{tmpl.header}</p>}
-        <p className="text-[10px] text-white/90 leading-relaxed whitespace-pre-wrap">{rendered.replace(/\*([^*]+)\*/g, "$1")}</p>
-        {tmpl.footer && <p className="text-[9px] text-white/40 mt-1.5 pt-1.5 border-t border-white/10">{tmpl.footer}</p>}
-        <p className="text-[8px] text-white/30 text-right mt-1">9:41 AM ✓✓</p>
+    <div className="min-w-[180px] space-y-1">
+      <div className="h-1.5 rounded-full bg-muted overflow-hidden flex" role="progressbar" aria-valuenow={pct(processed, c.total)} aria-valuemin={0} aria-valuemax={100} aria-label="Progress">
+        <span className="bg-primary h-full" style={{ width: `${pct(c.sent, c.total)}%` }} />
+        <span className="bg-destructive h-full" style={{ width: `${pct(c.failed, c.total)}%` }} />
       </div>
+      <p className="text-2xs text-muted-foreground tabular">
+        <span className="text-foreground font-medium">{c.sent.toLocaleString()}</span>/{c.total.toLocaleString()} sent
+        {c.sent > 0 && <> · {pct(c.delivered, c.sent)}% delivered · {pct(c.read, c.sent)}% read · {c.replied} replied</>}
+        {c.failed > 0 && <span className="text-destructive"> · {c.failed} failed</span>}
+      </p>
     </div>
   );
 }
 
-// ─── Create Campaign Modal ────────────────────────────────────────────────────
-
-function CreateCampaignModal({ open, onClose, onSubmit, templates = [], segments = [] }) {
-  const [form, setForm] = useState({ ...BLANK_FORM });
-  const [step, setStep] = useState(1);
-  const [localTemplates, setLocalTemplates] = useState([]);
-  const [isParsingFile, setIsParsingFile] = useState(false);
-  const [isEstimating, setIsEstimating] = useState(false);
-  const [isSendingTest, setIsSendingTest] = useState(false);
-  const fileRef = useRef(null);
-
-  // Auto-fetch templates when modal opens
-  useEffect(() => {
-    if (!open) return;
-    if (templates && templates.length > 0) {
-      setLocalTemplates(templates);
-    } else {
-      whatsappTemplatesApi.getAll()
-        .then((list) => {
-          if (Array.isArray(list) && list.length > 0) setLocalTemplates(list);
-          else setLocalTemplates(MOCK_TEMPLATES);
-        })
-        .catch(() => setLocalTemplates(MOCK_TEMPLATES));
-    }
-  }, [open, templates]);
-
-  const activeTemplates = localTemplates.length > 0 ? localTemplates : (templates.length > 0 ? templates : MOCK_TEMPLATES);
-  const selectedTemplate = activeTemplates.find((t) => t.id === form.templateId || t.templateName === form.templateId);
-  const selectedSegment = segments.find((s) => s.id === form.segmentId);
-
-  const setF = (patch) => setForm((p) => ({ ...p, ...patch }));
-  const setVar = (key, val) => setForm((p) => ({ ...p, variableValues: { ...p.variableValues, [key]: val } }));
-
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.name.match(/\.(xlsx|xls|csv)$/i)) return toast.error("Only .xlsx, .xls, or .csv files allowed");
-
-    setIsParsingFile(true);
-    setF({ excelFile: file, excelFileName: file.name, parsedPhones: [] });
-
-    try {
-      const XLSX = (await import("xlsx")).default || (await import("xlsx"));
-      const buffer = await file.arrayBuffer();
-      const wb = XLSX.read(buffer, { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-
-      if (!data || data.length === 0) throw new Error("Spreadsheet appears to be empty");
-
-      const headerRow = (data[0] || []).map((h) => String(h).toLowerCase().trim());
-      const phoneKeywords = ["phone", "mobile", "contact", "number", "whatsapp", "cell"];
-      let phoneColIdx = headerRow.findIndex((col) => phoneKeywords.some((k) => col.includes(k)));
-      let startRow = 1;
-
-      if (phoneColIdx === -1) {
-        phoneColIdx = 0;
-        startRow = 0;
-      }
-
-      const extracted = [];
-      for (let r = startRow; r < data.length; r++) {
-        const val = String(data[r]?.[phoneColIdx] || "").trim();
-        const digits = val.replace(/\D/g, "");
-        if (digits.length >= 10) {
-          extracted.push(digits.length === 10 ? `+91${digits}` : (digits.startsWith("91") ? `+${digits}` : `+${digits}`));
-        }
-      }
-
-      const uniquePhones = Array.from(new Set(extracted));
-      if (uniquePhones.length === 0) throw new Error("No phone numbers with 10+ digits found in column " + (phoneColIdx + 1));
-
-      setF({ parsedPhones: uniquePhones });
-      toast.success(`Found ${uniquePhones.length} valid phone numbers!`);
-    } catch (err) {
-      toast.error(err.message || "Failed to parse file");
-    } finally {
-      setIsParsingFile(false);
-    }
-  };
-
-  const handleEstimateAudience = async () => {
-    setIsEstimating(true);
-    try {
-      const res = await whatsappCampaignsApi.previewAudience({
-        stage: form.filterStage !== "all" ? form.filterStage : undefined,
-        source: form.filterSource !== "all" ? form.filterSource : undefined,
-      });
-      const count = res?.count ?? res?.total ?? 250;
-      setF({ audienceCount: count });
-      toast.success(`Estimated audience: ${count} matching leads`);
-    } catch {
-      setF({ audienceCount: 150 });
-    } finally {
-      setIsEstimating(false);
-    }
-  };
-
-  const handleSendTest = async () => {
-    if (!form.testPhone?.trim()) return toast.error("Enter a phone number with country code (e.g. +91...)");
-    setIsSendingTest(true);
-    try {
-      await whatsappSendApi.sendTemplate({
-        phone: form.testPhone.trim(),
-        name: "Test Contact",
-        templateId: selectedTemplate?.id || selectedTemplate?.templateName,
-        variables: Object.values(form.variableValues || {}),
-      });
-      toast.success("Test message dispatched to " + form.testPhone);
-    } catch (e) {
-      toast.error(e?.message || "Failed to send test message");
-    } finally {
-      setIsSendingTest(false);
-    }
-  };
-
-  const handleClose = () => { setForm({ ...BLANK_FORM }); setStep(1); onClose(); };
-
-  const canStep1 = form.name.trim() && form.templateId;
-  const canStep2 = form.contactMode === "segment"
-    ? !!form.segmentId
-    : form.contactMode === "manual"
-      ? form.manualNumbers.trim().length > 0
-      : form.contactMode === "filter"
-        ? true
-        : form.parsedPhones && form.parsedPhones.length > 0;
-
-  const handleCreate = () => {
-    if (!canStep1 || !canStep2) return toast.error("Please fill all required fields");
-    onSubmit(form, selectedTemplate, selectedSegment);
-    handleClose();
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl p-0 overflow-hidden">
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-card">
-          <div className="h-8 w-8 rounded-lg bg-emerald-500 flex items-center justify-center shrink-0">
-            <Megaphone className="h-4 w-4 text-white" />
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-foreground">New WhatsApp Broadcast Campaign</p>
-            <p className="text-[11px] text-muted-foreground">Step {step} of 2 — {step === 1 ? "Select Template & Custom Variables" : "Configure Audience, Filters & Schedule"}</p>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            {[1, 2].map((s) => (
-              <div key={s} className={`h-1.5 w-8 rounded-full transition-colors ${s <= step ? "bg-emerald-500" : "bg-muted"}`} />
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 min-h-0">
-          <div className="p-5 space-y-3.5 overflow-y-auto max-h-[68vh] border-r border-border">
-            {step === 1 ? (
-              <>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">Campaign Name <span className="text-red-500">*</span></Label>
-                  <Input value={form.name} onChange={(e) => setF({ name: e.target.value })} placeholder="e.g. Q1 Festival Price Drop Broadcast" className="h-8 text-xs" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-foreground flex items-center justify-between">
-                    <span>Message Template <span className="text-rose-500">*</span></span>
-                    {activeTemplates.length > 0 && (
-                      <span className="text-[10px] text-emerald-500 font-normal">{activeTemplates.length} templates available</span>
-                    )}
-                  </Label>
-                  <select
-                    value={form.templateId || ""}
-                    onChange={(e) => setF({ templateId: e.target.value, variableValues: {} })}
-                    className="w-full h-9 px-3 text-xs rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium cursor-pointer shadow-sm"
-                  >
-                    <option value="" disabled>-- Select a WhatsApp Template --</option>
-                    {activeTemplates.map((t) => (
-                      <option key={t.id || t.templateName} value={t.id || t.templateName}>
-                        {t.displayName || t.templateName} ({t.category || "MARKETING"})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {selectedTemplate?.variables?.length > 0 && (
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">Template Variables (Personalization)</Label>
-                    <div className="space-y-2">
-                      {selectedTemplate.variables.map((v, i) => (
-                        <div key={v} className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-1 rounded shrink-0 w-10 text-center">{`{{${i + 1}}}`}</span>
-                          <Input value={form.variableValues[v] || ""} onChange={(e) => setVar(v, e.target.value)} placeholder={`e.g. ${v.replace(/_/g, " ")}`} className="h-7 text-xs flex-1" />
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">Values substitute into preview on the right →</p>
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">Target Audience Source <span className="text-red-500">*</span></Label>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {[
-                      { val: "segment", label: "Segment", Icon: Users },
-                      { val: "filter", label: "CRM Filter", Icon: Filter },
-                      { val: "excel", label: "Excel / CSV", Icon: FileSpreadsheet },
-                      { val: "manual", label: "Manual", Icon: FileText },
-                    ].map(({ val, label, Icon }) => (
-                      <button key={val} type="button" onClick={() => setF({ contactMode: val })}
-                        className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-[11px] font-medium transition-colors ${form.contactMode === val ? "border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-border text-muted-foreground hover:text-foreground"}`}>
-                        <Icon className="h-3.5 w-3.5" />{label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {form.contactMode === "segment" && (
-                  <div className="space-y-1.5">
-                    <Select value={form.segmentId} onValueChange={(v) => setF({ segmentId: v })}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select segment" /></SelectTrigger>
-                      <SelectContent>
-                        {segments.map((s) => (
-                          <SelectItem key={s.id} value={s.id} className="text-xs">
-                            {s.name || s.label} <span className="text-muted-foreground">({(s.count || 0).toLocaleString()} leads)</span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {selectedSegment && (
-                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                        <Users className="h-3 w-3" />{selectedSegment.count.toLocaleString()} contacts in this segment
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {form.contactMode === "filter" && (
-                  <div className="space-y-2 p-3 rounded-xl bg-muted/30 border border-border">
-                    <p className="text-[11px] font-semibold text-foreground">Filter CRM Leads Dynamically</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-[10px]">Lead Stage</Label>
-                        <Select value={form.filterStage} onValueChange={(v) => setF({ filterStage: v })}>
-                          <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {["all", "NEW", "CONTACTED", "INTERESTED", "SITE_VISIT_SCHEDULED", "NEGOTIATION", "WON"].map((st) => (
-                              <SelectItem key={st} value={st} className="text-xs">{st === "all" ? "All Stages" : st}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px]">Lead Source</Label>
-                        <Select value={form.filterSource} onValueChange={(v) => setF({ filterSource: v })}>
-                          <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {["all", "META_ADS", "WEBSITE", "JUSTDIAL", "INDIAMART", "WHATSAPP", "REFERRAL"].map((src) => (
-                              <SelectItem key={src} value={src} className="text-xs">{src === "all" ? "All Sources" : src}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between pt-1">
-                      <Button type="button" size="sm" variant="outline" className="h-6 text-[10px]" onClick={handleEstimateAudience} disabled={isEstimating}>
-                        {isEstimating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Users className="h-3 w-3 mr-1" />}
-                        Estimate Audience
-                      </Button>
-                      {form.audienceCount !== null && (
-                        <span className="text-[11px] font-bold text-emerald-600">~{form.audienceCount} leads</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {form.contactMode === "excel" && (
-                  <div className="space-y-2">
-                    <div onClick={() => fileRef.current?.click()}
-                      className="border-2 border-dashed border-border rounded-xl p-4 flex flex-col items-center gap-1.5 cursor-pointer hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-colors">
-                      <FileSpreadsheet className="h-6 w-6 text-muted-foreground/60" />
-                      {form.excelFileName ? (
-                        <div className="text-center">
-                          <p className="text-xs font-semibold text-foreground">{form.excelFileName}</p>
-                          {form.parsedPhones.length > 0 && (
-                            <p className="text-[10px] text-emerald-600 font-bold mt-0.5">
-                              ✓ {form.parsedPhones.length} valid phone numbers parsed
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-center">
-                          <p className="text-xs font-medium text-foreground">Click to upload Excel / CSV</p>
-                          <p className="text-[10px] text-muted-foreground">.xlsx, .xls, or .csv (auto-detects phone column)</p>
-                        </div>
-                      )}
-                    </div>
-                    <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileUpload} />
-                    {isParsingFile && (
-                      <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                        <Loader2 className="h-3 w-3 animate-spin" /> Parsing phone column...
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {form.contactMode === "manual" && (
-                  <div className="space-y-1.5">
-                    <Textarea value={form.manualNumbers} onChange={(e) => setF({ manualNumbers: e.target.value })}
-                      placeholder={"Enter phone numbers (one per line)\n+919876543210\n+918765432109"}
-                      className="text-xs min-h-[90px] resize-none font-mono" />
-                    <p className="text-[10px] text-muted-foreground">
-                      {form.manualNumbers.trim() ? `${form.manualNumbers.trim().split("\n").filter(Boolean).length} numbers entered` : "Include country code e.g. +91"}
-                    </p>
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">Schedule Broadcast <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input type="date" value={form.scheduleDate} onChange={(e) => setF({ scheduleDate: e.target.value })} className="h-8 text-xs" />
-                    <Input type="time" value={form.scheduleTime} onChange={(e) => setF({ scheduleTime: e.target.value })} className="h-8 text-xs" />
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="p-5 bg-muted/20 flex flex-col gap-3.5 overflow-y-auto max-h-[68vh]">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">WhatsApp Live Preview</p>
-            {selectedTemplate ? (
-              <TemplatePreview tmpl={selectedTemplate} varValues={form.variableValues} />
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground/40 py-8">
-                <MessageCircle className="h-8 w-8" />
-                <p className="text-xs">Select a template to preview</p>
-              </div>
-            )}
-
-            {/* Test Send Section */}
-            {selectedTemplate && (
-              <div className="p-3 rounded-xl bg-card border border-border space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Test Send to My Phone</p>
-                <div className="flex items-center gap-1.5">
-                  <Input
-                    placeholder="+91..."
-                    value={form.testPhone}
-                    onChange={(e) => setF({ testPhone: e.target.value })}
-                    className="h-7 text-xs flex-1 font-mono"
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs font-medium shrink-0"
-                    onClick={handleSendTest}
-                    disabled={isSendingTest || !form.testPhone.trim()}
-                  >
-                    {isSendingTest ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3 mr-1" />}
-                    Send Test
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {step === 2 && selectedTemplate && (
-              <div className="space-y-1.5 p-3 rounded-xl bg-card border border-border text-[11px]">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Campaign Summary</p>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Template:</span>
-                  <span className="font-semibold text-foreground truncate max-w-[65%]">{selectedTemplate.displayName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Audience:</span>
-                  <span className="font-semibold text-foreground">
-                    {form.contactMode === "segment" ? (selectedSegment?.name || "Segment") :
-                     form.contactMode === "excel" ? `${form.parsedPhones.length} Excel contacts` :
-                     form.contactMode === "manual" ? `${form.manualNumbers.trim().split("\n").filter(Boolean).length} manual numbers` :
-                     `Filtered Leads (~${form.audienceCount || "All"})`}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Timing:</span>
-                  <span className="font-semibold text-foreground">{form.scheduleDate ? `${form.scheduleDate} ${form.scheduleTime || "09:00"}` : "Immediate / Draft"}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-t border-border bg-card">
-          <Button variant="outline" size="sm" className="text-xs" onClick={step === 1 ? handleClose : () => setStep(1)}>
-            {step === 1 ? "Cancel" : "← Back"}
-          </Button>
-          {step === 1 ? (
-            <Button size="sm" className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white" disabled={!canStep1} onClick={() => setStep(2)}>
-              Next: Audience →
-            </Button>
-          ) : (
-            <Button size="sm" className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white" disabled={!canStep2} onClick={handleCreate}>
-              <Send className="h-3.5 w-3.5 mr-1.5" />Create Campaign
-            </Button>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
 export default function WhatsAppCampaignsPage() {
   const router = useRouter();
-  const { accounts } = useWaAccounts();
-  const metaAccounts = accounts.filter((a) => a.type === "meta");
-  const onlyPersonal = accounts.length > 0 && metaAccounts.length === 0;
-
+  const { accounts, defaultAccount, accountById, isLoading: accountsLoading } = useWaAccounts();
   const [campaigns, setCampaigns] = useState([]);
-  const [apiTemplates, setApiTemplates] = useState([]);
-  const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(false);
+  const [state, setState] = useState("loading");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [createOpen, setCreateOpen] = useState(false);
-  const [deleteId, setDeleteId] = useState(null);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [filter, setFilter] = useState("all");
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const [confirm, setConfirm] = useState(null); // { type: delete|cancel, c }
 
-  // Load campaigns from API
-  useEffect(() => {
-    if (!isApiMode()) { setCampaigns([]); return; }
-    setIsLoadingCampaigns(true);
-    whatsappCampaignsApi.getAll({ size: 100 })
-      .then((data) => {
-        const items = Array.isArray(data) ? data : (data?.content || []);
-        setCampaigns(items.map((c) => ({
-          id: c.id,
-          name: c.name || "",
-          template: c.templateName || c.template || "",
-          templateId: c.templateId || "",
-          segment: c.segmentName || c.segment || "All Leads",
-          status: (c.status || "draft").toLowerCase(),
-          scheduledAt: c.scheduledAt ? new Date(c.scheduledAt).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—",
-          sent: c.sentCount || 0,
-          delivered: c.deliveredCount || 0,
-          read: c.readCount || 0,
-          replied: c.repliedCount || 0,
-          failed: c.failedCount || 0,
-          createdAt: c.createdAt ? new Date(c.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "",
-        })));
-      })
-      .catch(() => { })
-      .finally(() => setIsLoadingCampaigns(false));
+  const load = useCallback(async () => {
+    try {
+      const page = await whatsappCampaignsApi.getAll({ size: 100 });
+      setCampaigns(page.items.map(mapCampaign));
+      setState("ready");
+    } catch {
+      setState("error");
+    }
   }, []);
 
-  // Load approved templates from API
-  useEffect(() => {
-    if (!isApiMode()) return;
-    whatsappTemplatesApi.getApproved()
-      .then((data) => { if (Array.isArray(data) && data.length > 0) setApiTemplates(data); })
-      .catch(() => { });
-  }, []);
+  useEffect(() => { load(); }, [load]);
 
-  // Load real computed segments from API
-  const [segments, setSegments] = useState([]);
-  useEffect(() => {
-    apiRequest("/segments")
-      .then((data) => {
-        const list = Array.isArray(data) ? data : (data?.data || []);
-        if (Array.isArray(list)) setSegments(list);
-      })
-      .catch(() => setSegments([]));
-  }, []);
+  useEffect(() => subscribeCampaignProgress((p) => {
+    setCampaigns((list) => list.map((c) => (c.id === String(p.campaignId) ? {
+      ...c,
+      status: p.status ? String(p.status).toLowerCase() : c.status,
+      sent: p.sentCount ?? c.sent, failed: p.failedCount ?? c.failed,
+      delivered: p.deliveredCount ?? c.delivered, read: p.readCount ?? c.read, total: p.totalRecipients ?? c.total,
+    } : c)));
+  }), []);
 
-  // WebSocket: live campaign progress
-  useEffect(() => {
-    if (!isApiMode()) return;
-    const unsub = subscribeCampaignProgress((data) => {
-      setCampaigns((prev) => prev.map((c) =>
-        c.id === data.campaignId
-          ? { ...c, sent: data.sentCount ?? c.sent, failed: data.failedCount ?? c.failed }
-          : c
-      ));
-    });
-    return unsub;
-  }, []);
+  const act = async (c, fn, ok) => {
+    setBusyId(c.id);
+    try {
+      const res = await fn();
+      if (res?.id) setCampaigns((list) => list.map((x) => (x.id === String(res.id) ? { ...x, ...mapCampaign(res), replied: x.replied } : x)));
+      toast.success(ok);
+    } catch (e) {
+      toast.error(e?.message || "Action failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const runConfirm = async () => {
+    const { type, c } = confirm;
+    if (type === "delete") {
+      setBusyId(c.id);
+      try {
+        await whatsappCampaignsApi.delete(c.id);
+        setCampaigns((list) => list.filter((x) => x.id !== c.id));
+        toast.success("Campaign deleted");
+      } catch (e) {
+        toast.error(e?.message || "Delete failed");
+      } finally {
+        setBusyId(null);
+      }
+    } else {
+      await act(c, () => whatsappCampaignsApi.cancel(c.id), "Campaign cancelled");
+    }
+    setConfirm(null);
+  };
 
   const filtered = useMemo(() => campaigns.filter((c) => {
-    const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.template.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === "all" || c.status === statusFilter;
-    return matchSearch && matchStatus;
-  }), [campaigns, search, statusFilter]);
+    const q = search.trim().toLowerCase();
+    if (q && !c.name.toLowerCase().includes(q) && !c.template.toLowerCase().includes(q)) return false;
+    return filter === "all" || c.status === filter;
+  }), [campaigns, search, filter]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const safePage = Math.min(page, totalPages);
-  const pageItems = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
-  React.useEffect(() => setPage(1), [search, statusFilter, pageSize]);
-
-  const stats = useMemo(() => {
+  const totals = useMemo(() => {
     const sent = campaigns.reduce((s, c) => s + c.sent, 0);
-    const read = campaigns.reduce((s, c) => s + c.read, 0);
     return {
-      total: campaigns.length,
       running: campaigns.filter((c) => c.status === "running").length,
       sent,
-      readRate: sent > 0 ? Math.round((read / sent) * 100) : 0,
+      read: pct(campaigns.reduce((s, c) => s + c.read, 0), sent),
+      replied: pct(campaigns.reduce((s, c) => s + c.replied, 0), sent),
     };
   }, [campaigns]);
 
-  const handleCreate = async (form, tmpl, seg) => {
-    let phoneNumbers = null;
-    if (form.contactMode === "excel" && form.parsedPhones?.length > 0) {
-      phoneNumbers = form.parsedPhones;
-    } else if (form.contactMode === "manual" && form.manualNumbers) {
-      phoneNumbers = form.manualNumbers.split("\n").map((n) => n.trim()).filter((n) => n.length >= 10);
-    }
-
-    let filterCriteriaJson = null;
-    if (form.contactMode === "filter") {
-      filterCriteriaJson = JSON.stringify({
-        stage: form.filterStage !== "all" ? form.filterStage : null,
-        source: form.filterSource !== "all" ? form.filterSource : null,
-      });
-    }
-
-    const payload = {
-      name: form.name,
-      templateId: tmpl?.id || null,
-      messageBody: null,
-      type: "OFFICIAL_API",
-      scheduledAt: form.scheduleDate ? `${form.scheduleDate}T${form.scheduleTime || "09:00"}:00` : null,
-      segmentId: form.contactMode === "segment" ? form.segmentId || null : null,
-      phoneNumbers: phoneNumbers,
-      filterCriteriaJson: filterCriteriaJson,
-    };
-    if (isApiMode()) {
-      try {
-        const created = await whatsappCampaignsApi.create(payload);
-        setCampaigns((prev) => [{
-          id: created.id,
-          name: form.name,
-          template: tmpl?.displayName || "",
-          templateId: tmpl?.id || "",
-          segment: form.contactMode === "segment" ? (seg?.label || "") : form.contactMode === "manual" ? `${phoneNumbers?.length || 0} manual numbers` : form.contactMode === "filter" ? "CRM Filtered Leads" : `${phoneNumbers?.length || 0} Excel contacts`,
-          status: form.scheduleDate ? "scheduled" : "draft",
-          scheduledAt: form.scheduleDate ? `${form.scheduleDate} · ${form.scheduleTime || "09:00"}` : "—",
-          sent: 0, delivered: 0, read: 0, replied: 0, failed: 0,
-          createdAt: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-        }, ...prev]);
-        toast.success("Campaign created successfully!");
-      } catch (err) {
-        toast.error(err?.message || "Failed to create campaign");
-        return;
-      }
-    } else {
-      const newC = {
-        id: `c_${Date.now()}`, name: form.name,
-        templateId: tmpl?.id || "", template: tmpl?.displayName || "",
-        segment: form.contactMode === "segment" ? (seg?.label || "") : form.contactMode === "manual" ? `${phoneNumbers?.length || 0} manual numbers` : form.contactMode === "filter" ? "CRM Filtered Leads" : `${phoneNumbers?.length || 0} Excel contacts`,
-        status: form.scheduleDate ? "scheduled" : "draft",
-        scheduledAt: form.scheduleDate ? `${form.scheduleDate} · ${form.scheduleTime || "09:00"}` : "—",
-        sent: 0, delivered: 0, read: 0, replied: 0, failed: 0,
-        createdAt: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-      };
-      setCampaigns((prev) => [newC, ...prev]);
-      toast.success("Campaign created successfully");
-    }
-  };
-
-  const togglePause = async (id) => {
-    const c = campaigns.find((x) => x.id === id);
-    if (!c) return;
-    const next = c.status === "running" ? "paused" : "running";
-    if (isApiMode()) {
-      try {
-        if (next === "paused") await whatsappCampaignsApi.pause(id);
-        else await whatsappCampaignsApi.start(id);
-      } catch { toast.error("Action failed"); return; }
-    }
-    setCampaigns((prev) => prev.map((x) => x.id === id ? { ...x, status: next } : x));
-    toast.success(`Campaign ${next === "paused" ? "paused" : "resumed"}`);
-  };
-
-  const sendNow = async (id) => {
-    if (isApiMode()) {
-      try { await whatsappCampaignsApi.start(id); } catch { toast.error("Failed to start campaign"); return; }
-    }
-    setCampaigns((prev) => prev.map((c) => c.id === id ? { ...c, status: "running" } : c));
-    const c = campaigns.find((x) => x.id === id);
-    toast.success(`Campaign "${c?.name}" is now running`);
-  };
-
-  const handleDelete = async (id) => {
-    if (isApiMode()) {
-      try { await whatsappCampaignsApi.delete(id); } catch { toast.error("Delete failed"); return; }
-    }
-    setCampaigns((prev) => prev.filter((c) => c.id !== id));
-    setDeleteId(null);
-    toast.success("Campaign deleted");
-  };
-
-  const duplicate = (c) => {
-    setCampaigns((prev) => [{ ...c, id: `c_${Date.now()}`, name: `${c.name} (Copy)`, status: "draft", sent: 0, delivered: 0, read: 0, replied: 0, failed: 0 }, ...prev]);
-    toast.success("Campaign duplicated");
-  };
+  const noNumber = !accountsLoading && accounts.length === 0;
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-background">
-
-      {/* Top Bar */}
-      <div className="shrink-0 flex items-center justify-between gap-4 px-6 py-3 border-b border-border bg-card">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="h-8 w-8 rounded-lg bg-emerald-500 flex items-center justify-center shrink-0">
-            <Megaphone className="h-4 w-4 text-white" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-sm font-bold text-foreground leading-tight">WhatsApp Campaigns</h1>
-            <p className="text-[11px] text-muted-foreground">Send bulk messages using Meta-approved templates</p>
-          </div>
+    <div className="h-full w-full min-w-0 max-w-full overflow-x-hidden flex flex-col min-h-0">
+      <header className="px-4 sm:px-6 pt-5 pb-3 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Campaigns</h1>
+          <p className="text-sm text-muted-foreground">Broadcast an approved template to leads, segments or imported numbers.</p>
         </div>
-        <Button size="sm" className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-3.5 w-3.5" />New Campaign
-        </Button>
-      </div>
+        <Button size="sm" onClick={() => setBuilderOpen(true)} disabled={noNumber}><Plus /> New campaign</Button>
+      </header>
 
-      {/* Personal WA restriction banner */}
-      {onlyPersonal && (
-        <div className="shrink-0 flex items-center gap-2.5 px-6 py-2.5 bg-amber-500/10 border-b border-amber-500/20">
-          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-          <p className="text-xs text-amber-700 font-medium">
-            Bulk campaigns require a <span className="font-bold">Meta Cloud API</span> account. Personal WhatsApp cannot send bulk messages or templates.
-            <a href="/whatsapp/connect" className="ml-2 underline font-semibold">Connect Meta API →</a>
-          </p>
+      {noNumber && (
+        <div className="mx-4 sm:mx-6 mb-3 flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+          <AlertTriangle className="h-4 w-4 text-warning shrink-0" aria-hidden />
+          <span><Link href="/whatsapp/connect" className="font-medium text-primary hover:underline">Connect a WhatsApp number</Link> to send campaigns.</span>
         </div>
       )}
 
-      {/* KPI Strip */}
-      <div className="shrink-0 grid grid-cols-4 border-b border-border bg-card/50">
+      <dl className="mx-4 sm:mx-6 mb-3 grid grid-cols-2 sm:grid-cols-4 rounded-lg border border-border bg-card divide-x divide-y sm:divide-y-0 divide-border">
         {[
-          { label: "Total", value: stats.total, color: "text-foreground", dot: "bg-muted-foreground/50" },
-          { label: "Running", value: stats.running, color: "text-blue-600", dot: "bg-blue-500" },
-          { label: "Sent", value: stats.sent.toLocaleString(), color: "text-emerald-600", dot: "bg-emerald-500" },
-          { label: "Read Rate", value: `${stats.readRate}%`, color: "text-violet-600", dot: "bg-violet-500" },
-        ].map((k, i) => (
-          <div key={k.label} className={`px-5 py-3 flex items-center gap-2.5 ${i < 3 ? "border-r border-border" : ""}`}>
-            <span className={`h-2 w-2 rounded-full shrink-0 ${k.dot}`} />
-            <div>
-              <p className={`text-lg font-bold leading-none ${k.color}`}>{k.value}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">{k.label}</p>
-            </div>
+          ["Sending now", totals.running, ""],
+          ["Messages sent", totals.sent.toLocaleString(), ""],
+          ["Read rate", `${totals.read}%`, ""],
+          ["Reply rate", `${totals.replied}%`, ""],
+        ].map(([l, v]) => (
+          <div key={l} className="px-4 py-3">
+            <dt className="text-2xs font-medium uppercase tracking-wider text-muted-foreground">{l}</dt>
+            <dd className="text-xl font-semibold tabular mt-0.5">{v}</dd>
           </div>
         ))}
-      </div>
+      </dl>
 
-      {/* Toolbar */}
-      <div className="shrink-0 flex items-center gap-2.5 px-6 py-2.5 border-b border-border bg-card/30 flex-wrap">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search campaigns..." className="pl-8 h-8 text-xs w-52 bg-background" />
+      <div className="px-4 sm:px-6 pb-3 flex flex-wrap items-center gap-2">
+        <div className="relative w-full sm:w-60">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search campaigns" className="h-8 pl-8 text-xs" aria-label="Search campaigns" />
         </div>
-        <div className="flex items-center gap-0.5 bg-muted/50 p-0.5 rounded-lg border border-border">
-          {["all", "running", "scheduled", "completed", "draft", "paused"].map((s) => (
-            <button key={s} onClick={() => setStatusFilter(s)}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors capitalize ${statusFilter === s ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-              {s === "all" ? "All" : s}
+        <div className="flex gap-1 overflow-x-auto no-scrollbar" role="tablist" aria-label="Status">
+          {FILTERS.map((f) => (
+            <button key={f} type="button" role="tab" aria-selected={filter === f} onClick={() => setFilter(f)}
+              className={cn("h-8 px-2.5 rounded-md text-xs whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                filter === f ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground")}>
+              {f === "all" ? "All" : STATUS_CFG[f]?.label || f}
             </button>
           ))}
         </div>
-        <span className="ml-auto text-[11px] text-muted-foreground">{filtered.length} campaign{filtered.length !== 1 ? "s" : ""}</span>
       </div>
 
-      {/* Table */}
-      <div className="flex-1 overflow-auto">
-        <table className="w-full text-xs border-collapse">
-          <thead className="sticky top-0 z-10 bg-muted/70 backdrop-blur-sm border-b border-border">
-            <tr>
-              {["#", "Campaign", "Template", "Status", "Sent", "Delivered", "Read", "Replied", "Failed", "Scheduled", "Actions"].map((h, i) => (
-                <th key={h} className={`px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap ${i === 0 ? "w-10" : ""} ${h === "Actions" ? "text-right pr-4" : ""}`}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {pageItems.length === 0 && (
-              <tr>
-                <td colSpan={11} className="px-4 py-16 text-center">
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground max-w-sm mx-auto">
-                    <Megaphone className="h-8 w-8 text-emerald-600/40" />
-                    <p className="text-sm font-bold text-foreground">
-                      {campaigns.length === 0 ? "No broadcast campaigns yet" : "No campaigns match your filter"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {campaigns.length === 0
-                        ? "Select an approved Meta template and audience to launch your first WhatsApp broadcast campaign."
-                        : "Try adjusting your search query or status filter."}
-                    </p>
-                  </div>
-                </td>
+      <div className="flex-1 min-h-0 overflow-auto px-4 sm:px-6 pb-6">
+        <div className="rounded-lg border border-border bg-card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 border-b border-border">
+              <tr className="text-left text-2xs uppercase tracking-wider text-muted-foreground">
+                <th scope="col" className="px-4 py-2.5 font-medium">Campaign</th>
+                <th scope="col" className="px-4 py-2.5 font-medium">Status</th>
+                <th scope="col" className="px-4 py-2.5 font-medium hidden md:table-cell">Progress</th>
+                <th scope="col" className="px-4 py-2.5 font-medium hidden lg:table-cell">When</th>
+                <th scope="col" className="w-12"><span className="sr-only">Actions</span></th>
               </tr>
-            )}
-            {pageItems.map((c, idx) => {
-              const sc = STATUS_CFG[c.status] || STATUS_CFG.draft;
-              const globalIdx = (safePage - 1) * pageSize + idx + 1;
-              const delivRate = c.sent > 0 ? Math.round((c.delivered / c.sent) * 100) : null;
-              const readRate = c.sent > 0 ? Math.round((c.read / c.sent) * 100) : null;
-              const replyRate = c.sent > 0 ? Math.round((c.replied / c.sent) * 100) : null;
-              return (
-                <tr key={c.id} className="hover:bg-muted/20 transition-colors">
-                  <td className="px-3 py-3 text-muted-foreground font-mono text-[11px] w-10">{globalIdx}</td>
-                  <td className="px-3 py-3 min-w-[180px] max-w-[220px]">
-                    <div className="flex items-center gap-2">
-                      <div className="h-7 w-7 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                        <Megaphone className="h-3.5 w-3.5 text-emerald-600" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-medium text-foreground truncate text-[12px]">{c.name}</p>
-                        <p className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
-                          <Users className="h-2.5 w-2.5 shrink-0" />{c.segment}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 min-w-[140px] max-w-[180px]">
-                    <p className="text-[11px] text-foreground truncate">{c.template}</p>
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap">
-                    <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-1 rounded-full border ${sc.cls}`}>
-                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${sc.dot} ${c.status === "running" ? "animate-pulse" : ""}`} />
-                      {sc.label}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap">
-                    <span className="text-[11px] font-medium text-blue-600">{c.sent > 0 ? c.sent.toLocaleString() : <span className="text-muted-foreground">—</span>}</span>
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap">
-                    {delivRate !== null ? (
-                      <div><span className="text-[11px] font-medium text-emerald-600">{delivRate}%</span><p className="text-[9px] text-muted-foreground">{c.delivered.toLocaleString()}</p></div>
-                    ) : <span className="text-muted-foreground text-[11px]">—</span>}
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap">
-                    {readRate !== null ? (
-                      <div><span className="text-[11px] font-medium text-violet-600">{readRate}%</span><p className="text-[9px] text-muted-foreground">{c.read.toLocaleString()}</p></div>
-                    ) : <span className="text-muted-foreground text-[11px]">—</span>}
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap">
-                    {replyRate !== null ? (
-                      <div><span className="text-[11px] font-medium text-amber-600">{replyRate}%</span><p className="text-[9px] text-muted-foreground">{c.replied.toLocaleString()}</p></div>
-                    ) : <span className="text-muted-foreground text-[11px]">—</span>}
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap">
-                    {c.failed > 0 ? <span className="text-[11px] font-medium text-red-500">{c.failed.toLocaleString()}</span> : <span className="text-muted-foreground text-[11px]">—</span>}
-                  </td>
-                  <td className="px-3 py-3 whitespace-nowrap text-[11px] text-muted-foreground min-w-[130px]">{c.scheduledAt}</td>
-                  <td className="px-3 py-3 whitespace-nowrap pr-4">
-                    <div className="flex items-center justify-end gap-0.5">
-                      {(c.status === "draft" || c.status === "scheduled") && (
-                        <button onClick={() => sendNow(c.id)} className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors" title="Send Now">
-                          <Play className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                      {(c.status === "running" || c.status === "paused") && (
-                        <button onClick={() => togglePause(c.id)} className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title={c.status === "running" ? "Pause" : "Resume"}>
-                          {c.status === "running" ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-                        </button>
-                      )}
-                      <button onClick={() => router.push(`/whatsapp/campaigns/${encodeId(c.id)}`)} className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="View Details">
-                        <Eye className="h-3.5 w-3.5" />
-                      </button>
-                      <button onClick={() => duplicate(c)} className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Duplicate">
-                        <Copy className="h-3.5 w-3.5" />
-                      </button>
-                      <button onClick={() => setDeleteId(c.id)} className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="Delete">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination */}
-      <div className="shrink-0 flex items-center justify-between gap-3 px-6 py-2.5 border-t border-border bg-card">
-        <div className="flex items-center gap-2.5">
-          <span className="text-[11px] text-muted-foreground">Rows</span>
-          <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
-            <SelectTrigger className="h-7 w-14 text-xs border-border"><SelectValue /></SelectTrigger>
-            <SelectContent>{PAGE_SIZE_OPTIONS.map((n) => <SelectItem key={n} value={String(n)} className="text-xs">{n}</SelectItem>)}</SelectContent>
-          </Select>
-          <span className="text-[11px] text-muted-foreground">
-            {filtered.length === 0 ? "0 results" : `${(safePage - 1) * pageSize + 1}–${Math.min(safePage * pageSize, filtered.length)} of ${filtered.length}`}
-          </span>
-        </div>
-        <div className="flex items-center gap-0.5">
-          <button onClick={() => setPage(1)} disabled={safePage === 1} className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"><ChevronsLeft className="h-3.5 w-3.5" /></button>
-          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage === 1} className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-3.5 w-3.5" /></button>
-          <div className="flex items-center gap-0.5 mx-1">
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter((p) => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
-              .reduce((acc, p, i, arr) => { if (i > 0 && p - arr[i - 1] > 1) acc.push("..."); acc.push(p); return acc; }, [])
-              .map((p, i) => p === "..." ? (
-                <span key={`e-${i}`} className="text-[11px] text-muted-foreground px-1">…</span>
-              ) : (
-                <button key={p} onClick={() => setPage(p)} className={`h-7 min-w-[28px] px-2 rounded-md text-[11px] font-medium transition-colors ${safePage === p ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}>{p}</button>
-              ))}
-          </div>
-          <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-3.5 w-3.5" /></button>
-          <button onClick={() => setPage(totalPages)} disabled={safePage === totalPages} className="h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"><ChevronsRight className="h-3.5 w-3.5" /></button>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {state === "loading" && [0, 1, 2, 3].map((i) => <tr key={i}><td colSpan={5} className="px-4 py-3"><div className="h-6 rounded bg-muted animate-pulse" /></td></tr>)}
+              {state === "error" && (
+                <tr><td colSpan={5} className="px-4 py-10 text-center space-y-2"><p className="text-sm text-destructive">Could not load campaigns.</p><Button variant="outline" size="sm" onClick={load}>Retry</Button></td></tr>
+              )}
+              {state === "ready" && filtered.length === 0 && (
+                <tr><td colSpan={5} className="px-4 py-12 text-center">
+                  <p className="text-sm font-medium">{campaigns.length === 0 ? "No campaigns yet" : "No campaign matches"}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{campaigns.length === 0 ? "Pick an approved template and an audience to send your first broadcast." : "Try another filter."}</p>
+                </td></tr>
+              )}
+              {state === "ready" && filtered.map((c) => {
+                const s = STATUS_CFG[c.status] || STATUS_CFG.draft;
+                const acc = accounts.length > 1 ? accountById(c.accountId) : null;
+                return (
+                  <tr key={c.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-3 min-w-[200px]">
+                      <Link href={`/whatsapp/campaigns/${encodeId(c.id)}`} className="font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">{c.name}</Link>
+                      <p className="text-2xs text-muted-foreground">{c.template}{acc ? ` · ${acc.label}` : ""}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={cn("inline-flex items-center gap-1.5 rounded-sm border px-1.5 py-0.5 text-2xs font-medium", s.cls)}>
+                        <span className={cn("h-1.5 w-1.5 rounded-full", s.dot, c.status === "running" && "motion-safe:animate-pulse")} aria-hidden />{s.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell"><Funnel c={c} /></td>
+                    <td className="px-4 py-3 hidden lg:table-cell text-xs text-muted-foreground tabular">
+                      {c.status === "scheduled" ? `Starts ${fmtDate(c.scheduledAt)}` : `Created ${fmtDate(c.createdAt)}`}
+                    </td>
+                    <td className="px-2 py-2.5">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Actions for ${c.name}`} disabled={busyId === c.id}>
+                            {busyId === c.id ? <Loader2 className="animate-spin" /> : <MoreHorizontal />}
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem onClick={() => router.push(`/whatsapp/campaigns/${encodeId(c.id)}`)}><Eye className="h-4 w-4" /> View report</DropdownMenuItem>
+                          {["draft", "scheduled", "paused"].includes(c.status) && (
+                            <DropdownMenuItem onClick={() => act(c, () => whatsappCampaignsApi.start(c.id), c.status === "paused" ? "Resumed" : "Sending started")}>
+                              <Play className="h-4 w-4" /> {c.status === "paused" ? "Resume" : "Send now"}
+                            </DropdownMenuItem>
+                          )}
+                          {["running", "scheduled"].includes(c.status) && (
+                            <DropdownMenuItem onClick={() => act(c, () => whatsappCampaignsApi.pause(c.id), "Paused — unsent people wait")}><Pause className="h-4 w-4" /> Pause</DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onClick={() => act(c, async () => {
+                            const copy = await whatsappCampaignsApi.duplicate(c.id);
+                            setCampaigns((list) => [mapCampaign(copy), ...list]);
+                            return null;
+                          }, "Copied as a draft")}><CopyPlus className="h-4 w-4" /> Duplicate</DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {!["completed", "cancelled"].includes(c.status) && (
+                            <DropdownMenuItem onClick={() => setConfirm({ type: "cancel", c })}><Ban className="h-4 w-4" /> Cancel</DropdownMenuItem>
+                          )}
+                          {c.status !== "running" && (
+                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setConfirm({ type: "delete", c })}><Trash2 className="h-4 w-4" /> Delete</DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <CreateCampaignModal open={createOpen} onClose={() => setCreateOpen(false)} onSubmit={handleCreate} templates={apiTemplates} segments={segments} />
+      <CampaignBuilderDialog open={builderOpen} onOpenChange={setBuilderOpen} accounts={accounts} defaultAccountId={defaultAccount?.id}
+        onCreated={(c) => setCampaigns((list) => [mapCampaign(c), ...list])} />
 
-      <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+      <Dialog open={Boolean(confirm)} onOpenChange={(v) => !v && setConfirm(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-sm font-semibold flex items-center gap-2">
-              <div className="h-7 w-7 rounded-lg bg-red-500/10 flex items-center justify-center">
-                <Trash2 className="h-3.5 w-3.5 text-red-500" />
-              </div>
-              Delete Campaign
-            </DialogTitle>
+          <DialogHeader className="text-left">
+            <DialogTitle className="text-base font-semibold">{confirm?.type === "delete" ? `Delete “${confirm?.c.name}”?` : `Cancel “${confirm?.c.name}”?`}</DialogTitle>
+            <DialogDescription>
+              {confirm?.type === "delete" ? "The campaign and its report are removed. Messages already sent stay in the inbox." : "People who have not been messaged yet will not receive it. This cannot be undone."}
+            </DialogDescription>
           </DialogHeader>
-          <div className="py-2 space-y-3">
-            <p className="text-xs text-muted-foreground">
-              Are you sure you want to delete <span className="font-semibold text-foreground">{campaigns.find((c) => c.id === deleteId)?.name}</span>? This cannot be undone.
-            </p>
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/5 border border-red-500/20 text-[11px] text-red-600 dark:text-red-400">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <span>All analytics data for this campaign will be permanently lost.</span>
-            </div>
-          </div>
           <DialogFooter>
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => setDeleteId(null)}>Cancel</Button>
-            <Button size="sm" className="text-xs bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDelete(deleteId)}>Delete</Button>
+            <Button variant="outline" size="sm" onClick={() => setConfirm(null)}>Keep</Button>
+            <Button variant="destructive" size="sm" onClick={runConfirm} disabled={busyId === confirm?.c.id}>
+              {busyId === confirm?.c.id && <Loader2 className="animate-spin" />} {confirm?.type === "delete" ? "Delete" : "Cancel campaign"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

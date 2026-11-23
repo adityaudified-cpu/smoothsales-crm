@@ -82,17 +82,17 @@ export default function CampaignDetailPage() {
     setIsLoadingMsgs(true);
     whatsappCampaignsApi.getMessages(campaignId, { size: 200 })
       .then((data) => {
-        const items = Array.isArray(data) ? data : (data?.content || []);
+        const items = Array.isArray(data) ? data : (data?.items || data?.content || []);
         setMessages(items.map((m) => ({
           id: m.id,
           name: m.customerName || m.name || "Unknown",
           phone: m.customerPhone || m.phone || "",
-          status: (m.status || "sent").toLowerCase(),
+          status: m.hasReplied ? "replied" : (m.status || "sent").toLowerCase(),
           sentAt: m.sentAt ? new Date(m.sentAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—",
           deliveredAt: m.deliveredAt ? new Date(m.deliveredAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : null,
           readAt: m.readAt ? new Date(m.readAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : null,
           repliedAt: m.repliedAt ? new Date(m.repliedAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : null,
-          reply: m.replyText || null,
+          reply: m.replyMessageBody || m.replyText || null,
           failReason: m.failureReason || null,
         })));
       })
