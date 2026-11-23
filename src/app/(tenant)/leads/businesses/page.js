@@ -31,10 +31,21 @@ export default function BusinessesPage() {
 
   useEffect(() => { listLeadDocuments().then((items) => setDocuments(items || [])).catch(() => setDocuments([])); }, []);
 
+  // Purge any legacy/cached BuyBuzz entry from client storage
+  useEffect(() => {
+    setSavedAccounts((current) => {
+      if (!Array.isArray(current)) return current;
+      const filtered = current.filter((account) => !account.name?.toLowerCase().includes("buybuzz"));
+      return filtered.length !== current.length ? filtered : current;
+    });
+  }, [setSavedAccounts]);
+
   const accounts = useMemo(() => {
     const names = new Map(savedList.map((account) => [account.name.toLowerCase(), account.name]));
     leads.forEach((lead) => { const name = lead.business?.trim(); if (name && !names.has(name.toLowerCase())) names.set(name.toLowerCase(), name); });
-    return [...names.values()].sort((a, b) => a.localeCompare(b)).map((name) => {
+    return [...names.values()]
+      .filter((name) => !name.toLowerCase().includes("buybuzz"))
+      .sort((a, b) => a.localeCompare(b)).map((name) => {
       const meta = savedList.find((account) => account.name.toLowerCase() === name.toLowerCase()) || {};
       const associated = leads.filter((lead) => lead.business?.trim().toLowerCase() === name.toLowerCase());
       const primary = associated.find((lead) => String(lead.id) === String(meta.primaryLeadId)) || [...associated].sort((a, b) => (b.lead_priority || 0) - (a.lead_priority || 0))[0];

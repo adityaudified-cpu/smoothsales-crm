@@ -104,6 +104,7 @@ import { isApiMode } from "@/lib/api/client";
 import { customersApi, callsApi, remindersApi } from "@/lib/api/customers";
 import { DISPOSITION_TO_API } from "@/lib/api/mappers";
 import { decodeLeadId, encodeLeadId } from "@/lib/lead-id-codec";
+import { LeadAttributionsModal, OccurrenceCountBadge } from "@/components/leads/LeadAttributionsModal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -254,6 +255,7 @@ export default function LeadDetailPage() {
   const { data: leads, batchUpdateLeads, batchDeleteLeads, isInitialized } = useLeads();
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [attributionsModalOpen, setAttributionsModalOpen] = useState(false);
 
   const lead = useMemo(() => leads.find((l) => String(l.id) === leadId) || null, [leads, leadId]);
   const notFound = isInitialized && !lead;
@@ -951,15 +953,37 @@ export default function LeadDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Attribution */}
+          {/* Attribution & Marketing Touchpoints */}
           <Card className="border-border shadow-sm">
-            <CardHeader className="px-4 py-3 pb-2">
+            <CardHeader className="px-4 py-3 pb-2 flex flex-row items-center justify-between">
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <Globe className="h-3.5 w-3.5 text-primary" />Attribution
+                <Globe className="h-3.5 w-3.5 text-primary" />Attribution &amp; Source
               </h3>
+              {(lead?.occurrenceCount > 1 || lead?.occurrence_count > 1) && (
+                <OccurrenceCountBadge
+                  count={lead.occurrenceCount || lead.occurrence_count}
+                  customerId={lead.id}
+                  leadName={leadName}
+                />
+              )}
             </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <InfoRow label="Source" value={leadSource} />
+            <CardContent className="px-4 pb-4 space-y-1">
+              <InfoRow label="Source Channel" value={leadSource} />
+              {(lead?.campaignName || lead?.campaign_name || lead?.utm_campaign || lead?.source_level_2) && (
+                <InfoRow label="Campaign" value={lead?.campaignName || lead?.campaign_name || lead?.utm_campaign || lead?.source_level_2} />
+              )}
+              {(lead?.formName || lead?.form_name) && (
+                <InfoRow label="Form Name" value={lead?.formName || lead?.form_name} />
+              )}
+              {(lead?.pageName || lead?.page_name) && (
+                <InfoRow label="Meta Page" value={lead?.pageName || lead?.page_name} />
+              )}
+              {lead?.utm_source && (
+                <InfoRow label="UTM Source" value={lead.utm_source} mono />
+              )}
+              {lead?.utm_medium && (
+                <InfoRow label="UTM Medium" value={lead.utm_medium} mono />
+              )}
               {(lead?.sourceCampaignId || lead?.source_campaign_id) && (
                 <InfoRow label="Google Campaign ID" value={String(lead.sourceCampaignId || lead.source_campaign_id)} mono />
               )}
@@ -967,10 +991,25 @@ export default function LeadDetailPage() {
                 <InfoRow label="Google Form ID" value={String(lead.sourceFormId || lead.source_form_id)} mono />
               )}
               {lead?.gclid && (
-                <InfoRow label="GCLID" value={lead.gclid} mono />
+                <InfoRow label="Google Click ID (GCLID)" value={lead.gclid} mono />
               )}
-              <InfoRow label="Campaign" value={lead.source_level_2} />
-              <InfoRow label="Segment" value={lead.source_level_3} />
+              {(lead?.website_domain || lead?.submitted_url) && (
+                <InfoRow label="Website Domain" value={lead?.website_domain || lead?.submitted_url} />
+              )}
+              {lead?.source_level_3 && (
+                <InfoRow label="Segment" value={lead.source_level_3} />
+              )}
+              <div className="pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAttributionsModalOpen(true)}
+                  className="w-full h-7 text-[11px] font-semibold gap-1.5 text-primary border-primary/30 hover:bg-primary/5"
+                >
+                  <Clock className="h-3 w-3" /> View Inbound Touchpoint History
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
@@ -1498,6 +1537,16 @@ export default function LeadDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {lead && (
+        <LeadAttributionsModal
+          customerId={lead.id}
+          leadName={leadName}
+          open={attributionsModalOpen}
+          onOpenChange={setAttributionsModalOpen}
+          occurrenceCount={lead.occurrenceCount || lead.occurrence_count || 1}
+        />
+      )}
     </div>
   );
 }

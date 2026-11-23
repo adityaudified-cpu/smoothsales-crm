@@ -739,11 +739,20 @@ export function LeadTable({
                 );
               }
               if (src.includes("Website") || src.toUpperCase() === "WEBSITE") {
+                const camp = lead?.campaignName || lead?.campaign_name || lead?.utm_campaign;
+                const utmSrc = lead?.utm_source || (lead?.source_detail !== "Website Form Webhook" ? lead?.source_detail : null);
                 return (
-                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/25">
-                    <Globe className="h-3 w-3 text-teal-500 shrink-0" />
-                    <span>Website Form</span>
-                  </span>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-teal-500/10 text-teal-600 dark:text-teal-400 border border-teal-500/25 w-fit">
+                      <Globe className="h-3 w-3 text-teal-500 shrink-0" />
+                      <span>Website Form</span>
+                    </span>
+                    {(camp || utmSrc) && (
+                      <span className="text-[10px] text-muted-foreground font-mono flex items-center gap-1.5 truncate max-w-[150px]" title={camp || utmSrc}>
+                        {camp ? <span>Camp: {camp}</span> : <span>{utmSrc}</span>}
+                      </span>
+                    )}
+                  </div>
                 );
               }
 

@@ -46,8 +46,17 @@ export async function simulateLead(source, payload) {
   });
 }
 
-export async function listWebhookAudit() {
-  return apiRequest("/integrations/audit/webhooks");
+export async function testLead(key, payload) {
+  return apiRequest(`/integrations/${key}/test-lead`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function listWebhookAudit(source = null) {
+  return apiRequest("/integrations/audit/webhooks", {
+    query: source ? { source } : undefined,
+  });
 }
 
 export async function reprocessWebhook(id) {
@@ -69,6 +78,24 @@ export async function sendGoogleOciConversion(data) {
     body: data,
   });
 }
+
+/**
+ * Unified object export for components using integrationsApi namespace
+ */
+export const integrationsApi = {
+  getAll: listIntegrations,
+  list: listIntegrations,
+  getByKey: getIntegration,
+  get: getIntegration,
+  save: saveIntegration,
+  delete: deleteIntegration,
+  test: testIntegration,
+  rotateWebhookKey,
+  simulateLead,
+  testLead,
+  listAudit: listWebhookAudit,
+  reprocessWebhook,
+};
 
 /**
  * Meta Lead Ads Admin API (Page & Form Asset Explorer)
