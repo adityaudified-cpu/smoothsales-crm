@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Bell, ChevronDown, Download, Plus, RefreshCw, RotateCw, Trash2, Unplug, Zap } from "lucide-react";
+import { Bell, ChevronDown, Download, Plug, Plus, RefreshCw, RotateCw, Trash2, Unplug, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -322,6 +323,8 @@ export function MetaAdsDetail() {
   const { state, data, busy, load, save, test, remove } = useIntegration("meta_ads");
   const [token, setToken] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [modalToken, setModalToken] = useState("");
   const tokenSaved = !!(data?.secretHints?.accessToken || data?.secretHints?.systemUserToken);
 
   const submit = async (e) => {
@@ -332,6 +335,18 @@ export function MetaAdsDetail() {
       setReloadKey((k) => k + 1);
     }
   };
+
+  const submitModalConnect = async (e) => {
+    e.preventDefault();
+    if (!modalToken.trim()) return;
+    if (await save({ enabled: true, config: { accessToken: modalToken.trim() } }, "Connected successfully")) {
+      setModalToken("");
+      setConnectOpen(false);
+      await test();
+      setReloadKey((k) => k + 1);
+    }
+  };
+
   const requeue = async () => {
     try {
       const r = await metaAdminApi.requeueEvents("FAILED_PERMANENT");
@@ -347,37 +362,86 @@ export function MetaAdsDetail() {
       testMessage={data?.lastTestMessage} testedAt={data?.lastTestedAt} testOk={data?.lastTestStatus === "OK"}
       actions={state === "ready" && (
         <div className="flex items-center gap-2">
-          {tokenSaved && (
-            <Button variant="outline" size="sm" onClick={test} disabled={!!busy}>
-              <Saving on={busy === "test"} />
-              {busy !== "test" && <Zap className="h-3.5 w-3.5 mr-1" />} Check connection
+          {tokenSaved ? (
+            <>
+              <Button variant="outline" size="sm" onClick={test} disabled={!!busy}>
+                <Saving on={busy === "test"} />
+                {busy !== "test" && <Zap className="h-3.5 w-3.5 mr-1" />} Check connection
+              </Button>
+              <Confirm
+                trigger={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                    disabled={!!busy}
+                  >
+                    <Unplug className="h-3.5 w-3.5 mr-1" /> Disconnect
+                  </Button>
+                }
+                title="Disconnect Meta Lead Ads?"
+                action="Disconnect"
+                onConfirm={async () => {
+                  await remove();
+                  setReloadKey((k) => k + 1);
+                }}
+                description="The access token, connected Facebook pages, and ad accounts will be removed from your CRM. Existing leads will remain safe."
+              />
+            </>
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => setConnectOpen(true)}
+              disabled={!!busy}
+            >
+              <Plug className="h-3.5 w-3.5 mr-1" /> Connect
             </Button>
           )}
-          <Confirm
-            trigger={
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
-                disabled={!!busy}
-              >
-                <Unplug className="h-3.5 w-3.5 mr-1" /> Disconnect
-              </Button>
-            }
-            title="Disconnect Meta Lead Ads?"
-            action="Disconnect"
-            onConfirm={async () => {
-              await remove();
-              setReloadKey((k) => k + 1);
-            }}
-            description="The access token, connected Facebook pages, and ad accounts will be removed from your CRM. Existing leads will remain safe."
-          />
         </div>
       )}>
       {state === "loading" && <Rows count={6} />}
       {state === "error" && <LoadError message="Could not load this integration." onRetry={load} />}
       {state === "ready" && (
         <>
+          <Dialog open={connectOpen} onOpenChange={setConnectOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Connect Meta Lead Ads</DialogTitle>
+                <DialogDescription>
+                  Generate a System User access token from Meta Business Settings to link your leads.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={submitModalConnect} className="space-y-4 pt-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="modal-token" className="text-xs font-medium">System user access token</Label>
+                  <Input
+                    id="modal-token"
+                    type="password"
+                    autoComplete="new-password"
+                    value={modalToken}
+                    onChange={(e) => setModalToken(e.target.value)}
+                    placeholder="EAAB..."
+                    className="font-mono text-xs"
+                    required
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Required permissions: <span className="font-mono text-foreground">{[...NEEDED, "ads_read"].join(", ")}</span>
+                </p>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setConnectOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" size="sm" disabled={!modalToken.trim() || !!busy}>
+                    <Saving on={busy === "save" || busy === "test"} />
+                    {busy !== "save" && busy !== "test" && <Plug className="h-3.5 w-3.5 mr-1" />}
+                    Connect & check
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+
           <div className="grid gap-4 lg:grid-cols-2 items-start">
             <Panel id="tok" title="Access token" description="Business Settings → System users → Generate token. Assign your pages and ad accounts to that system user.">
               <form onSubmit={submit} className="space-y-3">
