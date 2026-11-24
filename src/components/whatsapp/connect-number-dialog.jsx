@@ -150,9 +150,7 @@ export function ConnectNumberDialog({ open, onOpenChange, onConnected }) {
         config_id: config.configId,
         response_type: "code",
         override_default_response_type: true,
-        auth_type: "rerequest",
         extras: {
-          setup: {},
           sessionInfoVersion: "3",
           ...(method === "coexistence" ? { featureType: "whatsapp_business_app_onboarding" } : {}),
         },
