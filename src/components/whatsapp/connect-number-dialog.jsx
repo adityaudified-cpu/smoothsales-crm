@@ -59,7 +59,7 @@ const METHODS = [
  * workspace can connect as many as it needs.
  */
 export function ConnectNumberDialog({ open, onOpenChange, onConnected }) {
-  const [method, setMethod] = useState("coexistence");
+  const [method, setMethod] = useState("cloud");
   const [config, setConfig] = useState(null);
   const [label, setLabel] = useState("");
   const [manual, setManual] = useState({ phoneNumberId: "", wabaId: "", accessToken: "" });
@@ -77,21 +77,17 @@ export function ConnectNumberDialog({ open, onOpenChange, onConnected }) {
   const finish = useCallback(async () => {
     const { code, info } = session.current;
     if (!code) return;
+    // Wait briefly (up to 800ms) for postMessage info if it arrives right after popup closes
     if (!info) {
-      setTimeout(() => {
-        if (!session.current.info) {
-          setBusy(false);
-          toast.error("Meta skipped number selection because this account was previously linked. In the Facebook popup, please click 'Edit settings' or remove Smoothsales from Facebook Business Integrations.", { duration: 7000 });
-        }
-      }, 1500);
-      return;
+      await new Promise((r) => setTimeout(r, 800));
     }
+    const finalInfo = session.current.info;
     session.current = { code: null, info: null };
     try {
       const account = await whatsappAccountsApi.completeSignup({
         code,
-        phoneNumberId: info.phone_number_id,
-        wabaId: info.waba_id,
+        phoneNumberId: finalInfo?.phone_number_id || undefined,
+        wabaId: finalInfo?.waba_id || undefined,
         coexistence: method === "coexistence",
         label: label.trim() || undefined,
       });
