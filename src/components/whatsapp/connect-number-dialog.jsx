@@ -66,23 +66,28 @@ export function ConnectNumberDialog({ open, onOpenChange, onConnected }) {
   const [busy, setBusy] = useState(false);
   const [pin, setPin] = useState(null);
   const session = useRef({ code: null, info: null });
+  const inFlight = useRef(false);
 
   useEffect(() => {
     if (!open) return;
     setPin(null);
+    inFlight.current = false;
     session.current = { code: null, info: null };
     whatsappAccountsApi.signupConfig().then(setConfig).catch(() => setConfig({ enabled: false, missing: [] }));
   }, [open]);
 
   const finish = useCallback(async () => {
-    const { code, info } = session.current;
+    if (inFlight.current) return;
+    const code = session.current.code;
     if (!code) return;
+    inFlight.current = true;
+    session.current.code = null;
+
     // Wait briefly (up to 800ms) for postMessage info if it arrives right after popup closes
-    if (!info) {
+    if (!session.current.info) {
       await new Promise((r) => setTimeout(r, 800));
     }
     const finalInfo = session.current.info;
-    session.current = { code: null, info: null };
     try {
       const account = await whatsappAccountsApi.completeSignup({
         code,
@@ -98,6 +103,7 @@ export function ConnectNumberDialog({ open, onOpenChange, onConnected }) {
     } catch (e) {
       toast.error(e?.message || "Could not finish connecting the number");
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }, [label, method, onConnected, onOpenChange]);
@@ -114,7 +120,9 @@ export function ConnectNumberDialog({ open, onOpenChange, onConnected }) {
       if (data?.type !== "WA_EMBEDDED_SIGNUP") return;
       if (String(data.event).startsWith("FINISH")) {
         session.current.info = data.data;
-        finish();
+        if (session.current.code) {
+          finish();
+        }
       } else if (data.event === "CANCEL") {
         setBusy(false);
         toast.message(data.data?.current_step ? `Signup stopped at: ${data.data.current_step}` : "Signup cancelled");
@@ -130,6 +138,7 @@ export function ConnectNumberDialog({ open, onOpenChange, onConnected }) {
   const launchSignup = async () => {
     if (!config?.enabled) return;
     setBusy(true);
+    inFlight.current = false;
     try {
       const FB = await loadFacebookSdk(config.appId, config.graphVersion);
       FB.login((response) => {
@@ -141,6 +150,7 @@ export function ConnectNumberDialog({ open, onOpenChange, onConnected }) {
         config_id: config.configId,
         response_type: "code",
         override_default_response_type: true,
+        auth_type: "rerequest",
         extras: {
           setup: {},
           sessionInfoVersion: "3",
