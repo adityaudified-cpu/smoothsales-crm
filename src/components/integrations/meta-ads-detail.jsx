@@ -133,9 +133,23 @@ function Pages({ connected, reloadKey }) {
                       <Button size="sm" variant="outline" disabled={!!busy} onClick={() => backfill(p)}>{busy === `b-${p.pageId}` ? <Saving on /> : <Download />} Last 30 days</Button>
                       <Button size="sm" variant="outline" aria-expanded={open === p.pageId} onClick={() => setOpen(open === p.pageId ? null : p.pageId)}>Forms <ChevronDown className={cn("transition-transform", open === p.pageId && "rotate-180")} /></Button>
                       <Switch checked={p.active} disabled={!!busy} aria-label={`Capture leads from ${p.pageName}`} onCheckedChange={(on) => run(`a-${p.pageId}`, () => metaAdminApi.togglePageActive(p.pageId, on), on ? "Page is live" : "Page is paused")} />
-                      <Confirm trigger={<Button size="icon" variant="ghost" className="h-8 w-8" aria-label={`Remove ${p.pageName}`} disabled={!!busy}><Trash2 /></Button>}
-                        title={`Remove ${p.pageName}?`} action="Remove" onConfirm={() => run(`d-${p.pageId}`, () => metaAdminApi.deletePage(p.pageId), "Page removed")}
-                        description="New leads from this page are no longer captured. Existing leads are kept." />
+                      <Confirm
+                        trigger={
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                            aria-label={`Delete ${p.pageName}`}
+                            disabled={!!busy}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                          </Button>
+                        }
+                        title={`Delete ${p.pageName}?`}
+                        action="Delete"
+                        onConfirm={() => run(`d-${p.pageId}`, () => metaAdminApi.deletePage(p.pageId), "Page deleted")}
+                        description="New leads from this page will no longer be captured. Existing leads in the CRM will be kept."
+                      />
                     </div>
                   </div>
                   {open === p.pageId && <Forms page={p} />}
@@ -162,6 +176,11 @@ function Pages({ connected, reloadKey }) {
 function AdAccounts({ connected, reloadKey }) {
   const [state, setState] = useState("loading");
   const [items, setItems] = useState([]);
+  const [busyItem, setBusyItem] = useState(null);
+  const [newId, setNewId] = useState("");
+  const [newName, setNewName] = useState("");
+  const [busyAdd, setBusyAdd] = useState(false);
+
   const load = useCallback(async () => {
     try {
       const list = await metaAdminApi.listAdAccounts();
@@ -173,29 +192,95 @@ function AdAccounts({ connected, reloadKey }) {
   }, []);
   useEffect(() => { load(); }, [load, reloadKey]);
 
-  const act = async (work, message) => {
-    try { await work(); toast.success(message); await load(); } catch (e) { toast.error(e?.message || "Could not change the ad account"); }
+  const act = async (work, message, id) => {
+    if (id) setBusyItem(id);
+    try {
+      await work();
+      toast.success(message);
+      await load();
+    } catch (e) {
+      toast.error(e?.message || "Could not change the ad account");
+    } finally {
+      if (id) setBusyItem(null);
+    }
   };
+
   if (state === "hidden") return null;
   return (
     <Panel id="accts" title="Ad accounts" description="Used to show which ad account a lead came from. “Find pages” refreshes this list.">
       {state === "loading" && <Rows count={2} />}
       {state === "error" && <LoadError message="Could not load ad accounts." onRetry={load} />}
-      {state === "ready" && (items.length === 0 ? <Empty>{connected ? "None visible to this token." : "Save a Meta access token first."}</Empty> : (
-        <ul className="divide-y divide-border border-y border-border">
-          {items.map((a) => (
-            <li key={a.adAccountId} className="flex items-center justify-between gap-3 py-2">
-              <div className="min-w-0"><p className="text-sm text-foreground truncate">{a.name}</p><p className="font-mono text-xs text-muted-foreground">{a.adAccountId}</p></div>
-              <div className="flex items-center gap-2">
-                <Switch checked={a.active} aria-label={`Use ${a.name}`} onCheckedChange={(on) => act(() => metaAdminApi.toggleAdAccountActive(a.adAccountId, on), "Saved")} />
-                <Confirm trigger={<Button size="icon" variant="ghost" className="h-8 w-8" aria-label={`Remove ${a.name}`}><Trash2 /></Button>}
-                  title={`Remove ${a.name}?`} action="Remove" description="Only the link in the CRM is removed. Nothing changes in Meta."
-                  onConfirm={() => act(() => metaAdminApi.deleteAdAccount(a.adAccountId), "Ad account removed")} />
-              </div>
-            </li>
-          ))}
-        </ul>
-      ))}
+      {state === "ready" && (
+        <>
+          {items.length === 0 ? (
+            <Empty>{connected ? "No ad accounts linked yet. Use “Find pages” or add an account ID below." : "Save a Meta access token first."}</Empty>
+          ) : (
+            <ul className="divide-y divide-border border-y border-border">
+              {items.map((a) => (
+                <li key={a.adAccountId} className="flex flex-wrap items-center justify-between gap-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{a.name}</p>
+                    <p className="font-mono text-xs text-muted-foreground">{a.adAccountId}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={a.active}
+                      disabled={busyItem === a.adAccountId}
+                      aria-label={`Use ${a.name}`}
+                      onCheckedChange={(on) => act(() => metaAdminApi.toggleAdAccountActive(a.adAccountId, on), on ? "Account active" : "Account paused", a.adAccountId)}
+                    />
+                    <Confirm
+                      trigger={
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                          aria-label={`Delete ${a.name}`}
+                          disabled={busyItem === a.adAccountId}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                        </Button>
+                      }
+                      title={`Delete ${a.name}?`}
+                      action="Delete"
+                      description="Only the link in the CRM is removed. Nothing changes in Meta Business Manager."
+                      onConfirm={() => act(() => metaAdminApi.deleteAdAccount(a.adAccountId), "Ad account deleted", a.adAccountId)}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form className="flex flex-wrap items-end gap-2 pt-2" onSubmit={async (e) => {
+            e.preventDefault();
+            if (!newId.trim()) return;
+            setBusyAdd(true);
+            try {
+              await metaAdminApi.addAdAccount(newId.trim(), newName.trim() || undefined);
+              toast.success("Ad account linked");
+              setNewId("");
+              setNewName("");
+              await load();
+            } catch (err) {
+              toast.error(err?.message || "Could not link ad account");
+            } finally {
+              setBusyAdd(false);
+            }
+          }}>
+            <div className="space-y-1.5">
+              <Label htmlFor="ma-acc-id" className="text-xs">Account missing? Add by ID</Label>
+              <Input id="ma-acc-id" value={newId} onChange={(e) => setNewId(e.target.value.trim())} placeholder="e.g. act_123456789" className="h-8 w-48 text-xs font-mono" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ma-acc-name" className="text-xs">Account name (optional)</Label>
+              <Input id="ma-acc-name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Main Ads" className="h-8 w-44 text-xs" />
+            </div>
+            <Button type="submit" size="sm" variant="outline" disabled={!connected || !newId.trim() || busyAdd}>
+              {busyAdd ? <Saving on /> : <Plus className="h-3.5 w-3.5 mr-1" />} Add account
+            </Button>
+          </form>
+        </>
+      )}
     </Panel>
   );
 }
@@ -260,13 +345,34 @@ export function MetaAdsDetail() {
     <DetailShell integrationKey="meta_ads" title="Meta Lead Ads" status={data?.status}
       description="Leads from Facebook and Instagram lead forms, in real time, with campaign and ad details."
       testMessage={data?.lastTestMessage} testedAt={data?.lastTestedAt} testOk={data?.lastTestStatus === "OK"}
-      actions={state === "ready" && tokenSaved && (
-        <>
-          <Button variant="outline" size="sm" onClick={test} disabled={!!busy}><Saving on={busy === "test"} />{busy !== "test" && <Zap />} Check connection</Button>
-          <Confirm trigger={<Button variant="outline" size="sm" disabled={!!busy}><Unplug /> Disconnect</Button>}
-            title="Disconnect Meta Lead Ads?" action="Disconnect" onConfirm={async () => { await remove(); setReloadKey((k) => k + 1); }}
-            description="The access token is deleted, so new leads can no longer be fetched. Pages and existing leads are kept." />
-        </>
+      actions={state === "ready" && (
+        <div className="flex items-center gap-2">
+          {tokenSaved && (
+            <Button variant="outline" size="sm" onClick={test} disabled={!!busy}>
+              <Saving on={busy === "test"} />
+              {busy !== "test" && <Zap className="h-3.5 w-3.5 mr-1" />} Check connection
+            </Button>
+          )}
+          <Confirm
+            trigger={
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                disabled={!!busy}
+              >
+                <Unplug className="h-3.5 w-3.5 mr-1" /> Disconnect
+              </Button>
+            }
+            title="Disconnect Meta Lead Ads?"
+            action="Disconnect"
+            onConfirm={async () => {
+              await remove();
+              setReloadKey((k) => k + 1);
+            }}
+            description="The access token, connected Facebook pages, and ad accounts will be removed from your CRM. Existing leads will remain safe."
+          />
+        </div>
       )}>
       {state === "loading" && <Rows count={6} />}
       {state === "error" && <LoadError message="Could not load this integration." onRetry={load} />}

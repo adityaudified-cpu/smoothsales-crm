@@ -143,8 +143,24 @@ export function Empty({ children }) {
 }
 
 export function Confirm({ trigger, title, description, action = "Continue", destructive = true, onConfirm }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const handleConfirm = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      if (onConfirm) await onConfirm();
+      setOpen(false);
+    } catch {
+      // Keep open if unhandled error
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <AlertDialog>
+    <AlertDialog open={open} onOpenChange={(o) => { if (!busy) setOpen(o); }}>
       <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -152,9 +168,12 @@ export function Confirm({ trigger, title, description, action = "Continue", dest
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}
-            className={destructive ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}>{action}</AlertDialogAction>
+          <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={handleConfirm} disabled={busy}
+            className={destructive ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+            {action}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
