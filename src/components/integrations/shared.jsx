@@ -152,8 +152,8 @@ export function Confirm({ trigger, title, description, action = "Continue", dest
     try {
       if (onConfirm) await onConfirm();
       setOpen(false);
-    } catch {
-      // Keep open if unhandled error
+    } catch (err) {
+      toast.error(err?.message || "Operation failed");
     } finally {
       setBusy(false);
     }
@@ -169,11 +169,15 @@ export function Confirm({ trigger, title, description, action = "Continue", dest
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={handleConfirm} disabled={busy}
-            className={destructive ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}>
+          <Button
+            type="button"
+            disabled={busy}
+            onClick={handleConfirm}
+            className={destructive ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
+          >
             {busy ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
             {action}
-          </AlertDialogAction>
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
