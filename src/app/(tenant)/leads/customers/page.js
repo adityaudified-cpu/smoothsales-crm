@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { customersApi } from "@/lib/api/customers";
 import { formatDistanceToNowStrict, parseISO, isValid } from "date-fns";
+import { useCallOutcome } from "@/lib/call-outcome-context";
 
 const STATUS_CFG = {
   ACTIVE:   { label: "Active",   cls: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30", dot: "bg-emerald-500" },
@@ -80,6 +81,7 @@ const PAGE_SIZE = 15;
 
 export default function CustomersPage() {
   const router = useRouter();
+  const { openCallOutcomeDrawer } = useCallOutcome();
   const [customers, setCustomers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -156,10 +158,17 @@ export default function CustomersPage() {
 
   const handleCall = (e, c) => {
     e.stopPropagation();
-    const phone = (c.phone || "").replace(/[^\d+]/g, "");
-    if (!phone) return toast.error("No phone number");
-    toast.success(`Dialing ${c.fullName || c.name}...`);
-    window.location.assign(`tel:${phone}`);
+    openCallOutcomeDrawer(
+      {
+        id: c.id,
+        lead_name: c.fullName || c.name,
+        mobile_number: c.phone,
+        city: c.preferredLocation,
+        preferred_service: c.propertyInterest,
+        dealValueINR: c.totalValue,
+      },
+      { dial: true, sourceLabel: "Web-initiated call", onSaved: () => loadCustomers() }
+    );
   };
 
   const handleWhatsApp = (e, c) => {

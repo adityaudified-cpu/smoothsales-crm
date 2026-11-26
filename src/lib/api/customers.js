@@ -41,6 +41,13 @@ export const callsApi = {
   logPersonal: (body) => apiRequest("/calls/personal", { method: "POST", body }),
   // POST /calls/disposition — { callId, outcome, stageUpdate, notes, followUpDate, createReminder }
   disposition: (body) => apiRequest("/calls/disposition", { method: "POST", body }),
+  // POST /calls/log-outcome — atomic Web/SIM call outcome + deal + follow-up + form payload
+  logOutcome: (body) => apiRequest("/calls/log-outcome", { method: "POST", body }),
+  // GET /call-outcomes/config — tenant outcomes + custom form schemas
+  getOutcomeConfigs: () => apiRequest("/call-outcomes/config"),
+  // PUT /call-outcomes/config/{outcomeCode}/form — persist custom form schema for an outcome
+  saveOutcomeForm: (outcomeCode, body) =>
+    apiRequest(`/call-outcomes/config/${encodeURIComponent(outcomeCode)}/form`, { method: "PUT", body }),
   pendingDisposition: () => apiRequest("/calls/pending-disposition"),
 };
 

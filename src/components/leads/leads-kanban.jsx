@@ -9,11 +9,13 @@ import { estimateDealValue } from "@/lib/leads-workspace";
 import { formatINR } from "@/lib/format-cell-value";
 import { cn } from "@/lib/utils";
 import { encodeLeadId } from "@/lib/lead-id-codec";
+import { useCallOutcome } from "@/lib/call-outcome-context";
 
 const CARD_LIMIT = 50;
 
 // Stage board: drag a card to another column, or use the card's stage menu (keyboard friendly).
 export function LeadsKanban({ leads = [], onStageChange }) {
+  const { openCallOutcomeDrawer } = useCallOutcome();
   const [dragId, setDragId] = useState(null);
   const [overStage, setOverStage] = useState(null);
   const knownStages = new Set(DEFAULT_PIPELINE_STAGES.map((stage) => stage.name));
@@ -70,7 +72,19 @@ export function LeadsKanban({ leads = [], onStageChange }) {
                       {due && <span className={cn("flex shrink-0 items-center gap-0.5", overdue && "font-semibold text-rose-600")}><Clock className="h-2.5 w-2.5" />{overdue ? `${formatDistanceToNowStrict(due)} late` : formatDistanceToNowStrict(due)}</span>}
                     </div>
                     <div className="mt-1.5 flex items-center gap-1">
-                      {lead.mobile_number && <a href={`tel:${lead.mobile_number.replace(/[^\d+]/g, "")}`} aria-label={`Call ${lead.lead_name}`} className="rounded p-1 text-emerald-600 hover:bg-emerald-500/10"><Phone className="h-3 w-3" /></a>}
+                      {lead.mobile_number && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openCallOutcomeDrawer(lead, { dial: true, sourceLabel: "Web-initiated call" });
+                          }}
+                          aria-label={`Call ${lead.lead_name}`}
+                          className="rounded p-1 text-emerald-600 hover:bg-emerald-500/10"
+                        >
+                          <Phone className="h-3 w-3" />
+                        </button>
+                      )}
                       <select
                         aria-label={`Move ${lead.lead_name} to stage`}
                         value={lead.lead_stage || "New Lead"}

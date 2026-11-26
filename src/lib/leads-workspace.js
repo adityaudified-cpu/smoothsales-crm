@@ -134,7 +134,7 @@ export const ATTENTION_QUEUES = [
   { id: "untouched", label: "Untouched new", hint: "No call attempt yet", tone: "amber", test: (lead) => isUntouched(lead) && lifecycleOf(lead) !== "Closed" },
   { id: "due_today", label: "Callbacks due today", hint: "Follow-up later today", tone: "sky", test: (lead, now) => { const due = lead.next_followup && new Date(lead.next_followup); return Boolean(due) && due >= now && isSameDay(due, now); } },
   { id: "overdue", label: "Overdue follow-ups", hint: "Promised time has passed", tone: "rose", test: (lead, now) => Boolean(lead.next_followup) && new Date(lead.next_followup) < now },
-  { id: "not_connected", label: "Not connected yet", hint: "Dialed, never answered", tone: "orange", test: (lead) => Number(lead.attempts) > 0 && lead.last_call_outcome && lead.last_call_outcome !== "Connected" && lifecycleOf(lead) !== "Closed" },
+  { id: "not_connected", label: "Not connected yet", hint: "Dialed, never answered", tone: "orange", test: (lead) => Number(lead.attempts) > 0 && (lead.last_call_connected === false || (lead.last_call_connected == null && lead.last_call_outcome && !["Connected", "Interested", "Meeting Agreed", "Send More Info", "Call Back Later"].includes(lead.last_call_outcome))) && lifecycleOf(lead) !== "Closed" },
   { id: "neglected", label: "Neglected 7d+", hint: "Open lead, no activity in 7 days", tone: "slate", test: (lead, now) => lifecycleOf(lead) !== "Closed" && !isUntouched(lead) && now - touchedAt(lead) > 7 * DAY },
   { id: "high_intent", label: "High intent", hint: "Priority 4★ or above", tone: "emerald", test: (lead) => Number(lead.lead_priority) >= 4 && lifecycleOf(lead) !== "Closed" },
 ];

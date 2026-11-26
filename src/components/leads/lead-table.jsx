@@ -81,6 +81,7 @@ import { formatCellValue, formatINR, parseValidDate } from "@/lib/format-cell-va
 import { LEADS_COLUMNS_CONFIG } from "@/lib/leads-columns.config";
 import { encodeLeadId } from "@/lib/lead-id-codec";
 import { OccurrenceCountBadge } from "@/components/leads/LeadAttributionsModal";
+import { useCallOutcome } from "@/lib/call-outcome-context";
 
 export function LeadTable({
   data = [],
@@ -98,6 +99,7 @@ export function LeadTable({
   onDeleteLead,
 }) {
   const router = useRouter();
+  const { openCallOutcomeDrawer } = useCallOutcome();
   const [sorting, setSorting] = useState([{ id: "last_worked", desc: true }]);
   const [columnFilters, setColumnFilters] = useState([]);
   const [density, setDensity] = useState("normal");
@@ -127,10 +129,7 @@ export function LeadTable({
   // Quick Action Handlers
   const handleCall = (e, lead) => {
     e.stopPropagation();
-    const phone = String(lead.mobile_number || lead.phone || "").trim();
-    if (!phone) return toast.error("This lead has no phone number");
-    toast.success(`Dialing ${lead.lead_name || lead.name || phone}...`);
-    window.location.href = `tel:${phone.replace(/[^\d+]/g, "")}`;
+    openCallOutcomeDrawer(lead, { dial: true, sourceLabel: "Web-initiated call" });
   };
 
   const handleWhatsApp = (e, lead) => {
@@ -617,12 +616,21 @@ export function LeadTable({
               const disp = formatCellValue(rawVal);
               if (disp === "—") return <span className="text-muted-foreground">—</span>;
               const dispStyles = {
+                "Interested": "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25",
                 "Connected - Interested": "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25",
+                "Meeting Agreed": "bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/25",
+                "Send More Info": "bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/25",
+                "Call Back Later": "bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/25",
                 "Connected - Callback Requested": "bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/25",
                 "RNR": "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25",
                 "Busy": "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25",
+                "Cut the call": "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25",
                 "Not Reachable": "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25",
+                "Switched Off": "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25",
                 "Not Interested": "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/25",
+                "Budget Mismatch": "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/25",
+                "Invalid": "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/25",
+                "Multiple RNR": "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/25",
                 "Invalid Number": "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/25",
               };
               const cls = dispStyles[disp] || "bg-secondary text-secondary-foreground border-border";

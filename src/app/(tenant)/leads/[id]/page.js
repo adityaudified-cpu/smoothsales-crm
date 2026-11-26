@@ -105,6 +105,7 @@ import { customersApi, callsApi, remindersApi } from "@/lib/api/customers";
 import { DISPOSITION_TO_API } from "@/lib/api/mappers";
 import { decodeLeadId, encodeLeadId } from "@/lib/lead-id-codec";
 import { LeadAttributionsModal, OccurrenceCountBadge } from "@/components/leads/LeadAttributionsModal";
+import { useCallOutcome } from "@/lib/call-outcome-context";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -253,6 +254,7 @@ export default function LeadDetailPage() {
   const leadId = decodeLeadId(String(params?.id || ""));
 
   const { data: leads, batchUpdateLeads, batchDeleteLeads, isInitialized } = useLeads();
+  const { openCallOutcomeDrawer } = useCallOutcome();
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [attributionsModalOpen, setAttributionsModalOpen] = useState(false);
@@ -342,7 +344,7 @@ export default function LeadDetailPage() {
     } catch { setUserEvents([]); }
   }, [timelineKey]);
 
-  useEffect(() => {
+  const fetchTimeline = useCallback(() => {
     if (!isApiMode() || !lead || String(lead.id).startsWith("lead_") || String(lead.id).startsWith("manual_")) return;
     customersApi.timeline(lead.id)
       .then(({ items }) => {
@@ -358,6 +360,20 @@ export default function LeadDetailPage() {
       })
       .catch(() => {});
   }, [lead]);
+
+  useEffect(() => {
+    fetchTimeline();
+  }, [fetchTimeline]);
+
+  useEffect(() => {
+    const onUpdated = (e) => {
+      if (!e?.detail?.lead?.id || String(e.detail.lead.id) === String(lead?.id)) {
+        fetchTimeline();
+      }
+    };
+    window.addEventListener("smoothsales:lead-updated", onUpdated);
+    return () => window.removeEventListener("smoothsales:lead-updated", onUpdated);
+  }, [fetchTimeline, lead?.id]);
 
   const addEvent = useCallback((event) => {
     const entry = { id: makeId("ev"), at: new Date().toISOString(), caller: ownerName, ...event };
@@ -529,10 +545,19 @@ export default function LeadDetailPage() {
   const handleCallNow = useCallback(() => {
     if (!dialable) return toast.error("No phone number on this lead");
     if (callBlocked) return toast.error(dndBlocked ? "Lead is on DND" : "Lead has not consented to calls");
-    window.location.href = `tel:${dialable}`;
-    setComposerTab("call");
-    toast.info(`Dialing ${leadName}…`);
-  }, [dialable, callBlocked, dndBlocked, leadName]);
+    openCallOutcomeDrawer(lead, {
+      dial: true,
+      sourceLabel: "Web-initiated call",
+      onSaved: (res) => {
+        addEvent({
+          type: "call",
+          title: `Outbound · ${res?.outcomeLabel || "Call logged"}`,
+          transcript: res?.customer?.notes || "",
+          snippet: res?.deal ? `Deal created (${res.deal.stage})` : res?.followUpAt ? `Follow-up scheduled` : undefined,
+        });
+      },
+    });
+  }, [dialable, callBlocked, dndBlocked, lead, openCallOutcomeDrawer, addEvent]);
 
   const handleWhatsAppSend = useCallback(() => {
     if (!dialable) return toast.error("No phone number on this lead");

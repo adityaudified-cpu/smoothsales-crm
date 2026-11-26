@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Search, Building2, Bell, User, Settings, LogOut, ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -15,18 +15,35 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth/auth-context";
-
-const MOCK_NOTIFICATIONS = [
-  { id: 1, title: "New lead assigned", desc: "Aditya Narayan — Apex Tech", time: "2m ago", unread: true },
-  { id: 2, title: "Follow-up overdue", desc: "Meera Kulkarni — 3 hrs past due", time: "1h ago", unread: true },
-  { id: 3, title: "Deal moved to Proposal", desc: "Kavita Nair — Zenith Retail", time: "2h ago", unread: false },
-  { id: 4, title: "WhatsApp delivered", desc: "Rajeshwar Iyer — Trident Eng.", time: "3h ago", unread: false },
-];
+import { apiRequest, unwrapPage } from "@/lib/api/client";
+import { formatDistanceToNowStrict } from "date-fns";
 
 export function Topbar() {
-  const { user, logout } = useAuth();
+  const { user, logout, isAuthenticated } = useAuth();
   const initials = user?.initials || "U";
-  const unreadCount = MOCK_NOTIFICATIONS.filter((n) => n.unread).length;
+  const [notifications, setNotifications] = useState([]);
+
+  const loadNotifications = useCallback(() => {
+    if (!isAuthenticated) return;
+    apiRequest("/notifications", { query: { page: 0, size: 8 } })
+      .then((res) => {
+        const { items } = unwrapPage(res);
+        setNotifications(items || []);
+      })
+      .catch(() => {});
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
+
+  useEffect(() => {
+    const onRefresh = () => loadNotifications();
+    window.addEventListener("smoothsales:lead-updated", onRefresh);
+    return () => window.removeEventListener("smoothsales:lead-updated", onRefresh);
+  }, [loadNotifications]);
+
+  const unreadCount = notifications.filter((n) => !n.read && !n.isRead).length;
 
   return (
     <header suppressHydrationWarning className="h-14 bg-card border-b border-border px-6 flex items-center justify-between sticky top-0 z-10 shrink-0">
@@ -70,18 +87,30 @@ export function Topbar() {
               )}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {MOCK_NOTIFICATIONS.map((n) => (
-              <DropdownMenuItem key={n.id} className="flex flex-col items-start gap-0.5 py-2.5 cursor-pointer">
-                <div className="flex items-center justify-between w-full gap-2">
-                  <span className={`text-xs font-semibold ${n.unread ? "text-foreground" : "text-muted-foreground"}`}>
-                    {n.unread && <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary mr-1.5 mb-0.5" />}
-                    {n.title}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground shrink-0">{n.time}</span>
-                </div>
-                <span className="text-[11px] text-muted-foreground pl-3">{n.desc}</span>
-              </DropdownMenuItem>
-            ))}
+            {notifications.length === 0 ? (
+              <div className="py-6 text-center text-xs text-muted-foreground">
+                No notifications yet
+              </div>
+            ) : (
+              notifications.slice(0, 6).map((n) => {
+                const unread = !n.read && !n.isRead;
+                const timeText = n.createdAt
+                  ? formatDistanceToNowStrict(new Date(n.createdAt), { addSuffix: true })
+                  : "";
+                return (
+                  <DropdownMenuItem key={n.id} className="flex flex-col items-start gap-0.5 py-2.5 cursor-pointer">
+                    <div className="flex items-center justify-between w-full gap-2">
+                      <span className={`text-xs font-semibold ${unread ? "text-foreground" : "text-muted-foreground"}`}>
+                        {unread && <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary mr-1.5 mb-0.5" />}
+                        {n.title}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground shrink-0">{timeText}</span>
+                    </div>
+                    <span className="text-[11px] text-muted-foreground pl-3 line-clamp-2">{n.message || n.body || n.desc}</span>
+                  </DropdownMenuItem>
+                );
+              })
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Link href="/notifications" className="text-xs text-center text-primary font-semibold justify-center cursor-pointer">

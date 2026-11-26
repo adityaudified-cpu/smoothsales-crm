@@ -36,9 +36,11 @@ import { toast } from "sonner";
 import { formatCellValue, parseValidDate } from "@/lib/format-cell-value";
 import { WorkedInsights } from "@/components/leads/worked-insights";
 import { encodeLeadId } from "@/lib/lead-id-codec";
+import { useCallOutcome } from "@/lib/call-outcome-context";
 
 export default function WorkedLeadsPage() {
   const { data: leads, isLoading } = useLeads();
+  const { openCallOutcomeDrawer } = useCallOutcome();
   const [selectedRep, setSelectedRep] = useState("all");
   const [outcomeFilter, setOutcomeFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
@@ -58,9 +60,11 @@ export default function WorkedLeadsPage() {
     const total = allWorkedLeads.length;
     if (total === 0) return { total: 0, connectedRate: 0, avgAttempts: 0, recoveryRate: 0 };
 
-    const connectedCount = allWorkedLeads.filter((l) =>
-      String(l.lead_disposition || l.last_call_outcome || "").toLowerCase().includes("connect")
-    ).length;
+    const connectedCount = allWorkedLeads.filter((l) => {
+      if (typeof l.last_call_connected === "boolean") return l.last_call_connected;
+      const d = String(l.lead_disposition || l.last_call_outcome || "").toLowerCase();
+      return d.includes("connect") || d.includes("interest") || d.includes("meeting") || d.includes("info") || d.includes("call back");
+    }).length;
 
     const totalAttempts = allWorkedLeads.reduce((acc, l) => acc + (Number(l.attempts) || 1), 0);
     const avgAttempts = (totalAttempts / total).toFixed(1);
@@ -90,9 +94,12 @@ export default function WorkedLeadsPage() {
 
       if (outcomeFilter !== "all") {
         const disp = String(lead.lead_disposition || lead.last_call_outcome || "").toLowerCase();
-        if (outcomeFilter === "connected" && !disp.includes("connect")) return false;
+        const isConn = typeof lead.last_call_connected === "boolean"
+          ? lead.last_call_connected
+          : disp.includes("connect") || disp.includes("interest") || disp.includes("meeting") || disp.includes("info") || disp.includes("call back");
+        if (outcomeFilter === "connected" && !isConn) return false;
         if (outcomeFilter === "interested" && !disp.includes("interest")) return false;
-        if (outcomeFilter === "unanswered" && !disp.includes("rnr") && !disp.includes("busy")) return false;
+        if (outcomeFilter === "unanswered" && isConn && !disp.includes("rnr") && !disp.includes("busy") && !disp.includes("reachable") && !disp.includes("switched")) return false;
       }
 
       if (dateFilter !== "all" && lead.last_worked) {
@@ -114,10 +121,7 @@ export default function WorkedLeadsPage() {
   // Quick Action Handlers
   const handleCall = (e, lead) => {
     e.stopPropagation();
-    const phone = String(lead.mobile_number || lead.phone || "").trim();
-    if (!phone) return toast.error("This lead has no phone number");
-    toast.success(`Dialing ${lead.lead_name || lead.name}...`);
-    window.location.assign(`tel:${phone.replace(/[^\d+]/g, "")}`);
+    openCallOutcomeDrawer(lead, { dial: true, sourceLabel: "Follow-up call" });
   };
 
   const handleWhatsApp = (e, lead) => {

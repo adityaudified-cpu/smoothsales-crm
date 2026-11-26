@@ -134,7 +134,7 @@ export function Sidebar() {
           ],
         },
         { name: "Deals & Pipeline", href: "/deals", icon: Kanban, permission: "CUSTOMERS_EDIT" },
-        { name: "Activities", href: "/activities", icon: CalendarCheck, permission: "CALLS_VIEW" },
+        { name: "Follow-ups & To-dos", href: "/activities", icon: CalendarCheck, permission: "CALLS_VIEW" },
         { name: "Forecasting", href: "/forecasting", icon: TrendingUp, permission: "MONITORING_VIEW" },
         {
           name: "WhatsApp",

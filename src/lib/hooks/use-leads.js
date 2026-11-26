@@ -82,6 +82,19 @@ export function useLeads() {
     loadFromApi();
   }, [loadFromApi]);
 
+  useEffect(() => {
+    const onLeadUpdated = (event) => {
+      const updated = event?.detail?.lead;
+      if (updated?.id) {
+        setData((prev) => prev.map((item) => (String(item.id) === String(updated.id) ? { ...item, ...updated } : item)));
+      } else {
+        loadFromApi();
+      }
+    };
+    window.addEventListener("smoothsales:lead-updated", onLeadUpdated);
+    return () => window.removeEventListener("smoothsales:lead-updated", onLeadUpdated);
+  }, [loadFromApi]);
+
   const refreshData = useCallback(() => loadFromApi(), [loadFromApi]);
 
   const createLead = useCallback(async (lead) => {

@@ -7,6 +7,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { useAuth } from "@/lib/auth/auth-context";
 import { hasRouteAccess } from "@/lib/auth/permissions";
 import { AccessDenied } from "@/components/auth/access-denied";
+import { CallOutcomeProvider } from "@/lib/call-outcome-context";
 
 export default function TenantLayout({ children }) {
   const pathname = usePathname();
@@ -26,6 +27,7 @@ export default function TenantLayout({ children }) {
   const isWhatsApp = pathname?.startsWith("/whatsapp");
 
   return (
+    <CallOutcomeProvider>
     <div suppressHydrationWarning className="flex h-screen bg-background text-foreground antialiased w-full overflow-hidden">
       {/* Dynamic Left Sidebar (Collapsible & Compact) */}
       <Sidebar />
@@ -46,6 +48,7 @@ export default function TenantLayout({ children }) {
         </main>
       </div>
     </div>
+    </CallOutcomeProvider>
   );
 }
 
